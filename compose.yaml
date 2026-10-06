@@ -1,9 +1,36 @@
+# 開発用。本番では使わないこと（認証情報を平文で置いている）。
 services:
   postgres:
-    image: 'postgres:latest'
+    image: 'postgres:18'
     environment:
-      - 'POSTGRES_DB=mydatabase'
+      - 'POSTGRES_DB=tsumory'
+      - 'POSTGRES_USER=tsumory'
       - 'POSTGRES_PASSWORD=secret'
-      - 'POSTGRES_USER=myuser'
+      - 'TZ=Asia/Tokyo'
     ports:
-      - '5432'
+      - '5432:5432'
+    volumes:
+      # PostgreSQL 18 以降のイメージは /var/lib/postgresql/<major>/docker にデータを置くため親ディレクトリをマウントする
+      - 'postgres-data:/var/lib/postgresql'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tsumory -d tsumory']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  adminer:
+    image: 'adminer:5'
+    environment:
+      # ログイン画面のサーバー欄の初期値
+      - 'ADMINER_DEFAULT_SERVER=postgres'
+    ports:
+      - '127.0.0.1:8081:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels:
+      # Spring Boot の Docker Compose 連携の接続先検出から除外する
+      org.springframework.boot.ignore: true
+
+volumes:
+  postgres-data:
