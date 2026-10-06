@@ -28,6 +28,8 @@ dependencies {
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("org.thymeleaf.extras:thymeleaf-extras-springsecurity6")
     implementation("com.anthropic:anthropic-java:2.68.0")
+    implementation("org.webjars:bootstrap:5.3.8")
+    implementation("org.webjars:webjars-locator-lite:1.1.4")
     compileOnly("org.projectlombok:lombok")
     developmentOnly("org.springframework.boot:spring-boot-docker-compose")
     runtimeOnly("org.postgresql:postgresql")
