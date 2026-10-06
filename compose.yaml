@@ -1,6 +1,6 @@
 # 開発用。本番では使わないこと（認証情報を平文で置いている）。
 services:
-  postgres:
+  db:
     image: 'postgres:18'
     environment:
       - 'POSTGRES_DB=tsumory'
@@ -22,11 +22,11 @@ services:
     image: 'adminer:5'
     environment:
       # ログイン画面のサーバー欄の初期値
-      - 'ADMINER_DEFAULT_SERVER=postgres'
+      - 'ADMINER_DEFAULT_SERVER=db'
     ports:
       - '127.0.0.1:8081:8080'
     depends_on:
-      postgres:
+      db:
         condition: service_healthy
     labels:
       # Spring Boot の Docker Compose 連携の接続先検出から除外する
