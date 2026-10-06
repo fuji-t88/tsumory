@@ -58,3 +58,10 @@ spotless {
         ktlint("1.8.0")
     }
 }
+
+// ローカルではコンパイル前に自動整形する。CI では整形せず spotlessCheck で違反を検出させる。
+if (System.getenv("CI") == null) {
+    tasks.compileJava {
+        dependsOn(tasks.named("spotlessApply"))
+    }
+}
