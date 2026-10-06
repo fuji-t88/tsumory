@@ -6,8 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class TsumoryApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(TsumoryApplication.class, args);
-	}
-
+    public static void main(String[] args) {
+        SpringApplication.run(TsumoryApplication.class, args);
+    }
 }
