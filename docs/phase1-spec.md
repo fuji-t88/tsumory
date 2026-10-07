@@ -1,7 +1,7 @@
 # フェーズ 1（MVP）詳細仕様
 
 [phases.md](phases.md) のフェーズ 1 を、実装に入れる粒度まで詳細化したもの。
-パッケージ構成・コーディング規約・禁止事項は [CLAUDE.md](../CLAUDE.md) に従う。
+パッケージ構成・コーディング規約・禁止事項は [CLAUDE.md](../CLAUDE.md) に従い、この仕様書には繰り返し書かない。仕様書の一覧は [spec.md](spec.md)。
 
 ## 1. 機能と画面の対応
 
@@ -410,7 +410,7 @@ public sealed interface DiaryGenerationResult {
 - **失敗してもリトライしない**。1 回呼んで失敗したら、エラーをユーザーに表示して終わる。やり直すかどうかはユーザーがもう一度ボタン（「日記を書く」「作り直す」）を押して決める
 - `stop_reason` が `refusal` なら `Refused`、`end_turn` 以外のその他は `Failed` として扱う
 - API の例外（レート制限・接続エラー・タイムアウトなど）は `Failed`
-- ログには失敗の種類とステータスコードだけ出す。つぶやきと日記の本文は出さない
+- ログには失敗の種類とステータスコードだけ出す（本文を出さないことは CLAUDE.md の禁止事項「ログ」）
 
 ### プロンプト
 
@@ -450,10 +450,10 @@ public sealed interface DiaryGenerationResult {
 | ログアウト | `POST /logout`、成功後 `/login?logout` |
 | パスワード | `BCryptPasswordEncoder` の Bean |
 | ユーザー取得 | `service/LoginUserDetailsService`（`UserDetailsService` を実装）が `users` から読む |
-| CSRF | 有効のまま。フォームはすべて `th:action` |
+| CSRF | 有効のまま（CLAUDE.md の禁止事項「CSRF」） |
 
 - controller ではログイン中のユーザーを `@AuthenticationPrincipal` で受け、service に渡す
-- 他人のつぶやきの ID を指定された場合は、存在しない場合と同じく 404 を返す
+- 他人のつぶやき・日記の扱いは CLAUDE.md の禁止事項「他人のデータ（IDOR）」に従う
 
 ## 8. エラー処理
 
@@ -474,7 +474,7 @@ spring:
 ```
 
 - `Clock` の Bean（`Clock.system(ZoneId.of("Asia/Tokyo"))`）を `config/` で定義する
-- API キーは環境変数 `ANTHROPIC_API_KEY`。設定ファイルには書かない
+- API キーの扱いは CLAUDE.md の「AI（Claude API）」に従う
 
 ## 10. テスト
 
