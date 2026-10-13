@@ -52,7 +52,9 @@ public class DiaryController {
         var userId = principal.userId();
         var today = LocalDate.now(clock);
         try {
-            diaryGenerationService.generateToday(userId);
+            var diary = diaryGenerationService.generateToday(userId);
+            // 生成中に 0 時をまたぐと、押したときの「今日」と保存された日記の日付がずれるので、保存された日付へ移る
+            return "redirect:/diary/" + diary.getDiaryDate();
         } catch (NoPostsException e) {
             flash.addFlashAttribute("message", NO_POSTS_MESSAGE);
             return "redirect:/";
@@ -60,6 +62,5 @@ public class DiaryController {
             flash.addFlashAttribute("message", GENERATION_FAILED_MESSAGE);
             return "redirect:/diary/" + today;
         }
-        return "redirect:/diary/" + today;
     }
 }

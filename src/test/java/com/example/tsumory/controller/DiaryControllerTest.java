@@ -161,6 +161,16 @@ class DiaryControllerTest {
     }
 
     @Test
+    void 生成中に0時をまたいだら保存された日記の日付へ() throws Exception {
+        // 押したときは 10/7（Clock）だが、保存は 10/8 の日記として行われた場合
+        var tomorrow = TODAY.plusDays(1);
+        when(diaryGenerationService.generateToday(USER_ID)).thenReturn(new Diary(user, tomorrow, "日記", NOW));
+
+        mockMvc.perform(post("/diary/generate").with(user(PRINCIPAL)).with(csrf()))
+                .andExpect(redirectedUrl("/diary/2026-10-08"));
+    }
+
+    @Test
     void つぶやきが0件ならメッセージを付けてホームへ() throws Exception {
         when(diaryGenerationService.generateToday(USER_ID)).thenThrow(new NoPostsException());
 
