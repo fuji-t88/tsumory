@@ -1,35 +1,37 @@
 <!DOCTYPE html>
-<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ログイン - Tsumory</title>
     <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
-    <link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
-<body>
-<main class="container app-container py-5">
-    <div class="text-center mb-4">
-        <h1 class="fw-bold">Tsumory</h1>
-        <p class="text-secondary">ひと粒ずつ、1 日の物語に。</p>
+<body class="bg-body-tertiary">
+<main class="min-vh-100 d-flex align-items-center justify-content-center py-5 px-3">
+    <div class="card shadow-sm" style="max-width: 24rem; width: 100%;">
+        <div class="card-body p-4 p-md-5">
+            <header class="text-center mb-4">
+                <h1 class="h3 mb-1">Tsumory</h1>
+            </header>
+
+            <div th:if="${param.error}" class="alert alert-danger" role="alert">ユーザー名またはパスワードが違います</div>
+            <div th:if="${param.logout}" class="alert alert-success" role="status">ログアウトしました</div>
+
+            <form th:action="@{/login}" method="post">
+                <div class="form-floating mb-3">
+                    <input type="text" id="username" name="username" class="form-control"
+                           placeholder="ユーザー名" autocomplete="username" required autofocus>
+                    <label for="username">ユーザー名</label>
+                </div>
+                <div class="form-floating mb-4">
+                    <input type="password" id="password" name="password" class="form-control"
+                           placeholder="パスワード" autocomplete="current-password" required>
+                    <label for="password">パスワード</label>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">ログイン</button>
+            </form>
+        </div>
     </div>
-
-    <div th:if="${param.error}" class="alert alert-danger" role="alert">ユーザー名またはパスワードが違います</div>
-    <div th:if="${param.logout}" class="alert alert-success" role="status">ログアウトしました</div>
-
-    <form th:action="@{/login}" method="post">
-        <div class="mb-3">
-            <label for="username" class="form-label">ユーザー名</label>
-            <input type="text" id="username" name="username" class="form-control"
-                   autocomplete="username" required autofocus>
-        </div>
-        <div class="mb-4">
-            <label for="password" class="form-label">パスワード</label>
-            <input type="password" id="password" name="password" class="form-control"
-                   autocomplete="current-password" required>
-        </div>
-        <button type="submit" class="btn btn-primary w-100">ログイン</button>
-    </form>
 </main>
 </body>
 </html>
