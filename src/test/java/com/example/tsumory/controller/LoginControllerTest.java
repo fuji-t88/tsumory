@@ -72,6 +72,22 @@ class LoginControllerTest {
     }
 
     @Test
+    void ログイン済みでログイン画面を開くとトップへリダイレクト() throws Exception {
+        mockMvc.perform(get("/login").with(user(demoUser()))).andExpect(redirectedUrl("/"));
+    }
+
+    @Test
+    void ログアウト後のログイン画面はリダイレクトせずに表示する() throws Exception {
+        var session = (MockHttpSession) mockMvc.perform(logout())
+                .andExpect(redirectedUrl("/login?logout"))
+                .andReturn()
+                .getRequest()
+                .getSession();
+
+        mockMvc.perform(get("/login").param("logout", "").session(session)).andExpect(status().isOk());
+    }
+
+    @Test
     void ログイン失敗のメッセージを表示する() throws Exception {
         mockMvc.perform(get("/login").param("error", ""))
                 .andExpect(content().string(containsString("ユーザー名またはパスワードが違います")));
