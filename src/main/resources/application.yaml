@@ -4,3 +4,14 @@ spring:
   threads:
     virtual:
       enabled: true
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true
+
+# 開発中の SQL 可視化。bind パラメータにはつぶやきや日記の本文が含まれるため、
+# 本番デプロイ時は必ず無効化すること。
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE
