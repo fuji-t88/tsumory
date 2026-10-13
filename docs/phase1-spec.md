@@ -201,7 +201,7 @@ erDiagram
 
 `PostController#populateHomeModel` が、`today`（今日の日付）・`posts`（今日のつぶやきの `PostView` のリスト）・`diary`（今日の日記。なければ `null`）・`editingPost`（編集中のつぶやきの `PostView`。編集モードでなければ `null`）を渡す。背景は `bg-body-tertiary`、本文は最大幅 720px で、セクションはそれぞれ `card` にする。上から次の順に並べる。
 
-1. **ナビゲーション**：左にサービス名「Tsumory」、右に今日の日付（`yyyy-MM-dd`）と「ログアウト」ボタン（`POST /logout` のフォーム）。ほかの画面の共通ヘッダー（`fragments/header`）は使わない
+1. **ナビゲーション**：左にサービス名「Tsumory」、右に今日の日付（`yyyy年M月d日（E）`）と「ログアウト」ボタン（`POST /logout` のフォーム）。ほかの画面の共通ヘッダー（`fragments/header`）は使わない
 2. **フラッシュメッセージ**（あるときだけ。`message`、`alert-warning`）
 3. **投稿フォーム**（カード「いまの気持ちをつぶやく」）
    - テキストエリア（2 行、`maxlength="100"`）と「つぶやく」ボタン

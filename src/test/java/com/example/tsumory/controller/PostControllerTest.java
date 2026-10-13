@@ -84,7 +84,7 @@ class PostControllerTest {
         mockMvc.perform(get("/").with(user(PRINCIPAL)))
                 .andExpect(status().isOk())
                 .andExpect(view().name("home"))
-                .andExpect(content().string(containsString("2026-10-07")))
+                .andExpect(content().string(containsString("2026年10月7日（水）")))
                 .andExpect(content().string(containsString("2 件")))
                 .andExpect(content().string(containsString("12:40")))
                 .andExpect(content().string(containsString("昼のカレーが辛すぎた")))
