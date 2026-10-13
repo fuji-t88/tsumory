@@ -46,7 +46,7 @@ public class PostService {
         return postRepository.countInRange(userId, startOf(date), startOf(date.plusDays(1)));
     }
 
-    /** 編集モードで開くつぶやきを返す。自分の今日か昨日のつぶやきでなければ {@link PostNotFoundException}。 */
+    /** 編集モードで開くつぶやきを返す。自分の今日か昨日のつぶやきでなければ {@link ResourceNotFoundException}。 */
     public PostItem getEditablePost(Long userId, Long postId) {
         return PostItem.from(findEditablePost(userId, postId), ZONE);
     }
@@ -76,13 +76,13 @@ public class PostService {
         var post = postRepository.findByIdAndUserId(postId, userId).orElseThrow(() -> {
             // 他人のつぶやきへのアクセスの試行を含む（削除済みの ID と区別はできない）
             log.warn("Post not found for user: userId={}, postId={}", userId, postId);
-            return new PostNotFoundException(postId);
+            return new ResourceNotFoundException("Post", postId);
         });
         var postedDate = LocalDate.ofInstant(post.getPostedAt(), ZONE);
         if (!isEditableDate(postedDate)) {
             // 0 時を過ぎて、開いたままの画面から一昨日の分を直そうとした場合など
             log.info("Post not editable: userId={}, postId={}, postedDate={}", userId, postId, postedDate);
-            throw new PostNotFoundException(postId);
+            throw new ResourceNotFoundException("Post", postId);
         }
         return post;
     }

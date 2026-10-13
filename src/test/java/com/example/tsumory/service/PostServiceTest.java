@@ -134,7 +134,7 @@ class PostServiceTest {
         var post = new Post(user, "おやすみ", jst("2026-10-06T23:59:59"));
         when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
 
-        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, "直したい")).isInstanceOf(PostNotFoundException.class);
+        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, "直したい")).isInstanceOf(ResourceNotFoundException.class);
         assertThat(post.getContent()).isEqualTo("おやすみ");
     }
 
@@ -143,7 +143,7 @@ class PostServiceTest {
         var service = serviceAt("2026-10-08T12:00:00");
         when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.delete(USER_ID, POST_ID)).isInstanceOf(PostNotFoundException.class);
+        assertThatThrownBy(() -> service.delete(USER_ID, POST_ID)).isInstanceOf(ResourceNotFoundException.class);
         verify(postRepository, never()).delete(any());
     }
 
