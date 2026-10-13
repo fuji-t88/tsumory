@@ -81,7 +81,7 @@ tsumory/
   | `controller` | 画面のリクエストを受ける | `PostController` |
   | `service` | 業務ロジック・トランザクション | `PostService` |
   | `service` | AI 連携（Claude API の呼び出し） | `DiaryAiService` |
-  | `service` | 例外 | `PostNotFoundException` |
+  | `service` | 例外 | `ResourceNotFoundException` |
   | `repository` | DB アクセス（Spring Data JPA） | `PostRepository` |
   | `domain` | ドメインモデル（エンティティなど） | `Post` |
   | `form` | Thymeleaf のフォーム入力（Bean Validation 付き） | `PostForm` |
@@ -109,7 +109,7 @@ tsumory/
 
 ### Java 21 の機能を積極的に使う
 
-- **record**: 不変の値の受け渡し（service 間の結果、AI の生成結果など）は record で書く。JPA エンティティと `form/` のクラスは record にしない（JPA と Thymeleaf のフォームバインドが getter/setter を前提にするため）
+- **record**: 不変の値の受け渡し（service 間の結果、AI の生成結果など）は record で書く。`form/` のクラスも record で書く（Spring MVC はコンストラクタで値を入れ、Thymeleaf の `th:field` も record の値を読める）。JPA エンティティは record にしない（JPA が引数なしのコンストラクタと setter を前提にするため）
 - **switch 式とパターンマッチング**: 分岐は `switch` 式で書き、`instanceof` は型パターン（`if (x instanceof Post p)`）を使う。record パターン（`case Result(var a, var b) ->`）も使ってよい
 - **sealed interface**: 取りうる結果が決まっているもの（例: 日記生成の「成功」「つぶやきなし」「AI が拒否」）は sealed interface + record で表し、`switch` で漏れなく扱う。`default` を書かずにコンパイラに網羅性を確認させる
 - **テキストブロック**: Claude へのプロンプトや複数行の SQL は `"""` で書く
@@ -162,7 +162,7 @@ tsumory/
 - **SQL インジェクション**: SQL や JPQL を文字列連結で組み立てない。Spring Data のメソッド名クエリか、`@Query` + バインドパラメータを使う
 - **CSRF**: CSRF 対策を無効にしない（`csrf.disable()` 禁止）。フォームは `th:action` を使い、トークンを自動で埋め込ませる
 - **パスワード**: 平文やハッシュ化なしで保存しない。`BCryptPasswordEncoder` でハッシュ化する。初期ユーザーのマイグレーションにも、平文ではなく BCrypt のハッシュ値を書く
-- **他人のデータ（IDOR）**: つぶやきや日記を ID だけで取得しない。必ずログイン中のユーザーを条件に含める（例: `findByIdAndUserId(id, userId)`）。他人のデータにアクセスされた場合は 404 を返す
+- **他人のデータ（IDOR）**: つぶやきや日記を ID だけで取得しない。必ずログイン中のユーザーを条件に含める（例: `findByIdAndUserId(id, userId)`）。他人のデータにアクセスされた場合は、存在しない場合と区別せずに扱う。つぶやきは service が `ResourceNotFoundException` を投げ、controller が受けて「つぶやきが見つかりませんでした」のフラッシュメッセージを付けて `/` にリダイレクトする
 - **認可**: `permitAll()` はログイン画面と静的リソース（`/webjars/**` など）だけ。それ以外は認証必須にする
 - **秘密情報**: API キーやパスワードをコード・設定ファイル・コミットに含めない。`.env` などはコミットしない
 - **ログ**: パスワード、API キー、セッション ID をログに出さない。つぶやきと日記の本文も個人的な内容なのでログに出さない
