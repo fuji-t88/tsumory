@@ -109,6 +109,7 @@ tsumory/
   - 適用済みのファイルを編集すると、Flyway のチェックサム検証で起動時にエラーになり、環境ごとにスキーマがずれる原因にもなる
   - まだどこにも適用していないファイルだけは、直接書き換えてよい
 - 追加する依存のうち、Spring Boot が管理していないもの（Anthropic SDK、Bootstrap など）はバージョンを明記する
+- 画面の表示テキスト（見出し・ボタン・リンク・メッセージ・プレースホルダー・タブのタイトル）は日本語で書く。日付は `yyyy年M月d日（E）`、時刻は `HH:mm`（日本時間）で出す。サービス名「Tsumory」と URL はそのまま
 
 ### Java 21 の機能を積極的に使う
 
@@ -119,13 +120,19 @@ tsumory/
 - **`var`**: 右辺から型が明らかなローカル変数に使う。型が読み取れない場合は書く
 - **Sequenced Collections**: 先頭・末尾は `getFirst()` / `getLast()` / `reversed()` を使い、`get(0)` や `get(size() - 1)` は書かない
 - **仮想スレッド**: 有効にしてあるので、ブロッキング I/O（DB、Claude API）は普通に同期で書く。並行処理は `Executors.newVirtualThreadPerTaskExecutor()` を使う
-- **日時**: `java.time` を使う。日記の日付は `LocalDate`、日時は `Instant` か `OffsetDateTime`。「今日」は `ZoneId.of("Asia/Tokyo")` を明示して求め、テストできるように `Clock` を注入する
+- **日時**: `java.time` を使う。日記の日付は `LocalDate`、日時は `Instant` か `OffsetDateTime`。「今日」は `ZoneId.of("Asia/Tokyo")` を明示して求める（時刻の取り方は下の「時刻の取得」）
 - **Optional**: 見つからない可能性がある 1 件の戻り値は `Optional` にする。フィールドや引数には使わない
+
+### 時刻の取得
+
+- 現在時刻は、注入した `Clock`（`config/ClockConfig` の Bean。`Asia/Tokyo`）から取得する。`Instant.now()`・`LocalDate.now()`・`LocalDateTime.now()` などを引数なしで直接呼ばない（`clock.instant()`、`LocalDate.now(clock)` と書く）
+- エンティティのように Bean でないオブジェクトには `Clock` を注入しない。サービス層で求めた `Instant` を引数で渡す（例: `new Post(user, content, clock.instant())`、`post.edit(content, clock.instant())`）
+- 理由：テストで `Clock.fixed(...)` を渡せば時刻を固定でき、結果が毎回同じになる。タイムゾーンの基準も `Clock` の 1 か所にまとまり、本番用の `Clock` に差し替えるときもコードを変えずに済む
 
 ### Spring・Lombok
 
 - DI はコンストラクタインジェクション（`@RequiredArgsConstructor` + `private final` フィールド）
-- `@Transactional` は service に付ける。読み取りだけのメソッドは `@Transactional(readOnly = true)`
+- `@Transactional` は service に付ける。クラスに `@Transactional(readOnly = true)` を付けて既定を読み取り専用にし、状態を変えるメソッドだけに `@Transactional` を付けて上書きする（例: `PostService`）。外部 API を呼ぶメソッドは `@Transactional(propagation = Propagation.NOT_SUPPORTED)` にし、API の応答を待つ間はトランザクションを張らない（例: `DiaryGenerationService#generateToday`）
 - エンティティには `@Getter` と必要な `@Setter` だけを付ける。`@Data`・`@EqualsAndHashCode`・`@ToString` は付けない（遅延ロードや循環参照で問題が起きるため）
 - エンティティの引数なしコンストラクタは `@NoArgsConstructor(access = AccessLevel.PROTECTED)` にする（JPA 用。アプリのコードからは、必須の値を受け取るコンストラクタで作る）
 - エンティティの関連（`@ManyToOne` など）は `fetch = FetchType.LAZY` を明示する（`@ManyToOne` の既定は EAGER で、一覧を取得すると関連先ごとに SELECT が発行される N+1 問題の原因になるため）
