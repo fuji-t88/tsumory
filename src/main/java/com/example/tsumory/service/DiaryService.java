@@ -43,6 +43,19 @@ public class DiaryService {
     }
 
     /**
+     * 今日のつぶやき画面の「日記あり」の表示用に、その日の日記を返す。
+     *
+     * <p>{@link #findDiary} と違い、日付が今日・昨日かは確かめない。呼び出し側が 1 回だけ求めた「今日」から今日と昨日を渡す前提。
+     * ここで「今日」を求め直すと、0 時をまたいだ瞬間に昨日が一昨日の扱いになり、画面全体が 404 になるため。
+     */
+    @Transactional(readOnly = true)
+    public Optional<DiaryItem> findDiaryForSummary(Long userId, LocalDate date) {
+        return diaryRepository
+                .findByUserIdAndDiaryDate(userId, date)
+                .map(diary -> DiaryItem.from(diary, PostService.ZONE));
+    }
+
+    /**
      * その日のつぶやきから日記を書き、なければ保存、あれば上書きする。
      *
      * <p>Claude API は DB のトランザクションの外で呼ぶため、このメソッドにはトランザクションを付けない。

@@ -70,6 +70,19 @@ class DiaryServiceTest {
     }
 
     @Test
+    void findDiaryForSummary_doesNotRecheckDate() {
+        // 呼び出し側が「今日」を決めたあとに 0 時をまたぎ、昨日が一昨日の扱いになった場合でも 404 にしない
+        var yesterday = DATE.minusDays(1);
+        var diary = new Diary(user, yesterday, "昨日の日記", Instant.parse("2026-10-07T13:30:00Z"));
+        when(diaryRepository.findByUserIdAndDiaryDate(USER_ID, yesterday)).thenReturn(Optional.of(diary));
+
+        var result = service.findDiaryForSummary(USER_ID, yesterday);
+
+        assertThat(result).contains(new DiaryItem(yesterday, "昨日の日記", LocalTime.of(22, 30)));
+        verify(postService, never()).isEditableDate(any());
+    }
+
+    @Test
     void generate_dateNotAvailable_throwsNotFound() {
         var old = DATE.minusDays(2);
         when(postService.isEditableDate(old)).thenReturn(false);
