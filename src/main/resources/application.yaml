@@ -13,6 +13,16 @@ spring:
       hibernate:
         format_sql: true
 
+tsumory:
+  # 日記を書く仕組み。stub: 仮実装（Claude API を呼ばない）、claude: Claude API（環境変数 ANTHROPIC_API_KEY が必要）
+  # Claude につなぐときは、環境変数 TSUMORY_DIARY_WRITER=claude で起動する
+  diary-writer: ${TSUMORY_DIARY_WRITER:stub}
+  stub-diary-writer:
+    # 生成にかかる時間のまね（ローディング表示の確認用）
+    delay: 3s
+    # 仮実装が返す結果。written: 成功、refused: AI が拒否、failed: API エラー
+    result: written
+
 # 開発中の SQL 可視化。bind パラメータにはつぶやきや日記の本文が含まれるため、
 # 本番デプロイ時は必ず無効化すること。
 logging:

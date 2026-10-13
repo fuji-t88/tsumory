@@ -16,18 +16,20 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+/** Claude API で日記を書く {@link DiaryWriter}。{@code tsumory.diary-writer=claude} のときだけ使う。 */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class DiaryAiService {
+@ConditionalOnProperty(name = "tsumory.diary-writer", havingValue = "claude")
+public class DiaryAiService implements DiaryWriter {
 
     private static final String MODEL = "claude-opus-5-5";
     private static final long MAX_TOKENS = 16000L;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy年M月d日（E）", Locale.JAPANESE);
-    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
     private static final String SYSTEM_PROMPT = """
             あなたは、ユーザーがその日に書いたつぶやきから、本人の日記を書く書き手です。
@@ -48,8 +50,9 @@ public class DiaryAiService {
 
     private final AnthropicClient client;
 
-    /** その日のつぶやきから日記を書く。API を 1 回だけ呼び、失敗してもリトライしない。 */
-    public DiaryAiResult write(LocalDate date, List<PostItem> posts) {
+    /** その日のつぶやきから日記を書く。API を 1 回だけ呼び、失敗してもリトライしない（失敗・拒否は例外で知らせる）。 */
+    @Override
+    public String write(LocalDate date, List<String> contents) {
         var params = MessageCreateParams.builder()
                 .model(MODEL)
                 .maxTokens(MAX_TOKENS)
@@ -57,7 +60,7 @@ public class DiaryAiService {
                         .effort(OutputConfig.Effort.MEDIUM)
                         .build())
                 .system(SYSTEM_PROMPT)
-                .addUserMessage(buildUserMessage(date, posts))
+                .addUserMessage(buildUserMessage(date, contents))
                 .build();
 
         // ログには本文・プロンプト・例外のメッセージを出さず、種類・ステータス・ID・件数だけを出す
@@ -72,20 +75,20 @@ public class DiaryAiService {
                     e.statusCode(),
                     e.headers().values("request-id"),
                     elapsedMs(startedAt));
-            return new DiaryAiResult.Failed();
+            throw new DiaryWriteFailedException();
         } catch (AnthropicIoException e) {
             // タイムアウト（120 秒）や接続エラー
             log.warn(
                     "Claude API connection error: type={}, elapsedMs={}",
                     e.getClass().getSimpleName(),
                     elapsedMs(startedAt));
-            return new DiaryAiResult.Failed();
+            throw new DiaryWriteFailedException();
         } catch (AnthropicException e) {
             log.warn(
                     "Claude API client error: type={}, elapsedMs={}",
                     e.getClass().getSimpleName(),
                     elapsedMs(startedAt));
-            return new DiaryAiResult.Failed();
+            throw new DiaryWriteFailedException();
         }
 
         var stopReason = response.stopReason().orElse(null);
@@ -101,11 +104,11 @@ public class DiaryAiService {
                     "Claude API refused: messageId={}, category={}",
                     response.id(),
                     response.stopDetails().map(details -> details.category()));
-            return new DiaryAiResult.Refused();
+            throw new DiaryRefusedException();
         }
         if (!StopReason.END_TURN.equals(stopReason)) {
             log.warn("Claude API stopped unexpectedly: messageId={}, stopReason={}", response.id(), stopReason);
-            return new DiaryAiResult.Failed();
+            throw new DiaryWriteFailedException();
         }
 
         var content = response.content().stream()
@@ -115,19 +118,18 @@ public class DiaryAiService {
                 .strip();
         if (content.isEmpty()) {
             log.warn("Claude API returned no text: messageId={}", response.id());
-            return new DiaryAiResult.Failed();
+            throw new DiaryWriteFailedException();
         }
-        return new DiaryAiResult.Written(content);
+        return content;
     }
 
     private static long elapsedMs(long startedAt) {
         return Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
     }
 
-    static String buildUserMessage(LocalDate date, List<PostItem> posts) {
-        var lines = posts.stream()
-                .map(post -> "<post time=\"%s\">%s</post>"
-                        .formatted(post.postedTime().format(TIME_FORMAT), escape(post.content())))
+    static String buildUserMessage(LocalDate date, List<String> contents) {
+        var lines = contents.stream()
+                .map(content -> "<post>%s</post>".formatted(escape(content)))
                 .collect(Collectors.joining("\n"));
         return """
                 %sのつぶやき:
