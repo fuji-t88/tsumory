@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="|${#temporals.format(date, 'yyyy年M月d日（E）')}の日記 - Tsumory|">日記 - Tsumory</title>
+    <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<header th:replace="~{fragments/header :: header}"></header>
+<main class="container app-container pb-5">
+
+    <!-- フラッシュメッセージ（成功は緑、生成中・つぶやきなしは青、失敗は赤） -->
+    <div th:if="${successMessage}" class="alert alert-success" role="status" th:text="${successMessage}">日記を書きました</div>
+    <div th:if="${infoMessage}" class="alert alert-info" role="status" th:text="${infoMessage}">いま日記を書いています</div>
+    <div th:if="${errorMessage}" class="alert alert-danger" role="alert" th:text="${errorMessage}">日記を書けませんでした</div>
+
+    <h1 class="h4 mb-3" th:text="|${#temporals.format(date, 'yyyy年M月d日（E）')}の日記|">2026年10月7日（水）の日記</h1>
+
+    <!-- 日記あり：本文と「作り直す」 -->
+    <section th:if="${diary != null}" class="mb-4">
+        <p class="text-pre-wrap" th:text="${diary.content}">日記の本文</p>
+        <p class="text-secondary small" th:text="|${diary.generatedTime} に作成|">21:30 に作成</p>
+        <form th:action="@{/diary/generate}" method="post">
+            <input type="hidden" name="date" th:value="${date}">
+            <button type="submit" class="btn btn-outline-primary">作り直す</button>
+        </form>
+    </section>
+
+    <!-- 日記なし -->
+    <section th:if="${diary == null}" class="mb-4">
+        <th:block th:if="${postCount == 0}">
+            <th:block th:if="${isToday}">
+                <p>つぶやくと日記を書けます</p>
+                <button type="button" class="btn btn-primary" disabled>日記を書く</button>
+            </th:block>
+            <!-- 昨日の分には投稿できないので、ボタンは出さない -->
+            <p th:unless="${isToday}">この日のつぶやきはありません</p>
+        </th:block>
+        <th:block th:unless="${postCount == 0}">
+            <p th:text="|その日のつぶやき ${postCount} 件から日記を書きます|">その日のつぶやき 3 件から日記を書きます</p>
+            <form th:action="@{/diary/generate}" method="post">
+                <input type="hidden" name="date" th:value="${date}">
+                <button type="submit" class="btn btn-primary">日記を書く</button>
+            </form>
+        </th:block>
+    </section>
+
+    <!-- つぶやきへの導線 -->
+    <section class="border-top pt-3">
+        <!-- 今日の日記なら今日のつぶやきへ、昨日の日記なら「昨日」の区画へ -->
+        <a th:href="@{${isToday} ? '/' : '/#yesterday'}" class="btn btn-link px-0">つぶやきを直す</a>
+        <p class="text-secondary small mb-0">しっくりこないときは、つぶやきを直してから作り直せます</p>
+    </section>
+
+</main>
+</body>
+</html>
