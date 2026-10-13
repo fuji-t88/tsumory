@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<body>
+<header th:fragment="header" class="border-bottom mb-3">
+    <div class="container app-container d-flex align-items-center justify-content-between py-2">
+        <a th:href="@{/}" class="navbar-brand fw-bold">Tsumory</a>
+        <div class="d-flex align-items-center gap-2">
+            <span class="text-secondary small" sec:authentication="name">demo</span>
+            <!-- ログアウトは CSRF トークン付きの POST なので、リンクではなくフォームのボタンにする -->
+            <form th:action="@{/logout}" method="post">
+                <button type="submit" class="btn btn-outline-secondary btn-sm">ログアウト</button>
+            </form>
+        </div>
+    </div>
+</header>
+</body>
+</html>

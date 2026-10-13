@@ -1,0 +1,15 @@
+/* スマホ幅で 1 列、PC では中央に最大幅 640px */
+.app-container {
+    max-width: 640px;
+}
+
+/* スマホで押しやすいよう、ボタン・入力欄は高さ 44px 以上 */
+.btn,
+.form-control {
+    min-height: 44px;
+}
+
+/* つぶやき・日記の本文の改行を保つ */
+.text-pre-wrap {
+    white-space: pre-wrap;
+}

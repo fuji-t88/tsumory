@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>今日のつぶやき - Tsumory</title>
+    <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<header th:replace="~{fragments/header :: header}"></header>
+<!-- TODO 投稿フォーム・一覧・日記への導線は phase1-spec.md「11. 実装の順番」の 3 以降で作る -->
+<main class="container app-container">
+    <h1 class="h4">今日のつぶやき</h1>
+</main>
+</body>
+</html>
