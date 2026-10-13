@@ -4,6 +4,10 @@ spring:
   threads:
     virtual:
       enabled: true
+  # 日付の曜日などを日本語で出す（ブラウザの言語設定によらない）
+  web:
+    locale: ja_JP
+    locale-resolver: fixed
   jpa:
     properties:
       hibernate:

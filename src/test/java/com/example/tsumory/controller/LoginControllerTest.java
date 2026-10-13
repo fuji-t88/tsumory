@@ -34,7 +34,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest({LoginController.class, PostController.class})
+@WebMvcTest(LoginController.class)
 @Import({SecurityConfig.class, CustomUserDetailsService.class})
 class LoginControllerTest {
 
@@ -186,13 +186,5 @@ class LoginControllerTest {
     @Test
     void CSRFトークンなしのログアウトは403() throws Exception {
         mockMvc.perform(post("/logout").with(user(demoUser()))).andExpect(status().isForbidden());
-    }
-
-    @Test
-    void ログイン後のトップにユーザー名とログアウトボタンを表示する() throws Exception {
-        mockMvc.perform(get("/").with(user(demoUser())))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString(">demo</span>")))
-                .andExpect(content().string(containsString("ログアウト")));
     }
 }

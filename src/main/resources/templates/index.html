@@ -9,9 +9,49 @@
 </head>
 <body>
 <header th:replace="~{fragments/header :: header}"></header>
-<!-- TODO 投稿フォーム・一覧・日記への導線は phase1-spec.md「11. 実装の順番」の 3 以降で作る -->
-<main class="container app-container">
-    <h1 class="h4">今日のつぶやき</h1>
+<main class="container app-container pb-5">
+
+    <!-- フラッシュメッセージ（失敗。つぶやきが見つからなかったときなど） -->
+    <div th:if="${errorMessage}" class="alert alert-danger" role="alert" th:text="${errorMessage}">つぶやきが見つかりませんでした</div>
+
+    <h1 class="h4 mb-3" th:text="${#temporals.format(todaySection.date, 'yyyy年M月d日（E）')}">2026年10月7日（水）</h1>
+
+    <!-- 投稿フォーム（新しいつぶやきは常に今日の分） -->
+    <form th:action="@{/posts}" th:object="${postForm}" method="post" class="mb-4">
+        <label for="content" class="form-label">ひとこと</label>
+        <textarea id="content" th:field="*{content}" class="form-control" th:errorclass="is-invalid"
+                  rows="3" maxlength="100" placeholder="いま、なにしてる？" data-counter="content-remaining"></textarea>
+        <div class="invalid-feedback" th:if="${#fields.hasErrors('content')}" th:errors="*{content}"></div>
+        <div class="d-flex justify-content-end align-items-center gap-3 mt-2">
+            <span class="text-secondary small">残り <span id="content-remaining"
+                    th:text="${100 - (postForm.content?.length() ?: 0)}">100</span> 字</span>
+            <button type="submit" class="btn btn-primary">つぶやく</button>
+        </div>
+    </form>
+
+    <!-- 今日 -->
+    <section class="mb-4">
+        <h2 class="h5">今日のつぶやき</h2>
+        <p th:if="${todaySection.posts.isEmpty()}" class="text-secondary">まだつぶやきがありません</p>
+        <ul th:replace="~{fragments/posts :: postList(${todaySection})}"></ul>
+        <div class="d-flex align-items-center gap-3 mt-3">
+            <a th:href="@{/diary/{date}(date=${todaySection.date})}" class="btn btn-primary">今日の日記へ</a>
+            <span th:replace="~{fragments/posts :: diaryStatus(${todaySection})}"></span>
+        </div>
+    </section>
+
+    <!-- 昨日（昨日のつぶやきか日記があるときだけ。投稿フォームは出さない） -->
+    <section id="yesterday" th:unless="${yesterdaySection.isEmpty()}" class="border-top pt-4">
+        <h2 class="h5" th:text="|昨日 ${#temporals.format(yesterdaySection.date, 'yyyy年M月d日（E）')}|">昨日 2026年10月6日（火）</h2>
+        <ul th:replace="~{fragments/posts :: postList(${yesterdaySection})}"></ul>
+        <div class="d-flex align-items-center gap-3 mt-3">
+            <a th:href="@{/diary/{date}(date=${yesterdaySection.date})}" class="btn btn-outline-primary">昨日の日記へ</a>
+            <span th:replace="~{fragments/posts :: diaryStatus(${yesterdaySection})}"></span>
+        </div>
+    </section>
+
 </main>
+
+<script th:src="@{/js/post-form.js}"></script>
 </body>
 </html>
