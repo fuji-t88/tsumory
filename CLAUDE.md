@@ -80,7 +80,10 @@ tsumory/
   |---|---|---|
   | `controller` | 画面のリクエストを受ける | `PostController` |
   | `service` | 業務ロジック・トランザクション | `PostService` |
-  | `service` | AI 連携（Claude API の呼び出し） | `DiaryAiService` |
+  | `service` | 日記を書く流れの組み立て（つぶやき集め → AI → 保存） | `DiaryGenerationService` |
+  | `service` | AI 連携のインターフェース | `DiaryWriter` |
+  | `service` | AI 連携（Claude API の呼び出し。`DiaryWriter` の実装） | `DiaryAiService` |
+  | `service` | AI 連携の仮実装（Claude API を呼ばない。`DiaryWriter` の実装） | `StubDiaryWriter` |
   | `service` | 例外 | `ResourceNotFoundException` |
   | `repository` | DB アクセス（Spring Data JPA） | `PostRepository` |
   | `domain` | ドメインモデル（エンティティなど） | `Post` |
@@ -111,7 +114,7 @@ tsumory/
 
 - **record**: 不変の値の受け渡し（service 間の結果、AI の生成結果など）は record で書く。`form/` のクラスも record で書く（Spring MVC はコンストラクタで値を入れ、Thymeleaf の `th:field` も record の値を読める）。JPA エンティティは record にしない（JPA が引数なしのコンストラクタと setter を前提にするため）
 - **switch 式とパターンマッチング**: 分岐は `switch` 式で書き、`instanceof` は型パターン（`if (x instanceof Post p)`）を使う。record パターン（`case Result(var a, var b) ->`）も使ってよい
-- **sealed interface**: 取りうる結果が決まっているもの（例: 日記生成の「成功」「つぶやきなし」「AI が拒否」）は sealed interface + record で表し、`switch` で漏れなく扱う。`default` を書かずにコンパイラに網羅性を確認させる
+- **sealed interface**: 取りうる結果が決まっているもの（例: 日記生成の「成功」「つぶやきなし」「AI が拒否」）は sealed interface + record で表し、`switch` で漏れなく扱う。`default` を書かずにコンパイラに網羅性を確認させる。ただし `DiaryWriter`（AI の呼び出し）は日記の本文（`String`）だけを返す契約にし、拒否・失敗は例外（`DiaryRefusedException`・`DiaryWriteFailedException`）で知らせる。`DiaryGenerationService` がそれを受けて `DiaryGenerationResult` に変えるので、controller から先は sealed interface で扱う
 - **テキストブロック**: Claude へのプロンプトや複数行の SQL は `"""` で書く
 - **`var`**: 右辺から型が明らかなローカル変数に使う。型が読み取れない場合は書く
 - **Sequenced Collections**: 先頭・末尾は `getFirst()` / `getLast()` / `reversed()` を使い、`get(0)` や `get(size() - 1)` は書かない
@@ -177,6 +180,7 @@ tsumory/
 - Anthropic Java SDK を使い、HTTP を直接呼ばない
 - API キーは環境変数 `ANTHROPIC_API_KEY` から読む。コードや設定ファイルに書かない
 - モデル・タイムアウト・リトライなどの呼び出しの設定とプロンプトは、[docs/phase1-spec.md](docs/phase1-spec.md) の「6. AI 連携」に従う
+- どの実装で日記を書くかは `tsumory.diary-writer`（`stub` / `claude`）で切り替える。既定は `stub`（Claude API を呼ばない）。Claude につなぐときは環境変数 `TSUMORY_DIARY_WRITER=claude` と `ANTHROPIC_API_KEY` を設定して起動する
 
 ## 注意点
 
