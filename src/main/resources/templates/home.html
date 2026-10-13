@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tsumory</title>
+    <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+</head>
+<body class="bg-body-tertiary">
+<nav class="navbar bg-white border-bottom shadow-sm">
+    <div class="container">
+        <span class="navbar-brand mb-0 h1">Tsumory</span>
+        <div class="d-flex align-items-center gap-3">
+            <span class="text-body-secondary small" th:text="${today}">2026-05-17</span>
+            <form th:action="@{/logout}" method="post" class="m-0">
+                <button type="submit" class="btn btn-outline-secondary btn-sm">ログアウト</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<main class="container py-4" style="max-width: 720px;">
+    <div th:if="${message}" class="alert alert-warning" role="alert" th:text="${message}"></div>
+
+    <section class="card shadow-sm mb-4">
+        <div class="card-body">
+            <h2 class="h5 card-title mb-3">いまの気持ちをつぶやく</h2>
+            <form th:action="@{/posts}" th:object="${postForm}" method="post">
+                <div class="mb-2">
+                    <textarea th:field="*{content}" maxlength="100" rows="2" class="form-control"
+                              th:classappend="${#fields.hasErrors('content')} ? 'is-invalid'"></textarea>
+                    <p th:if="${#fields.hasErrors('content')}" th:errors="*{content}" class="invalid-feedback"
+                       role="alert"></p>
+                </div>
+                <div class="d-flex justify-content-end">
+                    <button type="submit" class="btn btn-primary">つぶやく</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <section class="card shadow-sm mb-4">
+        <div class="card-body">
+            <h2 class="h5 card-title mb-3">
+                今日のつぶやき
+                <span class="badge text-bg-secondary align-middle" th:text="|${#lists.size(posts)} 件|">0 件</span>
+            </h2>
+            <p th:if="${#lists.isEmpty(posts)}" class="text-body-secondary mb-0">まだつぶやきはありません。</p>
+            <ul th:if="${not #lists.isEmpty(posts)}" class="list-group list-group-flush">
+                <li th:each="post : ${posts}" class="list-group-item px-0">
+                    <div th:unless="${editingPost != null and editingPost.id eq post.id}"
+                         class="d-flex align-items-start gap-2">
+                        <span class="text-body-secondary small flex-shrink-0 pt-1" style="min-width: 3rem;"
+                              th:text="${post.time}"></span>
+                        <span class="flex-grow-1" th:text="${post.content}">コーヒーがおいしい</span>
+                        <div class="flex-shrink-0 d-flex align-items-center gap-2 pt-1">
+                            <a th:href="@{/posts/{id}/edit(id=${post.id})}" class="btn btn-link btn-sm p-0">編集</a>
+                            <form th:action="@{/posts/{id}/delete(id=${post.id})}" method="post" class="m-0">
+                                <button type="submit" class="btn btn-link btn-sm p-0 text-danger">削除</button>
+                            </form>
+                        </div>
+                    </div>
+                    <form th:if="${editingPost != null and editingPost.id eq post.id}"
+                          th:action="@{/posts/{id}/edit(id=${post.id})}" th:object="${postEditForm}" method="post">
+                        <div class="mb-2">
+                            <textarea th:field="*{content}" maxlength="100" rows="2" class="form-control"
+                                      th:classappend="${#fields.hasErrors('content')} ? 'is-invalid'"></textarea>
+                            <p th:if="${#fields.hasErrors('content')}" th:errors="*{content}"
+                               class="invalid-feedback" role="alert"></p>
+                        </div>
+                        <div class="d-flex justify-content-end gap-2">
+                            <a th:href="@{/}" class="btn btn-outline-secondary btn-sm">キャンセル</a>
+                            <button type="submit" class="btn btn-primary btn-sm">保存</button>
+                        </div>
+                    </form>
+                </li>
+            </ul>
+        </div>
+    </section>
+
+    <section class="card shadow-sm">
+        <div class="card-body">
+            <h2 class="h5 card-title mb-3">今日の日記</h2>
+            <div th:if="${diary != null}" class="d-flex align-items-center justify-content-between">
+                <span class="badge text-bg-success">生成済</span>
+                <a th:href="@{/diary/{date}(date=${today})}" class="btn btn-primary btn-sm">今日の日記を見る →</a>
+            </div>
+            <div th:if="${diary == null}">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="badge text-bg-secondary">未生成</span>
+                </div>
+                <form th:action="@{/diary/generate}" method="post"
+                      onsubmit="document.getElementById('genBtn').disabled = true; document.getElementById('genLoading').hidden = false;">
+                    <button type="submit" id="genBtn" class="btn btn-primary"
+                            th:disabled="${#lists.isEmpty(posts)}">日記を生成</button>
+                    <span id="genLoading" hidden aria-live="polite" class="ms-2 text-body-secondary small">
+                        日記を作成中です…しばらくお待ちください
+                    </span>
+                </form>
+            </div>
+        </div>
+    </section>
+</main>
+</body>
+</html>

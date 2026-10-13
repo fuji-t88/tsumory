@@ -48,12 +48,10 @@ class PostControllerTest {
 
     private static final Long USER_ID = 1L;
     private static final LocalDate TODAY = LocalDate.of(2026, 10, 7);
-    private static final LocalDate YESTERDAY = TODAY.minusDays(1);
     private static final CustomUserDetails PRINCIPAL = new CustomUserDetails(USER_ID, "demo", "$2a$10$hash");
 
     private static final PostItem TODAY_POST = new PostItem(10L, "昼のカレーが辛すぎた", LocalTime.of(12, 40), false);
     private static final PostItem EDITED_POST = new PostItem(11L, "寝坊した", LocalTime.of(8, 12), true);
-    private static final PostItem YESTERDAY_POST = new PostItem(20L, "夜ふかしした", LocalTime.of(23, 50), false);
 
     @Autowired
     private MockMvc mockMvc;
@@ -71,12 +69,10 @@ class PostControllerTest {
     void setUp() {
         when(postService.today()).thenReturn(TODAY);
         when(postService.findPosts(USER_ID, TODAY)).thenReturn(List.of(EDITED_POST, TODAY_POST));
-        when(postService.findPosts(USER_ID, YESTERDAY)).thenReturn(List.of());
         when(diaryService.findDiaryForSummary(USER_ID, TODAY)).thenReturn(Optional.empty());
-        when(diaryService.findDiaryForSummary(USER_ID, YESTERDAY)).thenReturn(Optional.empty());
     }
 
-    // --- 今日のつぶやき画面 ---
+    // --- ホーム画面 ---
 
     @Test
     void 未ログインならログイン画面へリダイレクト() throws Exception {
@@ -84,101 +80,74 @@ class PostControllerTest {
     }
 
     @Test
-    void 今日の日付とつぶやきを表示する() throws Exception {
+    void 今日のつぶやきを件数と時刻と編集削除の操作付きで表示する() throws Exception {
         mockMvc.perform(get("/").with(user(PRINCIPAL)))
                 .andExpect(status().isOk())
-                .andExpect(view().name("index"))
-                .andExpect(content().string(containsString("2026年10月7日（水）")))
+                .andExpect(view().name("home"))
+                .andExpect(content().string(containsString("2026-10-07")))
+                .andExpect(content().string(containsString("2 件")))
                 .andExpect(content().string(containsString("12:40")))
                 .andExpect(content().string(containsString("昼のカレーが辛すぎた")))
                 .andExpect(content().string(containsString("/posts/10/edit")))
-                .andExpect(content().string(containsString("まだ日記はありません")));
+                .andExpect(content().string(containsString("action=\"/posts/10/delete\"")));
     }
 
     @Test
-    void ヘッダーにユーザー名とログアウトボタンを表示する() throws Exception {
+    void ナビゲーションにログアウトボタンを表示する() throws Exception {
         mockMvc.perform(get("/").with(user(PRINCIPAL)))
-                .andExpect(content().string(containsString(">demo</span>")))
+                .andExpect(content().string(containsString("action=\"/logout\"")))
                 .andExpect(content().string(containsString("ログアウト")));
     }
 
     @Test
-    void 編集したつぶやきには編集済みと添える() throws Exception {
-        when(postService.findPosts(USER_ID, TODAY)).thenReturn(List.of(EDITED_POST));
-
-        mockMvc.perform(get("/").with(user(PRINCIPAL))).andExpect(content().string(containsString("編集済み")));
-    }
-
-    @Test
-    void 投稿しただけのつぶやきには編集済みと添えない() throws Exception {
-        when(postService.findPosts(USER_ID, TODAY)).thenReturn(List.of(TODAY_POST));
-
-        mockMvc.perform(get("/").with(user(PRINCIPAL))).andExpect(content().string(not(containsString("編集済み"))));
-    }
-
-    @Test
-    void 今日のつぶやきが0件ならその旨を表示する() throws Exception {
+    void 今日のつぶやきが0件ならその旨を表示し日記を生成ボタンを無効にする() throws Exception {
         when(postService.findPosts(USER_ID, TODAY)).thenReturn(List.of());
 
-        mockMvc.perform(get("/").with(user(PRINCIPAL)))
-                .andExpect(content().string(containsString("まだつぶやきがありません")))
-                .andExpect(content().string(containsString("/diary/2026-10-07")));
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andExpect(content().string(containsString("まだつぶやきはありません。")))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html).containsPattern("id=\"genBtn\"[^>]*disabled");
     }
 
     @Test
-    void 日記があれば作成時刻を表示する() throws Exception {
+    void つぶやきがあり日記がなければ未生成と日記を生成ボタンを出す() throws Exception {
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andExpect(content().string(containsString("未生成")))
+                .andExpect(content().string(containsString("action=\"/diary/generate\"")))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html).doesNotContainPattern("id=\"genBtn\"[^>]*disabled");
+        assertThat(html).contains("日記を作成中です");
+    }
+
+    @Test
+    void 日記があれば生成済と日記を見るリンクに切り替える() throws Exception {
         when(diaryService.findDiaryForSummary(USER_ID, TODAY))
                 .thenReturn(Optional.of(new DiaryItem(TODAY, "日記の本文", LocalTime.of(21, 30))));
 
-        mockMvc.perform(get("/").with(user(PRINCIPAL))).andExpect(content().string(containsString("日記あり（21:30 に作成）")));
-    }
-
-    @Test
-    void 昨日のつぶやきも日記もなければ昨日の区画を出さない() throws Exception {
         mockMvc.perform(get("/").with(user(PRINCIPAL)))
-                .andExpect(content().string(not(containsString("id=\"yesterday\""))));
+                .andExpect(content().string(containsString("生成済")))
+                .andExpect(content().string(containsString("href=\"/diary/2026-10-07\"")))
+                .andExpect(content().string(containsString("今日の日記を見る")))
+                .andExpect(content().string(not(containsString("action=\"/diary/generate\""))));
     }
 
     @Test
-    void 昨日のつぶやきがあれば昨日の区画に編集リンク付きで出す() throws Exception {
-        when(postService.findPosts(USER_ID, YESTERDAY)).thenReturn(List.of(YESTERDAY_POST));
-
-        mockMvc.perform(get("/").with(user(PRINCIPAL)))
-                .andExpect(content().string(containsString("id=\"yesterday\"")))
-                .andExpect(content().string(containsString("昨日 2026年10月6日（火）")))
-                .andExpect(content().string(containsString("夜ふかしした")))
-                .andExpect(content().string(containsString("/posts/20/edit")))
-                .andExpect(content().string(containsString("/diary/2026-10-06")));
-    }
-
-    @Test
-    void 昨日は日記だけあっても昨日の区画を出す() throws Exception {
-        when(diaryService.findDiaryForSummary(USER_ID, YESTERDAY))
-                .thenReturn(Optional.of(new DiaryItem(YESTERDAY, "日記の本文", LocalTime.of(23, 0))));
-
-        mockMvc.perform(get("/").with(user(PRINCIPAL)))
-                .andExpect(content().string(containsString("id=\"yesterday\"")))
-                .andExpect(content().string(containsString("日記あり（23:00 に作成）")));
-    }
-
-    @Test
-    void フラッシュメッセージがあれば赤で表示する() throws Exception {
-        mockMvc.perform(get("/").with(user(PRINCIPAL)).flashAttr("errorMessage", PostController.POST_NOT_FOUND_MESSAGE))
-                .andExpect(content().string(containsString("role=\"alert\"")))
+    void フラッシュメッセージがあれば表示する() throws Exception {
+        mockMvc.perform(get("/").with(user(PRINCIPAL)).flashAttr("message", PostController.POST_NOT_FOUND_MESSAGE))
+                .andExpect(content().string(containsString("alert-warning")))
                 .andExpect(content().string(containsString("つぶやきが見つかりませんでした")));
-    }
-
-    @Test
-    void 日記を生成できなかったときのメッセージを青で表示する() throws Exception {
-        mockMvc.perform(get("/").with(user(PRINCIPAL)).flashAttr("message", "つぶやきがないため日記を生成できません"))
-                .andExpect(content().string(containsString("alert-info")))
-                .andExpect(content().string(containsString("つぶやきがないため日記を生成できません")));
     }
 
     @Test
     void フラッシュメッセージがなければ出さない() throws Exception {
         mockMvc.perform(get("/").with(user(PRINCIPAL)))
-                .andExpect(content().string(not(containsString("role=\"alert\""))));
+                .andExpect(content().string(not(containsString("alert-warning"))));
     }
 
     @Test
@@ -256,7 +225,7 @@ class PostControllerTest {
                         .with(user(PRINCIPAL))
                         .with(csrf()))
                 .andExpect(status().isOk())
-                .andExpect(view().name("index"))
+                .andExpect(view().name("home"))
                 .andExpect(content().string(containsString("内容を入力してください")));
 
         verify(postService, never()).post(anyLong(), anyString());
@@ -288,36 +257,26 @@ class PostControllerTest {
     // --- 編集モード ---
 
     @Test
-    void 編集モードではその行だけ編集フォームにする() throws Exception {
+    void 編集モードではその行だけ現在の本文が入った編集フォームにする() throws Exception {
         when(postService.getEditablePost(USER_ID, 10L)).thenReturn(TODAY_POST);
 
-        mockMvc.perform(get("/posts/10/edit").with(user(PRINCIPAL)))
+        var html = mockMvc.perform(get("/posts/10/edit").with(user(PRINCIPAL)))
                 .andExpect(status().isOk())
-                .andExpect(view().name("index"))
-                .andExpect(content().string(containsString("action=\"/posts/10/edit\"")))
-                .andExpect(content().string(containsString("action=\"/posts/10/delete\"")))
-                .andExpect(content().string(containsString("投稿時刻は変わりません")))
-                .andExpect(content().string(containsString("/posts/11/edit")))
-                .andExpect(content().string(not(containsString("action=\"/posts/11/delete\""))));
-    }
-
-    @Test
-    void 昨日のつぶやきの編集モードは昨日の区画の行を編集フォームにする() throws Exception {
-        when(postService.findPosts(USER_ID, YESTERDAY)).thenReturn(List.of(YESTERDAY_POST));
-        when(postService.getEditablePost(USER_ID, 20L)).thenReturn(YESTERDAY_POST);
-
-        var html = mockMvc.perform(get("/posts/20/edit").with(user(PRINCIPAL)))
-                .andExpect(status().isOk())
+                .andExpect(view().name("home"))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
 
-        var yesterdaySection = html.substring(html.indexOf("id=\"yesterday\""));
-        assertThat(yesterdaySection)
-                .contains("action=\"/posts/20/edit\"")
-                .contains("action=\"/posts/20/delete\"")
-                .contains("夜ふかしした");
-        assertThat(html.substring(0, html.indexOf("id=\"yesterday\""))).doesNotContain("action=\"/posts/20/edit\"");
+        assertThat(html)
+                .contains("action=\"/posts/10/edit\"")
+                .contains(">昼のカレーが辛すぎた</textarea>")
+                .contains("キャンセル")
+                .contains("保存")
+                // 編集中の行は通常表示（編集・削除の操作）を出さない
+                .doesNotContain("action=\"/posts/10/delete\"")
+                // ほかの行は通常表示のまま
+                .contains("/posts/11/edit")
+                .contains("action=\"/posts/11/delete\"");
     }
 
     @Test
@@ -326,7 +285,7 @@ class PostControllerTest {
 
         mockMvc.perform(get("/posts/99/edit").with(user(PRINCIPAL)))
                 .andExpect(redirectedUrl("/"))
-                .andExpect(flash().attribute("errorMessage", PostController.POST_NOT_FOUND_MESSAGE));
+                .andExpect(flash().attribute("message", PostController.POST_NOT_FOUND_MESSAGE));
     }
 
     // --- 編集 ---
@@ -368,7 +327,7 @@ class PostControllerTest {
                         .with(user(PRINCIPAL))
                         .with(csrf()))
                 .andExpect(redirectedUrl("/"))
-                .andExpect(flash().attribute("errorMessage", PostController.POST_NOT_FOUND_MESSAGE));
+                .andExpect(flash().attribute("message", PostController.POST_NOT_FOUND_MESSAGE));
     }
 
     @Test
@@ -380,7 +339,7 @@ class PostControllerTest {
                         .with(user(PRINCIPAL))
                         .with(csrf()))
                 .andExpect(redirectedUrl("/"))
-                .andExpect(flash().attribute("errorMessage", PostController.POST_NOT_FOUND_MESSAGE));
+                .andExpect(flash().attribute("message", PostController.POST_NOT_FOUND_MESSAGE));
     }
 
     @Test
@@ -407,7 +366,7 @@ class PostControllerTest {
 
         mockMvc.perform(post("/posts/99/delete").with(user(PRINCIPAL)).with(csrf()))
                 .andExpect(redirectedUrl("/"))
-                .andExpect(flash().attribute("errorMessage", PostController.POST_NOT_FOUND_MESSAGE));
+                .andExpect(flash().attribute("message", PostController.POST_NOT_FOUND_MESSAGE));
     }
 
     @Test

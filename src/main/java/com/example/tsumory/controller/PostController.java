@@ -7,7 +7,6 @@ import com.example.tsumory.service.PostItem;
 import com.example.tsumory.service.PostService;
 import com.example.tsumory.service.ResourceNotFoundException;
 import jakarta.validation.Valid;
-import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -36,7 +35,7 @@ public class PostController {
     public String index(@AuthenticationPrincipal CustomUserDetails principal, Model model) {
         model.addAttribute("postForm", new PostForm(null));
         populateHomeModel(principal.userId(), null, model);
-        return "index";
+        return "home";
     }
 
     @PostMapping("/posts")
@@ -47,7 +46,7 @@ public class PostController {
             Model model) {
         if (bindingResult.hasErrors()) {
             populateHomeModel(principal.userId(), null, model);
-            return "index";
+            return "home";
         }
         postService.post(principal.userId(), form.content());
         return "redirect:/";
@@ -62,9 +61,9 @@ public class PostController {
         try {
             var post = postService.getEditablePost(principal.userId(), id);
             model.addAttribute("postForm", new PostForm(null));
-            model.addAttribute("editForm", new PostForm(post.content()));
-            populateHomeModel(principal.userId(), id, model);
-            return "index";
+            model.addAttribute("postEditForm", new PostForm(post.content()));
+            populateHomeModel(principal.userId(), toView(post), model);
+            return "home";
         } catch (ResourceNotFoundException e) {
             return redirectWithNotFound(redirectAttributes);
         }
@@ -74,17 +73,17 @@ public class PostController {
     public String edit(
             @AuthenticationPrincipal CustomUserDetails principal,
             @PathVariable Long id,
-            @Valid @ModelAttribute("editForm") PostForm form,
+            @Valid @ModelAttribute("postEditForm") PostForm form,
             BindingResult bindingResult,
             Model model,
             RedirectAttributes redirectAttributes) {
         try {
             if (bindingResult.hasErrors()) {
                 // 入力エラーでも、編集できないつぶやきなら再表示せずに戻す
-                postService.getEditablePost(principal.userId(), id);
+                var post = postService.getEditablePost(principal.userId(), id);
                 model.addAttribute("postForm", new PostForm(null));
-                populateHomeModel(principal.userId(), id, model);
-                return "index";
+                populateHomeModel(principal.userId(), toView(post), model);
+                return "home";
             }
             postService.edit(principal.userId(), id, form.content());
             return "redirect:/";
@@ -106,22 +105,22 @@ public class PostController {
         }
     }
 
-    /** ホーム画面（通常モード・編集モード）の今日・昨日の区画を詰める。編集モードでなければ {@code editingPostId} は {@code null}。 */
-    private void populateHomeModel(Long userId, Long editingPostId, Model model) {
-        // 「今日」はここで 1 回だけ求め、今日と昨日の区画をそこから決める（途中で 0 時をまたいでもずれない）
+    /**
+     * ホーム画面（通常モード・編集モード）の値を詰める。今日の日付・今日のつぶやき・今日の日記（なければ {@code null}）・
+     * 編集中のつぶやき（編集モードでなければ {@code null}）。
+     */
+    private void populateHomeModel(Long userId, PostView editingPost, Model model) {
+        // 「今日」はここで 1 回だけ求める（途中で 0 時をまたいでもずれない）
         var today = postService.today();
-        model.addAttribute("todaySection", section(userId, today));
-        model.addAttribute("yesterdaySection", section(userId, today.minusDays(1)));
-        model.addAttribute("editingPostId", editingPostId);
-    }
-
-    private DaySection section(Long userId, LocalDate date) {
-        return new DaySection(
-                date,
-                postService.findPosts(userId, date).stream()
+        model.addAttribute("today", today);
+        model.addAttribute(
+                "posts",
+                postService.findPosts(userId, today).stream()
                         .map(PostController::toView)
-                        .toList(),
-                diaryService.findDiaryForSummary(userId, date).orElse(null));
+                        .toList());
+        model.addAttribute(
+                "diary", diaryService.findDiaryForSummary(userId, today).orElse(null));
+        model.addAttribute("editingPost", editingPost);
     }
 
     /** 投稿時刻を表示用の文字列にして、画面専用の {@link PostView} に詰める。 */
@@ -131,7 +130,7 @@ public class PostController {
 
     // ログは PostService が WARN で出しているので、ここでは出さない
     private static String redirectWithNotFound(RedirectAttributes redirectAttributes) {
-        redirectAttributes.addFlashAttribute("errorMessage", POST_NOT_FOUND_MESSAGE);
+        redirectAttributes.addFlashAttribute("message", POST_NOT_FOUND_MESSAGE);
         return "redirect:/";
     }
 }
