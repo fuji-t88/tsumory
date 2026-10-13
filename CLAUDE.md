@@ -86,6 +86,8 @@ tsumory/
   | `domain` | ドメインモデル（エンティティなど） | `Post` |
   | `form` | Thymeleaf のフォーム入力（Bean Validation 付き） | `PostForm` |
   | `config` | 設定 | `SecurityConfig` |
+  | `config` | ログイン中のユーザー（`UserDetails` を実装する record。`@AuthenticationPrincipal` で受け、`userId()` を service に渡す） | `CustomUserDetails` |
+  | `config` | ログイン時に DB からユーザーを探し、`CustomUserDetails` に詰めて返す（`UserDetailsService` の実装） | `CustomUserDetailsService` |
 
 - パッケージは上の 6 つだけにする。`ai/`・`client/`・`exception/`・`entity/`・`dto/`・`common/`・`util/` などは作らない
 - AI 連携と例外は `service/` にまとめる
@@ -100,6 +102,9 @@ tsumory/
 - 整形は Spotless で統一する。Java は palantir-java-format（4 スペース、120 桁）、`*.gradle.kts` は ktlint
 - ローカルでは `compileJava` の前に `spotlessApply` が自動で走る。環境変数 `CI` があるときは整形せず `spotlessCheck` で失敗させる
 - DB スキーマの変更は Flyway のマイグレーション（`src/main/resources/db/migration/V<番号>__<説明>.sql`）で行い、JPA の `ddl-auto` には頼らない
+  - 一度適用したマイグレーションファイル（開発用 DB に適用しただけのものも含む）は編集しない。列の追加・型の変更・データの修正なども、番号を 1 つ進めた新しいバージョン（`V2__add_xxx.sql` など）を追加して行う
+  - 適用済みのファイルを編集すると、Flyway のチェックサム検証で起動時にエラーになり、環境ごとにスキーマがずれる原因にもなる
+  - まだどこにも適用していないファイルだけは、直接書き換えてよい
 - 追加する依存のうち、Spring Boot が管理していないもの（Anthropic SDK、Bootstrap など）はバージョンを明記する
 
 ### Java 21 の機能を積極的に使う
@@ -119,7 +124,24 @@ tsumory/
 - DI はコンストラクタインジェクション（`@RequiredArgsConstructor` + `private final` フィールド）
 - `@Transactional` は service に付ける。読み取りだけのメソッドは `@Transactional(readOnly = true)`
 - エンティティには `@Getter` と必要な `@Setter` だけを付ける。`@Data`・`@EqualsAndHashCode`・`@ToString` は付けない（遅延ロードや循環参照で問題が起きるため）
-- ログは SLF4J（Lombok の `@Slf4j`）で出す
+- エンティティの引数なしコンストラクタは `@NoArgsConstructor(access = AccessLevel.PROTECTED)` にする（JPA 用。アプリのコードからは、必須の値を受け取るコンストラクタで作る）
+- エンティティの関連（`@ManyToOne` など）は `fetch = FetchType.LAZY` を明示する（`@ManyToOne` の既定は EAGER で、一覧を取得すると関連先ごとに SELECT が発行される N+1 問題の原因になるため）
+
+### ログ
+
+- ログは SLF4J（Lombok の `@Slf4j`）で出す。本番で障害の原因を追えるよう、service の状態を変える処理と外部 API の呼び出しには記録を残す
+- 出してよいのは、個人情報を含まないメタ情報だけ（ユーザー ID、つぶやき・日記の ID、日付、件数、本文の文字数、結果の種類、処理時間、Claude API のステータスコード・リクエスト ID・メッセージ ID・トークン数）。出してはいけないものは禁止事項の「ログ」
+- 例外はメッセージを出さず、クラス名だけを出す（SQL や API の応答が含まれることがあるため）
+- ログレベルは次のとおり使い分ける
+
+  | レベル | 使う場面 | 例 |
+  |---|---|---|
+  | ERROR | システムが正常に動いておらず、すぐ対応が必要なとき。正常な業務処理には使わない（アラートが形骸化するため） | DB に接続できない |
+  | WARN | 処理は続けられたが、繰り返すなら調べるべきとき | 他人のつぶやきへのアクセスの試行、Claude API のエラー・タイムアウト・拒否 |
+  | INFO | 正常な業務イベント | つぶやきの投稿・編集・削除、日記の生成・保存 |
+  | DEBUG | 開発時の調査用。本番では出さない | 変数の中身 |
+
+- 想定外の例外は service で受け止めて ERROR を出さず、そのまま投げる（Spring が 500 として記録する）
 
 ## 禁止事項
 
@@ -131,7 +153,7 @@ tsumory/
 - `null` のコレクションを返すこと（空のコレクションを返す）
 - 仮想スレッド上でブロッキング I/O を `synchronized` で囲むこと（Java 21 ではキャリアスレッドを占有する）。排他が必要なら `ReentrantLock` を使う
 - 自前のスレッドプール（`Executors.newFixedThreadPool` など）や `new Thread()`
-- 適用済みの Flyway マイグレーションファイルの書き換え。変更は新しいマイグレーションで行う
+- 適用済みの Flyway マイグレーションファイルの書き換え（「コーディング規約 > 全般」のマイグレーションの方針を参照）
 - `spring.jpa.hibernate.ddl-auto` を `update` / `create` にすること
 
 ### セキュリティ
@@ -140,10 +162,11 @@ tsumory/
 - **SQL インジェクション**: SQL や JPQL を文字列連結で組み立てない。Spring Data のメソッド名クエリか、`@Query` + バインドパラメータを使う
 - **CSRF**: CSRF 対策を無効にしない（`csrf.disable()` 禁止）。フォームは `th:action` を使い、トークンを自動で埋め込ませる
 - **パスワード**: 平文やハッシュ化なしで保存しない。`BCryptPasswordEncoder` でハッシュ化する。初期ユーザーのマイグレーションにも、平文ではなく BCrypt のハッシュ値を書く
-- **他人のデータ（IDOR）**: つぶやきや日記を ID だけで取得しない。必ずログイン中のユーザーを条件に含める（例: `findByIdAndUser(id, user)`）。他人のデータにアクセスされた場合は 404 を返す
+- **他人のデータ（IDOR）**: つぶやきや日記を ID だけで取得しない。必ずログイン中のユーザーを条件に含める（例: `findByIdAndUserId(id, userId)`）。他人のデータにアクセスされた場合は 404 を返す
 - **認可**: `permitAll()` はログイン画面と静的リソース（`/webjars/**` など）だけ。それ以外は認証必須にする
 - **秘密情報**: API キーやパスワードをコード・設定ファイル・コミットに含めない。`.env` などはコミットしない
 - **ログ**: パスワード、API キー、セッション ID をログに出さない。つぶやきと日記の本文も個人的な内容なのでログに出さない
+  - 例外: 開発中は、`application.yaml` の `org.hibernate.orm.jdbc.bind: TRACE` で SQL のバインドパラメータの値を出してよい。本文が含まれるので、本番デプロイ時は必ず無効化する
 - **エラー表示**: スタックトレースや SQL などの内部情報を画面に出さない
 - **入力の受け取り**: リクエストを直接エンティティにバインドしない。必ず `form/` のクラスで受け、Bean Validation を通す（`@Valid`）
 - **プロンプトインジェクション**: つぶやきの本文をシステムプロンプトに埋め込まない。ユーザーメッセージ側にデータとして渡し、本文の中の指示に従わないようシステムプロンプトで指示する。AI の出力は表示用の文章としてだけ扱い、その内容で処理を分岐させない
