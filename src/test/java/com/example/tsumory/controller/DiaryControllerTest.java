@@ -22,32 +22,44 @@ import com.example.tsumory.config.SecurityConfig;
 import com.example.tsumory.domain.Diary;
 import com.example.tsumory.domain.User;
 import com.example.tsumory.repository.UserRepository;
-import com.example.tsumory.service.DiaryGenerationResult;
+import com.example.tsumory.service.DiaryGenerationException;
 import com.example.tsumory.service.DiaryGenerationService;
-import com.example.tsumory.service.DiaryItem;
 import com.example.tsumory.service.DiaryNotFoundException;
 import com.example.tsumory.service.DiaryService;
+import com.example.tsumory.service.NoPostsException;
 import com.example.tsumory.service.PostService;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(DiaryController.class)
-@Import({SecurityConfig.class, CustomUserDetailsService.class})
+@Import({SecurityConfig.class, CustomUserDetailsService.class, DiaryControllerTest.FixedClock.class})
 class DiaryControllerTest {
 
     private static final Long USER_ID = 1L;
+    // 2026-10-07 21:00（日本時間）
+    private static final Instant NOW = Instant.parse("2026-10-07T12:00:00Z");
     private static final LocalDate TODAY = LocalDate.of(2026, 10, 7);
     private static final LocalDate YESTERDAY = TODAY.minusDays(1);
     private static final CustomUserDetails PRINCIPAL = new CustomUserDetails(USER_ID, "demo", "$2a$10$hash");
+
+    @TestConfiguration
+    static class FixedClock {
+        @Bean
+        Clock clock() {
+            return Clock.fixed(NOW, PostService.ZONE);
+        }
+    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -59,23 +71,21 @@ class DiaryControllerTest {
     private DiaryGenerationService diaryGenerationService;
 
     @MockitoBean
-    private PostService postService;
-
-    @MockitoBean
     private UserRepository userRepository;
+
+    private final User user = new User("demo", "hash", Instant.EPOCH);
 
     @BeforeEach
     void setUp() {
-        when(postService.today()).thenReturn(TODAY);
-        when(diaryService.findDiary(USER_ID, TODAY)).thenReturn(Optional.empty());
-        when(diaryService.findDiary(USER_ID, YESTERDAY)).thenReturn(Optional.empty());
-        when(diaryService.findDiary(USER_ID, TODAY.minusDays(2)))
+        when(diaryService.findByDate(USER_ID, TODAY)).thenReturn(Optional.empty());
+        when(diaryService.findByDate(USER_ID, YESTERDAY)).thenReturn(Optional.empty());
+        when(diaryService.findByDate(USER_ID, TODAY.minusDays(2)))
                 .thenThrow(new DiaryNotFoundException(TODAY.minusDays(2)));
-        when(diaryService.findDiary(USER_ID, TODAY.plusDays(1)))
+        when(diaryService.findByDate(USER_ID, TODAY.plusDays(1)))
                 .thenThrow(new DiaryNotFoundException(TODAY.plusDays(1)));
     }
 
-    // --- 日記表示 ---
+    // --- 日記表示（view） ---
 
     @Test
     void 未ログインならログイン画面へリダイレクト() throws Exception {
@@ -83,57 +93,38 @@ class DiaryControllerTest {
     }
 
     @Test
-    void 日記があれば本文と作成時刻と作り直すボタンを出す() throws Exception {
-        when(diaryService.findDiary(USER_ID, TODAY))
-                .thenReturn(Optional.of(new DiaryItem(TODAY, "寝坊した一日。", LocalTime.of(21, 30))));
-        when(postService.countPosts(USER_ID, TODAY)).thenReturn(2L);
+    void 日記があれば本文と日本時間の作成時刻と作り直すボタンを出す() throws Exception {
+        // 12:30Z は日本時間の 21:30
+        when(diaryService.findByDate(USER_ID, TODAY))
+                .thenReturn(Optional.of(new Diary(user, TODAY, "寝坊した一日。", Instant.parse("2026-10-07T12:30:00Z"))));
 
         mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
                 .andExpect(status().isOk())
-                .andExpect(view().name("diary/show"))
+                .andExpect(view().name("diary"))
                 .andExpect(content().string(containsString("2026年10月7日（水）の日記")))
                 .andExpect(content().string(containsString("寝坊した一日。")))
                 .andExpect(content().string(containsString("21:30 に作成")))
-                .andExpect(content().string(containsString(">作り直す</button>")))
-                .andExpect(content().string(containsString("value=\"2026-10-07\"")));
+                .andExpect(content().string(containsString(">作り直す</button>")));
     }
 
     @Test
-    void つぶやきがあり日記がなければ件数と日記を書くボタンを出す() throws Exception {
-        when(postService.countPosts(USER_ID, TODAY)).thenReturn(3L);
-
+    void 日記がなければ日記を書くボタンを出す() throws Exception {
         mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
-                .andExpect(content().string(containsString("その日のつぶやき 3 件から日記を書きます")))
-                .andExpect(content().string(containsString("action=\"/diary/generate\"")))
+                .andExpect(content().string(containsString("まだ日記はありません")))
+                .andExpect(content().string(containsString(">日記を書く</button>")))
                 .andExpect(content().string(not(containsString(">作り直す</button>"))));
     }
 
     @Test
-    void 今日のつぶやきが0件なら無効の日記を書くボタンを出す() throws Exception {
-        when(postService.countPosts(USER_ID, TODAY)).thenReturn(0L);
-
-        mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
-                .andExpect(content().string(containsString("つぶやくと日記を書けます")))
-                .andExpect(content().string(containsString("disabled")))
-                .andExpect(content().string(not(containsString("action=\"/diary/generate\""))));
-    }
-
-    @Test
-    void 昨日のつぶやきが0件ならボタンを出さない() throws Exception {
-        when(postService.countPosts(USER_ID, YESTERDAY)).thenReturn(0L);
+    void 昨日の日記も表示できる() throws Exception {
+        // 14:00Z は日本時間の 23:00
+        when(diaryService.findByDate(USER_ID, YESTERDAY))
+                .thenReturn(Optional.of(new Diary(user, YESTERDAY, "昨日の日記", Instant.parse("2026-10-06T14:00:00Z"))));
 
         mockMvc.perform(get("/diary/2026-10-06").with(user(PRINCIPAL)))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("この日のつぶやきはありません")))
-                .andExpect(content().string(not(containsString("日記を書く"))));
-    }
-
-    @Test
-    void つぶやきを直すリンクは今日なら今日のつぶやき昨日なら昨日の区画へ() throws Exception {
-        mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
-                .andExpect(content().string(containsString("href=\"/\"")));
-        mockMvc.perform(get("/diary/2026-10-06").with(user(PRINCIPAL)))
-                .andExpect(content().string(containsString("href=\"/#yesterday\"")));
+                .andExpect(content().string(containsString("昨日の日記")))
+                .andExpect(content().string(containsString("23:00 に作成")));
     }
 
     @Test
@@ -150,117 +141,54 @@ class DiaryControllerTest {
     }
 
     @Test
-    void フラッシュメッセージを色ごとに出す() throws Exception {
-        mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)).flashAttr("successMessage", "日記を書きました"))
-                .andExpect(content().string(containsString("alert-success")));
-        mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)).flashAttr("infoMessage", "いま日記を書いています"))
-                .andExpect(content().string(containsString("alert-info")));
-        mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)).flashAttr("errorMessage", "日記を書けませんでした"))
-                .andExpect(content().string(containsString("alert-danger")));
-    }
-
-    // --- 日記生成 ---
-
-    @Test
-    void 生成に成功したら成功のメッセージを付けて日記表示へ() throws Exception {
-        var diary = new Diary(new User("demo", "hash", Instant.EPOCH), TODAY, "日記", Instant.EPOCH);
-        when(diaryGenerationService.generate(USER_ID, TODAY)).thenReturn(new DiaryGenerationResult.Generated(diary));
-
-        mockMvc.perform(post("/diary/generate")
-                        .param("date", "2026-10-07")
+    void フラッシュメッセージがあれば赤で出す() throws Exception {
+        mockMvc.perform(get("/diary/2026-10-07")
                         .with(user(PRINCIPAL))
-                        .with(csrf()))
-                .andExpect(redirectedUrl("/diary/2026-10-07"))
-                .andExpect(flash().attribute("successMessage", DiaryController.GENERATED_MESSAGE));
+                        .flashAttr("message", DiaryController.GENERATION_FAILED_MESSAGE))
+                .andExpect(content().string(containsString("alert-danger")))
+                .andExpect(content().string(containsString(DiaryController.GENERATION_FAILED_MESSAGE)));
     }
 
-    @Test
-    void 昨日の日記も生成できる() throws Exception {
-        when(diaryGenerationService.generate(USER_ID, YESTERDAY)).thenReturn(new DiaryGenerationResult.Failed());
-
-        mockMvc.perform(post("/diary/generate")
-                        .param("date", "2026-10-06")
-                        .with(user(PRINCIPAL))
-                        .with(csrf()))
-                .andExpect(redirectedUrl("/diary/2026-10-06"));
-
-        verify(diaryGenerationService).generate(USER_ID, YESTERDAY);
-    }
+    // --- 日記生成（generate） ---
 
     @Test
-    void つぶやきが0件なら青のメッセージ() throws Exception {
-        when(diaryGenerationService.generate(USER_ID, TODAY)).thenReturn(new DiaryGenerationResult.NoPosts());
+    void 生成に成功したら今日の日記表示へ() throws Exception {
+        when(diaryGenerationService.generateToday(USER_ID)).thenReturn(new Diary(user, TODAY, "日記", NOW));
 
-        mockMvc.perform(post("/diary/generate")
-                        .param("date", "2026-10-07")
-                        .with(user(PRINCIPAL))
-                        .with(csrf()))
-                .andExpect(flash().attribute("infoMessage", DiaryController.NO_POSTS_MESSAGE));
-    }
-
-    @Test
-    void 生成中なら青のメッセージ() throws Exception {
-        when(diaryGenerationService.generate(USER_ID, TODAY)).thenReturn(new DiaryGenerationResult.InProgress());
-
-        mockMvc.perform(post("/diary/generate")
-                        .param("date", "2026-10-07")
-                        .with(user(PRINCIPAL))
-                        .with(csrf()))
-                .andExpect(flash().attribute("infoMessage", DiaryController.IN_PROGRESS_MESSAGE));
-    }
-
-    @Test
-    void AIが拒否したら赤のメッセージ() throws Exception {
-        when(diaryGenerationService.generate(USER_ID, TODAY)).thenReturn(new DiaryGenerationResult.Refused());
-
-        mockMvc.perform(post("/diary/generate")
-                        .param("date", "2026-10-07")
-                        .with(user(PRINCIPAL))
-                        .with(csrf()))
-                .andExpect(flash().attribute("errorMessage", DiaryController.REFUSED_MESSAGE));
-    }
-
-    @Test
-    void APIエラーなら赤のメッセージ() throws Exception {
-        when(diaryGenerationService.generate(USER_ID, TODAY)).thenReturn(new DiaryGenerationResult.Failed());
-
-        mockMvc.perform(post("/diary/generate")
-                        .param("date", "2026-10-07")
-                        .with(user(PRINCIPAL))
-                        .with(csrf()))
-                .andExpect(flash().attribute("errorMessage", DiaryController.FAILED_MESSAGE));
-    }
-
-    @Test
-    void 一昨日の日付の生成は404() throws Exception {
-        var old = TODAY.minusDays(2);
-        when(diaryGenerationService.generate(USER_ID, old)).thenThrow(new DiaryNotFoundException(old));
-
-        mockMvc.perform(post("/diary/generate")
-                        .param("date", "2026-10-05")
-                        .with(user(PRINCIPAL))
-                        .with(csrf()))
-                .andExpect(status().isNotFound());
-    }
-
-    @Test
-    void 日付がないか形式が不正な生成は404で生成しない() throws Exception {
         mockMvc.perform(post("/diary/generate").with(user(PRINCIPAL)).with(csrf()))
-                .andExpect(status().isNotFound());
-        mockMvc.perform(post("/diary/generate")
-                        .param("date", "abc")
-                        .with(user(PRINCIPAL))
-                        .with(csrf()))
-                .andExpect(status().isNotFound());
+                .andExpect(redirectedUrl("/diary/2026-10-07"))
+                .andExpect(flash().attributeCount(0));
+    }
 
-        verify(diaryGenerationService, never()).generate(any(), any());
+    @Test
+    void つぶやきが0件ならメッセージを付けてホームへ() throws Exception {
+        when(diaryGenerationService.generateToday(USER_ID)).thenThrow(new NoPostsException());
+
+        mockMvc.perform(post("/diary/generate").with(user(PRINCIPAL)).with(csrf()))
+                .andExpect(redirectedUrl("/"))
+                .andExpect(flash().attribute("message", DiaryController.NO_POSTS_MESSAGE));
+    }
+
+    @Test
+    void AIの呼び出しが失敗したらメッセージを付けて今日の日記表示へ() throws Exception {
+        when(diaryGenerationService.generateToday(USER_ID)).thenThrow(new DiaryGenerationException("failed"));
+
+        mockMvc.perform(post("/diary/generate").with(user(PRINCIPAL)).with(csrf()))
+                .andExpect(redirectedUrl("/diary/2026-10-07"))
+                .andExpect(flash().attribute("message", DiaryController.GENERATION_FAILED_MESSAGE));
     }
 
     @Test
     void CSRFトークンなしの生成は403() throws Exception {
-        mockMvc.perform(post("/diary/generate").param("date", "2026-10-07").with(user(PRINCIPAL)))
-                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/diary/generate").with(user(PRINCIPAL))).andExpect(status().isForbidden());
 
-        verify(diaryGenerationService, never()).generate(any(), any());
+        verify(diaryGenerationService, never()).generateToday(any());
+    }
+
+    @Test
+    void 未ログインの生成はログイン画面へ() throws Exception {
+        mockMvc.perform(post("/diary/generate").with(csrf())).andExpect(redirectedUrl("/login"));
+
+        verify(diaryGenerationService, never()).generateToday(any());
     }
 }

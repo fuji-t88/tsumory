@@ -73,6 +73,17 @@ class PostServiceTest {
     }
 
     @Test
+    void findTodayPosts_searchesTodayInJst() {
+        // UTC ではまだ 10/7 だが、日本時間では 10/8 の 0:30
+        var service = serviceAt("2026-10-08T00:30:00");
+        var post = new Post(user, "おはよう", jst("2026-10-08T00:10:00"));
+        when(postRepository.findInRange(USER_ID, jst("2026-10-08T00:00:00"), jst("2026-10-09T00:00:00")))
+                .thenReturn(List.of(post));
+
+        assertThat(service.findTodayPosts(USER_ID)).containsExactly(post);
+    }
+
+    @Test
     void findPosts_searchesFromJstMidnightToNextMidnight() {
         var service = serviceAt("2026-10-08T12:00:00");
         var post = new Post(user, "おはよう", jst("2026-10-08T07:30:00"));

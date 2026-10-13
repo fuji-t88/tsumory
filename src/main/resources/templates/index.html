@@ -13,6 +13,8 @@
 
     <!-- フラッシュメッセージ（失敗。つぶやきが見つからなかったときなど） -->
     <div th:if="${errorMessage}" class="alert alert-danger" role="alert" th:text="${errorMessage}">つぶやきが見つかりませんでした</div>
+    <!-- 日記を生成しようとしたが、つぶやきがなかったとき（DiaryController から） -->
+    <div th:if="${message}" class="alert alert-info" role="status" th:text="${message}">つぶやきがないため日記を生成できません</div>
 
     <h1 class="h4 mb-3" th:text="${#temporals.format(todaySection.date, 'yyyy年M月d日（E）')}">2026年10月7日（水）</h1>
 

@@ -52,20 +52,20 @@ class DiaryServiceTest {
     }
 
     @Test
-    void findDiary_returnsDiaryOfAvailableDate() {
+    void findByDate_returnsDiaryOfAvailableDate() {
         when(postService.isEditableDate(DATE)).thenReturn(true);
         var diary = new Diary(user, DATE, "日記", Instant.parse("2026-10-08T12:30:00Z"));
         when(diaryRepository.findByUserIdAndDiaryDate(USER_ID, DATE)).thenReturn(Optional.of(diary));
 
-        assertThat(service.findDiary(USER_ID, DATE)).contains(new DiaryItem(DATE, "日記", LocalTime.of(21, 30)));
+        assertThat(service.findByDate(USER_ID, DATE)).containsSame(diary);
     }
 
     @Test
-    void findDiary_dateNotAvailable_throwsNotFound() {
+    void findByDate_dateNotAvailable_throwsNotFound() {
         var old = DATE.minusDays(2);
         when(postService.isEditableDate(old)).thenReturn(false);
 
-        assertThatThrownBy(() -> service.findDiary(USER_ID, old)).isInstanceOf(DiaryNotFoundException.class);
+        assertThatThrownBy(() -> service.findByDate(USER_ID, old)).isInstanceOf(DiaryNotFoundException.class);
         verify(diaryRepository, never()).findByUserIdAndDiaryDate(any(), any());
     }
 
@@ -83,10 +83,10 @@ class DiaryServiceTest {
     }
 
     @Test
-    void save_firstTime_insertsDiary() {
+    void saveDiary_firstTime_insertsTodaysDiary() {
         when(diaryRepository.findByUserIdAndDiaryDate(USER_ID, DATE)).thenReturn(Optional.empty());
 
-        var saved = service.save(USER_ID, DATE, "寝坊した一日。");
+        var saved = service.saveDiary(USER_ID, "寝坊した一日。");
 
         var captor = ArgumentCaptor.forClass(Diary.class);
         verify(diaryRepository).saveAndFlush(captor.capture());
@@ -96,11 +96,11 @@ class DiaryServiceTest {
     }
 
     @Test
-    void save_again_rewritesExistingDiary() {
+    void saveDiary_again_rewritesTodaysDiary() {
         var existing = new Diary(user, DATE, "前の日記", Instant.parse("2026-10-08T03:00:00Z"));
         when(diaryRepository.findByUserIdAndDiaryDate(USER_ID, DATE)).thenReturn(Optional.of(existing));
 
-        var saved = service.save(USER_ID, DATE, "新しい日記");
+        var saved = service.saveDiary(USER_ID, "新しい日記");
 
         assertThat(saved).isSameAs(existing);
         assertThat(existing.getContent()).isEqualTo("新しい日記");

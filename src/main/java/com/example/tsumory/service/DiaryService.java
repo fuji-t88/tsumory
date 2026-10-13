@@ -24,14 +24,12 @@ public class DiaryService {
 
     /** その日の日記を返す。今日と昨日以外の日付なら {@link DiaryNotFoundException}。 */
     @Transactional(readOnly = true)
-    public Optional<DiaryItem> findDiary(Long userId, LocalDate date) {
+    public Optional<Diary> findByDate(Long userId, LocalDate date) {
         if (!postService.isEditableDate(date)) {
             log.info("Diary date not available: userId={}, date={}", userId, date);
             throw new DiaryNotFoundException(date);
         }
-        return diaryRepository
-                .findByUserIdAndDiaryDate(userId, date)
-                .map(diary -> DiaryItem.from(diary, PostService.ZONE));
+        return diaryRepository.findByUserIdAndDiaryDate(userId, date);
     }
 
     /**
@@ -47,15 +45,11 @@ public class DiaryService {
                 .map(diary -> DiaryItem.from(diary, PostService.ZONE));
     }
 
-    /**
-     * その日の日記を、なければ INSERT、あれば上書きする。
-     *
-     * <p>同じ日記を同時に INSERT すると一意制約違反（{@code DataIntegrityViolationException}）になる。そのときはこのトランザクションを
-     * ロールバックして例外を投げるので、呼び出し側がもう一度呼べば、先に入った行を上書きする。
-     */
+    /** 今日（日本時間）の日記を、なければ INSERT、あれば上書きする。 */
     @Transactional
-    public Diary save(Long userId, LocalDate date, String content) {
+    public Diary saveDiary(Long userId, String content) {
         var now = clock.instant();
+        var date = LocalDate.ofInstant(now, PostService.ZONE);
         var existing = diaryRepository.findByUserIdAndDiaryDate(userId, date);
         if (existing.isPresent()) {
             var diary = existing.get();

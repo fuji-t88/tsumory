@@ -169,6 +169,13 @@ class PostControllerTest {
     }
 
     @Test
+    void 日記を生成できなかったときのメッセージを青で表示する() throws Exception {
+        mockMvc.perform(get("/").with(user(PRINCIPAL)).flashAttr("message", "つぶやきがないため日記を生成できません"))
+                .andExpect(content().string(containsString("alert-info")))
+                .andExpect(content().string(containsString("つぶやきがないため日記を生成できません")));
+    }
+
+    @Test
     void フラッシュメッセージがなければ出さない() throws Exception {
         mockMvc.perform(get("/").with(user(PRINCIPAL)))
                 .andExpect(content().string(not(containsString("role=\"alert\""))));
@@ -179,7 +186,7 @@ class PostControllerTest {
         mockMvc.perform(get("/").with(user(PRINCIPAL))).andExpect(status().isOk());
 
         verify(postService, times(1)).today();
-        verify(diaryService, never()).findDiary(any(), any());
+        verify(diaryService, never()).findByDate(any(), any());
     }
 
     // --- URL の値が不正 ---

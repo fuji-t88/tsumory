@@ -3,35 +3,32 @@ package com.example.tsumory.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.tsumory.domain.Diary;
+import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.User;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @ExtendWith(MockitoExtension.class)
 class DiaryGenerationServiceTest {
 
     private static final Long USER_ID = 1L;
-    private static final LocalDate DATE = LocalDate.of(2026, 10, 8);
-    private static final List<PostItem> POSTS = List.of(new PostItem(10L, "寝坊した", LocalTime.of(8, 12), false));
-    private static final List<String> CONTENTS = List.of("寝坊した");
+    // 2026-10-08 21:00（日本時間）
+    private static final Instant NOW = Instant.parse("2026-10-08T12:00:00Z");
+    private static final LocalDate TODAY = LocalDate.of(2026, 10, 8);
 
     @Mock
     private PostService postService;
@@ -42,109 +39,58 @@ class DiaryGenerationServiceTest {
     @Mock
     private DiaryWriter diaryWriter;
 
-    private final Diary diary = new Diary(new User("demo", "hash", Instant.EPOCH), DATE, "日記", Instant.EPOCH);
+    private final User user = new User("demo", "hash", Instant.EPOCH);
+    private final Diary diary = new Diary(user, TODAY, "日記", NOW);
 
     private DiaryGenerationService service;
 
     @BeforeEach
     void setUp() {
-        service = new DiaryGenerationService(postService, diaryService, diaryWriter);
-        lenient().when(postService.isEditableDate(DATE)).thenReturn(true);
+        service =
+                new DiaryGenerationService(postService, diaryService, diaryWriter, Clock.fixed(NOW, PostService.ZONE));
     }
 
     @Test
-    void generate_dateNotAvailable_throwsNotFound() {
-        var old = DATE.minusDays(2);
-        when(postService.isEditableDate(old)).thenReturn(false);
+    void generateToday_noPosts_throwsAndDoesNotCallWriter() {
+        when(postService.findTodayPosts(USER_ID)).thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.generate(USER_ID, old)).isInstanceOf(DiaryNotFoundException.class);
+        assertThatThrownBy(() -> service.generateToday(USER_ID)).isInstanceOf(NoPostsException.class);
         verify(diaryWriter, never()).write(any(), any());
+        verify(diaryService, never()).saveDiary(any(), any());
     }
 
     @Test
-    void generate_noPosts_doesNotCallWriter() {
-        when(postService.findPosts(USER_ID, DATE)).thenReturn(List.of());
+    void generateToday_passesTodayAndContentsInOrderAndSaves() {
+        when(postService.findTodayPosts(USER_ID))
+                .thenReturn(List.of(new Post(user, "寝坊した", NOW), new Post(user, "昼のカレーが辛すぎた", NOW)));
+        when(diaryWriter.write(TODAY, List.of("寝坊した", "昼のカレーが辛すぎた"))).thenReturn("寝坊した一日。");
+        when(diaryService.saveDiary(USER_ID, "寝坊した一日。")).thenReturn(diary);
 
-        assertThat(service.generate(USER_ID, DATE)).isInstanceOf(DiaryGenerationResult.NoPosts.class);
-        verify(diaryWriter, never()).write(any(), any());
+        assertThat(service.generateToday(USER_ID)).isSameAs(diary);
     }
 
     @Test
-    void generate_written_passesContentsInOrderAndSavesDiary() {
-        when(postService.findPosts(USER_ID, DATE)).thenReturn(POSTS);
-        when(diaryWriter.write(DATE, CONTENTS)).thenReturn("寝坊した一日。");
-        when(diaryService.save(USER_ID, DATE, "寝坊した一日。")).thenReturn(diary);
+    void generateToday_writerFails_doesNotSaveAndRethrows() {
+        when(postService.findTodayPosts(USER_ID)).thenReturn(List.of(new Post(user, "寝坊した", NOW)));
+        when(diaryWriter.write(any(), any())).thenThrow(new DiaryGenerationException("failed"));
 
-        assertThat(service.generate(USER_ID, DATE)).isEqualTo(new DiaryGenerationResult.Generated(diary));
+        assertThatThrownBy(() -> service.generateToday(USER_ID)).isInstanceOf(DiaryGenerationException.class);
+        verify(diaryService, never()).saveDiary(any(), any());
     }
 
     @Test
-    void generate_uniqueViolationOnInsert_savesAgainInNewTransaction() {
-        when(postService.findPosts(USER_ID, DATE)).thenReturn(POSTS);
-        when(diaryWriter.write(DATE, CONTENTS)).thenReturn("新しい日記");
-        when(diaryService.save(USER_ID, DATE, "新しい日記"))
-                .thenThrow(new DataIntegrityViolationException("duplicate key"))
-                .thenReturn(diary);
+    void generateToday_writerRefuses_doesNotSaveAndRethrows() {
+        when(postService.findTodayPosts(USER_ID)).thenReturn(List.of(new Post(user, "寝坊した", NOW)));
+        when(diaryWriter.write(any(), any())).thenThrow(new DiaryGenerationException("refused"));
 
-        assertThat(service.generate(USER_ID, DATE)).isEqualTo(new DiaryGenerationResult.Generated(diary));
-        verify(diaryService, times(2)).save(USER_ID, DATE, "新しい日記");
-        verify(diaryWriter, times(1)).write(any(), any());
+        assertThatThrownBy(() -> service.generateToday(USER_ID)).isInstanceOf(DiaryGenerationException.class);
+        verify(diaryService, never()).saveDiary(any(), any());
     }
 
     @Test
-    void generate_failed_keepsPreviousDiaryAndCallsWriterOnce() {
-        when(postService.findPosts(USER_ID, DATE)).thenReturn(POSTS);
-        when(diaryWriter.write(DATE, CONTENTS)).thenThrow(new DiaryWriteFailedException());
+    void generateToday_doesNotHoldTransactionDuringApiCall() throws Exception {
+        var method = DiaryGenerationService.class.getMethod("generateToday", Long.class);
 
-        assertThat(service.generate(USER_ID, DATE)).isInstanceOf(DiaryGenerationResult.Failed.class);
-        verify(diaryWriter, times(1)).write(any(), any());
-        verify(diaryService, never()).save(any(), any(), any());
-    }
-
-    @Test
-    void generate_refused_doesNotSave() {
-        when(postService.findPosts(USER_ID, DATE)).thenReturn(POSTS);
-        when(diaryWriter.write(DATE, CONTENTS)).thenThrow(new DiaryRefusedException());
-
-        assertThat(service.generate(USER_ID, DATE)).isInstanceOf(DiaryGenerationResult.Refused.class);
-        verify(diaryService, never()).save(any(), any(), any());
-    }
-
-    @Test
-    void generate_concurrentSameUserAndDate_secondIsInProgress() throws Exception {
-        var writerStarted = new CountDownLatch(1);
-        var releaseWriter = new CountDownLatch(1);
-        when(postService.findPosts(USER_ID, DATE)).thenReturn(POSTS);
-        when(diaryWriter.write(DATE, CONTENTS)).thenAnswer(invocation -> {
-            writerStarted.countDown();
-            releaseWriter.await(5, TimeUnit.SECONDS);
-            throw new DiaryWriteFailedException();
-        });
-
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            var first = executor.submit(() -> service.generate(USER_ID, DATE));
-            assertThat(writerStarted.await(5, TimeUnit.SECONDS)).isTrue();
-
-            var second = service.generate(USER_ID, DATE);
-            releaseWriter.countDown();
-
-            assertThat(second).isInstanceOf(DiaryGenerationResult.InProgress.class);
-            assertThat(first.get(5, TimeUnit.SECONDS)).isInstanceOf(DiaryGenerationResult.Failed.class);
-        }
-        verify(diaryWriter, times(1)).write(any(), any());
-    }
-
-    @Test
-    void generate_afterFailureOrException_canGenerateAgain() {
-        when(postService.findPosts(USER_ID, DATE)).thenReturn(POSTS);
-        when(diaryWriter.write(DATE, CONTENTS))
-                .thenThrow(new DiaryWriteFailedException())
-                .thenThrow(new IllegalStateException("unexpected"))
-                .thenReturn("日記");
-        when(diaryService.save(USER_ID, DATE, "日記")).thenReturn(diary);
-
-        assertThat(service.generate(USER_ID, DATE)).isInstanceOf(DiaryGenerationResult.Failed.class);
-        assertThatThrownBy(() -> service.generate(USER_ID, DATE)).isInstanceOf(IllegalStateException.class);
-        assertThat(service.generate(USER_ID, DATE)).isInstanceOf(DiaryGenerationResult.Generated.class);
+        assertThat(method.getAnnotation(Transactional.class).propagation()).isEqualTo(Propagation.NOT_SUPPORTED);
     }
 }

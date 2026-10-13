@@ -42,6 +42,12 @@ public class PostService {
                 .toList();
     }
 
+    /** 今日（日本時間）のつぶやきを投稿時刻の古い順に返す。日記を書く材料にする。 */
+    public List<Post> findTodayPosts(Long userId) {
+        var today = today();
+        return postRepository.findInRange(userId, startOf(today), startOf(today.plusDays(1)));
+    }
+
     public long countPosts(Long userId, LocalDate date) {
         return postRepository.countInRange(userId, startOf(date), startOf(date.plusDays(1)));
     }

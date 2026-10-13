@@ -16,14 +16,15 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Service;
 
-/** Claude API で日記を書く {@link DiaryWriter}。{@code tsumory.diary-writer=claude} のときだけ使う。 */
+/**
+ * Claude API で日記を書く {@link DiaryWriter}（本物の実装）。
+ *
+ * <p>まだ Bean にしていない（Claude につなぐまでは {@link StubDiaryWriter} を使う）。Claude につなぐときは、このクラスに
+ * {@code @Service} を付け、{@code AnthropicConfig} に {@code @Configuration} を付け、{@link StubDiaryWriter} を削除する。
+ */
 @Slf4j
-@Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "tsumory.diary-writer", havingValue = "claude")
 public class DiaryAiService implements DiaryWriter {
 
     private static final String MODEL = "claude-opus-5-5";
@@ -50,7 +51,7 @@ public class DiaryAiService implements DiaryWriter {
 
     private final AnthropicClient client;
 
-    /** その日のつぶやきから日記を書く。API を 1 回だけ呼び、失敗してもリトライしない（失敗・拒否は例外で知らせる）。 */
+    /** その日のつぶやきから日記を書く。API を 1 回だけ呼び、失敗してもリトライしない（失敗・拒否は DiaryGenerationException で知らせる）。 */
     @Override
     public String write(LocalDate date, List<String> contents) {
         var params = MessageCreateParams.builder()
@@ -75,20 +76,20 @@ public class DiaryAiService implements DiaryWriter {
                     e.statusCode(),
                     e.headers().values("request-id"),
                     elapsedMs(startedAt));
-            throw new DiaryWriteFailedException();
+            throw new DiaryGenerationException("Claude API call failed");
         } catch (AnthropicIoException e) {
             // タイムアウト（120 秒）や接続エラー
             log.warn(
                     "Claude API connection error: type={}, elapsedMs={}",
                     e.getClass().getSimpleName(),
                     elapsedMs(startedAt));
-            throw new DiaryWriteFailedException();
+            throw new DiaryGenerationException("Claude API call failed");
         } catch (AnthropicException e) {
             log.warn(
                     "Claude API client error: type={}, elapsedMs={}",
                     e.getClass().getSimpleName(),
                     elapsedMs(startedAt));
-            throw new DiaryWriteFailedException();
+            throw new DiaryGenerationException("Claude API call failed");
         }
 
         var stopReason = response.stopReason().orElse(null);
@@ -104,11 +105,11 @@ public class DiaryAiService implements DiaryWriter {
                     "Claude API refused: messageId={}, category={}",
                     response.id(),
                     response.stopDetails().map(details -> details.category()));
-            throw new DiaryRefusedException();
+            throw new DiaryGenerationException("Claude API refused");
         }
         if (!StopReason.END_TURN.equals(stopReason)) {
             log.warn("Claude API stopped unexpectedly: messageId={}, stopReason={}", response.id(), stopReason);
-            throw new DiaryWriteFailedException();
+            throw new DiaryGenerationException("Claude API call failed");
         }
 
         var content = response.content().stream()
@@ -118,7 +119,7 @@ public class DiaryAiService implements DiaryWriter {
                 .strip();
         if (content.isEmpty()) {
             log.warn("Claude API returned no text: messageId={}", response.id());
-            throw new DiaryWriteFailedException();
+            throw new DiaryGenerationException("Claude API call failed");
         }
         return content;
     }

@@ -10,8 +10,7 @@ public interface DiaryWriter {
      * @param date 日記の日付
      * @param contents その日のつぶやきの本文（投稿時刻の古い順）
      * @return 日記の本文
-     * @throws DiaryRefusedException 書くことを断られたとき
-     * @throws DiaryWriteFailedException エラーやタイムアウトで書けなかったとき
+     * @throws DiaryGenerationException エラー・タイムアウトや、書くことを断られたなどで書けなかったとき
      */
     String write(LocalDate date, List<String> contents);
 }
