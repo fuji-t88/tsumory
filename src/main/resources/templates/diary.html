@@ -16,29 +16,40 @@
 
     <h1 class="h4 mb-3" th:text="|${#temporals.format(date, 'yyyy年M月d日（E）')}の日記|">2026年10月7日（水）の日記</h1>
 
-    <!--/* 日記あり：本文と「作り直す」（作り直すのは今日の日記） */-->
-    <section th:if="${diary != null}" class="mb-4">
-        <p class="text-pre-wrap" th:text="${diary.content}">日記の本文</p>
-        <p class="text-secondary small" th:text="|${generatedAtTime} に作成|">21:30 に作成</p>
-        <form th:action="@{/diary/generate}" method="post">
-            <button type="submit" class="btn btn-outline-primary">作り直す</button>
-        </form>
+    <!--/* 本文の欄。生成中は diary-generate.js が aria-busy を付け、ローディングの文言を出す */-->
+    <section id="diary-body" class="mb-4">
+        <!--/* ローディングの文言（ボタンを押した直後に表示する。JavaScript が無効なら出ない） */-->
+        <div id="diary-loading" class="alert alert-light border" role="status" aria-live="polite" hidden>
+            日記を書いています。1 分ほどかかることがあります。このままお待ちください
+        </div>
+
+        <!--/* 日記あり：本文と「作り直す」（作り直すのは今日の日記） */-->
+        <th:block th:if="${diary != null}">
+            <div id="diary-content" data-has-diary="true">
+                <p class="text-pre-wrap" th:text="${diary.content}">日記の本文</p>
+                <p class="text-secondary small" th:text="|${generatedAtTime} に作成|">21:30 に作成</p>
+            </div>
+            <form th:action="@{/diary/generate}" method="post" class="js-diary-generate">
+                <button type="submit" class="btn btn-outline-primary">作り直す</button>
+            </form>
+        </th:block>
+
+        <!--/* 日記なし：「日記を書く」（書くのは今日の日記） */-->
+        <th:block th:if="${diary == null}">
+            <p id="diary-content">まだ日記はありません</p>
+            <form th:action="@{/diary/generate}" method="post" class="js-diary-generate">
+                <button type="submit" class="btn btn-primary">日記を書く</button>
+            </form>
+        </th:block>
     </section>
 
-    <!--/* 日記なし：「日記を書く」（書くのは今日の日記） */-->
-    <section th:if="${diary == null}" class="mb-4">
-        <p>まだ日記はありません</p>
-        <form th:action="@{/diary/generate}" method="post">
-            <button type="submit" class="btn btn-primary">日記を書く</button>
-        </form>
-    </section>
-
-    <!--/* つぶやきへの導線 */-->
+    <!--/* つぶやきへの導線（生成中も押せるままにする） */-->
     <section class="border-top pt-3">
         <a th:href="@{/}" class="btn btn-link px-0">つぶやきを直す</a>
         <p class="text-secondary small mb-0">しっくりこないときは、つぶやきを直してから作り直せます</p>
     </section>
 
 </main>
+<script th:src="@{/js/diary-generate.js}"></script>
 </body>
 </html>

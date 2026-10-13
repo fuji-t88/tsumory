@@ -116,6 +116,18 @@ class DiaryControllerTest {
     }
 
     @Test
+    void 生成中のローディング表示と二重押下防止のスクリプトを読み込む() throws Exception {
+        mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
+                .andExpect(content().string(containsString("src=\"/js/diary-generate.js\"")))
+                .andExpect(content().string(containsString("id=\"diary-loading\"")))
+                .andExpect(content().string(containsString("role=\"status\" aria-live=\"polite\" hidden")))
+                .andExpect(content().string(containsString("日記を書いています。1 分ほどかかることがあります。このままお待ちください")))
+                .andExpect(content().string(containsString("class=\"js-diary-generate\"")))
+                // インラインのスクリプトは書かない
+                .andExpect(content().string(not(containsString("onsubmit"))));
+    }
+
+    @Test
     void 昨日の日記も表示できる() throws Exception {
         // 14:00Z は日本時間の 23:00
         when(diaryService.findByDate(USER_ID, YESTERDAY))
