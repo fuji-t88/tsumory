@@ -7,7 +7,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.example.tsumory.config.CustomUserDetails;
 import com.example.tsumory.config.SecurityConfig;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -21,10 +23,14 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Import({SecurityConfig.class, ErrorPageTest.RenderErrorPageController.class})
 class ErrorPageTest {
 
+    private static final AtomicReference<String> userIdSeenByController = new AtomicReference<>();
+
     @Controller
     static class RenderErrorPageController {
         @GetMapping("/test/error-page")
         String render() {
+            // RequestLoggingFilter が Spring Security のあとに動いていれば、ここでユーザー ID が MDC に入っている
+            userIdSeenByController.set(MDC.get("userId"));
             return "error/500";
         }
     }
@@ -41,6 +47,7 @@ class ErrorPageTest {
         var requestId = result.getResponse().getHeader("X-Request-Id");
         var html = result.getResponse().getContentAsString();
         assertThat(requestId).isNotBlank();
+        assertThat(userIdSeenByController.get()).isEqualTo("1");
         assertThat(html).contains("問題が発生しました").contains("お問い合わせの際は").contains(requestId);
     }
 }

@@ -163,11 +163,13 @@ tsumory/
 
 本番で障害が起きたとき、ログだけでどのユーザーのどのリクエストかを特定できるようにする。
 
-- `config/RequestLoggingFilter` が、リクエストごとに SLF4J の MDC へ次の 2 つを入れ、リクエストが終わったら消す
-  - `requestId`：サーバーで作る UUID。クライアントから送られた値は使わない（ログに任意の文字列を書き込まれないようにするため）。応答ヘッダー `X-Request-Id` でも返す。500 のエラー画面にも出せるよう、リクエスト属性 `requestId` にも入れる（エラー画面を描くときには MDC はもう消えているが、リクエスト属性は残っている）。テンプレートでは `${requestId}` で読む
-  - `userId`：ログイン中のユーザー ID（`CustomUserDetails#userId`）。未ログインなら付けない
+- `config/RequestLoggingFilter`（`OncePerRequestFilter` を継承し、1 リクエストで 1 回だけ動かす）が、リクエストごとに SLF4J の MDC へ次の 2 つを入れる
+  - `requestId`：リクエストヘッダー `X-Request-Id` が安全な書式（英数字と `.`・`_`・`-`、64 文字以内。定数 `SAFE_REQUEST_ID`）なら引き継ぎ、ヘッダーがないか書式に合わなければ UUID を作る（受け取った値をそのまま使うと、改行などで偽のログ行を紛れ込ませられるため）。応答ヘッダー `X-Request-Id` で同じ値を返し、クライアント・プロキシ・アプリのログを同じ ID でたどれるようにする。500 のエラー画面にも出せるよう、リクエスト属性 `requestId` にも入れる（エラー画面を描くときには MDC はもう消えているが、リクエスト属性は残っている）。テンプレートでは `${requestId}` で読む
+  - `userId`：ログイン中のユーザー ID（`CustomUserDetails#userId`）。`Authentication` が `null` のとき（未ログイン）や、principal が `CustomUserDetails` でないときは付けない。判定は `instanceof` のパターンマッチングで書く
+- `finally` で、このフィルターが入れたキーだけを `MDC.remove()` で消す。消し忘れると、スレッドを使い回す環境で前のリクエストのユーザー情報が次のリクエストのログに混ざる。`MDC.clear()` は、同じスレッドでほかの部品が入れたキーまで消すので使わない
 - `application.yaml` の `logging.pattern.correlation` で、すべてのログ行に `[requestId=… userId=…]` を付ける。各ログのメッセージに `userId` を書かなくても、ユーザーとリクエストが分かる
-- フィルターは `SecurityConfig` で Spring Security のチェーンの `SecurityContextHolderFilter` の直後に入れる（ログイン中のユーザーが分かり、ログイン処理や認可のログにもリクエスト ID が付くため）。`@Component` にはしない（サーブレットのフィルターとしても登録され、2 回動くため）
+- フィルターは `@Component` にし、`@Order(SecurityFilterProperties.DEFAULT_FILTER_ORDER + 1)` で Spring Security のフィルターの直後に動かす（Spring Security がログイン中のユーザーを `SecurityContextHolder` に入れたあとでないと、ユーザー ID を取れないため）。順序は数値で書かず、定数からの相対で指定する（Spring 側の基準が変わっても追従するため）。`SecurityConfig` のチェーンには入れない（2 か所に登録すると順序が分かりにくくなるため）
+  - Spring Security が自分で応答を返すリクエスト（`POST /login`・`POST /logout`、未ログインでのログイン画面へのリダイレクト）はこのフィルターまで届かないので、リクエスト ID は付かない
 - リクエストの終わりに `request completed: method, uri, status, elapsedMs` を INFO で出す。`uri` はパスだけで、クエリ文字列は出さない。静的リソース（`/css/**`・`/js/**`・`/webjars/**`）は対象にしない
 - 処理されなかった例外は、このフィルターがスタックトレース付きの ERROR で出してから 500 を返す（このときはまだ MDC が残っているため、例外のログにもリクエスト ID とユーザー ID が付く）
 - 仮想スレッドでも、1 つのリクエストは 1 つのスレッドで処理されるので MDC はそのまま使える。自分で別スレッドに処理を渡すときは、MDC を引き継ぐ

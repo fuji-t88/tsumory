@@ -7,7 +7,11 @@ import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.MDC;
+import org.springframework.boot.security.autoconfigure.web.servlet.SecurityFilterProperties;
+import org.springframework.core.annotation.Order;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -51,13 +55,74 @@ class RequestLoggingFilterTest {
     }
 
     @Test
-    void クライアントが送ったリクエストIDは使わない() throws Exception {
+    void 安全な書式のリクエストIDは引き継いで応答にも返す() throws Exception {
         var request = new MockHttpServletRequest("GET", "/");
-        request.addHeader("X-Request-Id", "injected\nfake log line");
+        request.addHeader("X-Request-Id", "proxy-1a2b.3c_4d");
+        Map<String, String> seen = new HashMap<>();
+
+        filter.doFilter(request, response, (req, res) -> seen.putAll(MDC.getCopyOfContextMap()));
+
+        assertThat(seen.get("requestId")).isEqualTo("proxy-1a2b.3c_4d");
+        assertThat(response.getHeader("X-Request-Id")).isEqualTo("proxy-1a2b.3c_4d");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"injected\nfake log line", "has space", "a<b>", ""})
+    void 安全でない書式のリクエストIDは使わず新しく作る(String received) throws Exception {
+        var request = new MockHttpServletRequest("GET", "/");
+        request.addHeader("X-Request-Id", received);
 
         filter.doFilter(request, response, (req, res) -> {});
 
-        assertThat(response.getHeader("X-Request-Id")).doesNotContain("injected");
+        assertThat(response.getHeader("X-Request-Id")).isNotEqualTo(received).matches("[0-9a-f-]{36}");
+    }
+
+    @Test
+    void 長すぎるリクエストIDは使わない() {
+        assertThat(RequestLoggingFilter.resolveRequestId("a".repeat(64))).isEqualTo("a".repeat(64));
+        assertThat(RequestLoggingFilter.resolveRequestId("a".repeat(65))).isNotEqualTo("a".repeat(65));
+    }
+
+    @Test
+    void ヘッダーがなければ新しく作る() {
+        assertThat(RequestLoggingFilter.resolveRequestId(null)).matches("[0-9a-f-]{36}");
+    }
+
+    @Test
+    void Spring_Securityのフィルターの直後に動く() {
+        var order = RequestLoggingFilter.class.getAnnotation(Order.class);
+
+        assertThat(order.value()).isEqualTo(SecurityFilterProperties.DEFAULT_FILTER_ORDER + 1);
+    }
+
+    @Test
+    void 前のリクエストで入れた値は次のリクエストに残らない() throws Exception {
+        var user = new CustomUserDetails(42L, "demo", "hash");
+        SecurityContextHolder.getContext()
+                .setAuthentication(
+                        UsernamePasswordAuthenticationToken.authenticated(user, null, user.getAuthorities()));
+        filter.doFilter(new MockHttpServletRequest("GET", "/"), response, (req, res) -> {});
+        SecurityContextHolder.clearContext();
+        Map<String, String> seen = new HashMap<>();
+
+        filter.doFilter(
+                new MockHttpServletRequest("GET", "/"),
+                new MockHttpServletResponse(),
+                (req, res) -> seen.putAll(MDC.getCopyOfContextMap()));
+
+        assertThat(seen).doesNotContainKey("userId");
+    }
+
+    @Test
+    void ほかの部品がMDCに入れた値は消さない() throws Exception {
+        MDC.put("other", "keep");
+        try {
+            filter.doFilter(new MockHttpServletRequest("GET", "/"), response, (req, res) -> {});
+
+            assertThat(MDC.get("other")).isEqualTo("keep");
+        } finally {
+            MDC.remove("other");
+        }
     }
 
     @Test
