@@ -384,20 +384,27 @@ erDiagram
 | `DiaryService` | DB アクセス。日記の取得と、今日の日記の保存（`saveDiary`。なければ INSERT、あれば上書き。保存だけがトランザクション） |
 | `DiaryWriter`（インターフェース） | AI の呼び出し。`String write(LocalDate date, List<String> contents)`。日付とつぶやきの本文（投稿順）を受け取り、日記の本文を返す。Claude API に依存しない。書けなかったとき（エラー・タイムアウト・書くことを断られた）は `DiaryGenerationException` を投げ。`DiaryGenerationService` は受けずにそのまま投げ、controller が受けてメッセージを出す |
 
-`DiaryWriter` の実装は `DiaryAiService`（`@Service`）だけ。Claude API を呼び、下の「呼び出し」「プロンプト」に従う。クライアントの Bean は `config/AnthropicConfig`（`@Configuration`）で作る。
+`DiaryWriter` の実装は `DiaryAiService`（`@Service`）だけ。Claude API を呼び、下の「呼び出し」「プロンプト」に従う。クライアントの Bean は `config/AnthropicConfig`（`@Configuration`）で作り、呼び出しの設定値は `config/ClaudeProperties` から読む。
 
 ### 呼び出し
 
-| 項目 | 値 |
-|---|---|
-| SDK | Anthropic Java SDK（環境変数から作るクライアント。Bean は `config/` で 1 つ作る） |
-| モデル | `claude-opus-5-5` |
-| effort | `medium`（明示する） |
-| `max_tokens` | 16000 |
-| ストリーミング | なし（MVP では完成した日記をまとめて表示する） |
-| タイムアウト | **120 秒**（SDK の既定 10 分から短くする） |
-| 自動リトライ | **0 回**。SDK の既定（2 回）を `maxRetries(0)` で無効にする |
-| 拒否時のフォールバック | **使わない**（別モデルでの再試行もリトライにあたるため） |
+| 項目 | 値 | 置き場所 |
+|---|---|---|
+| SDK | Anthropic Java SDK（環境変数から作るクライアント。Bean は `config/AnthropicConfig` で 1 つ作る） | コード |
+| モデル | `claude-opus-5-5` | `application.yaml`（`anthropic.model`） |
+| effort | `medium`（明示する） | `application.yaml`（`anthropic.effort`） |
+| `max_tokens` | 16000 | `application.yaml`（`anthropic.max-tokens`） |
+| タイムアウト | **120 秒**（SDK の既定 10 分から短くする） | `application.yaml`（`anthropic.timeout`） |
+| ストリーミング | なし（MVP では完成した日記をまとめて表示する） | コード |
+| 自動リトライ | **0 回**。SDK の既定（2 回）を `maxRetries(0)` で無効にする | コード（方針なので設定で変えられるようにしない） |
+| 拒否時のフォールバック | **使わない**（別モデルでの再試行もリトライにあたるため） | コード |
+
+- `application.yaml` の値は `config/ClaudeProperties`（`@ConfigurationProperties(prefix = "anthropic")` の record）で受け、`@Validated` で起動時に検証する。値が不正ならアプリを起動しない（Claude API を呼んでから失敗するより原因を見つけやすいため）
+  - `model`：空でない
+  - `max-tokens`：1 以上
+  - `effort`：`low`・`medium`・`high`・`xhigh`・`max` のどれか
+  - `timeout`：必須（`120s` のように書く）
+- 開発と本番で値を変えたいときは、プロファイル別の `application-{profile}.yaml` や環境変数（`ANTHROPIC_MODEL` など）で上書きする
 
 - **失敗してもリトライしない**。1 回呼んで失敗したら、エラーをユーザーに表示して終わる。やり直すかどうかはユーザーがもう一度ボタン（「日記を書く」「作り直す」）を押して決める
 - `stop_reason` が `refusal`、または `end_turn` 以外なら `DiaryGenerationException` を投げる（拒否と失敗は分けない）
@@ -464,6 +471,13 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+
+# Claude API の呼び出しの設定（6. AI 連携）。API キーはここに書かない
+anthropic:
+  model: claude-opus-5-5
+  effort: medium
+  max-tokens: 16000
+  timeout: 120s
 ```
 
 - `Clock` の Bean（`Clock.system(ZoneId.of("Asia/Tokyo"))`）を `config/` で定義する
@@ -477,6 +491,7 @@ spring:
 | `DiaryGenerationService` | 単体テスト（`DiaryWriter`・`DiaryService` をモック） | 0 件なら `NoPostsException` で AI を呼ばない、今日の日付とつぶやきの本文（投稿順）を渡して保存する、AI 呼び出しが失敗したら保存せずに `DiaryGenerationException` をそのまま投げる、`generateToday` が `NOT_SUPPORTED` である |
 | `DiaryService` | 単体テスト（repository をモック） | 今日・昨日以外の日付は `DiaryNotFoundException`、初回は INSERT、2 回目以降は上書き |
 | `DiaryAiService` | 単体テスト | ユーザーメッセージの組み立て（並び順、エスケープ） |
+| `ClaudeProperties` | `ApplicationContextRunner` | `anthropic.*` の値がバインドされる、不正な値（空のモデル、0 以下の `max-tokens`、未知の effort、タイムアウトなし）では起動しない |
 | controller | `@WebMvcTest` + Spring Security Test | 未ログインはログイン画面へ、他人のつぶやき（`GET /posts/{id}/edit`・編集・削除）はメッセージを付けて `/` へリダイレクト、昨日の日記も表示できる、生成は成功なら今日の日記表示へ・つぶやき 0 件ならホームへ・AI 呼び出しの失敗なら今日の日記表示へ（それぞれのメッセージ付き）、一昨日・明日・不正な `{date}` は 404、CSRF トークンなしは 403、入力エラーの再表示（投稿フォーム・編集モード） |
 
 - 本物の Claude API はテストで呼ばない

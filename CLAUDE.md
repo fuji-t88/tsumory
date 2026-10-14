@@ -88,6 +88,7 @@ tsumory/
   | `domain` | ドメインモデル（エンティティなど） | `Post` |
   | `form` | Thymeleaf のフォーム入力（Bean Validation 付き） | `PostForm` |
   | `config` | 設定 | `SecurityConfig` |
+  | `config` | `application.yaml` の設定値を受ける record（`@ConfigurationProperties` + `@Validated`） | `ClaudeProperties` |
   | `config` | ログイン中のユーザー（`UserDetails` を実装する record。`@AuthenticationPrincipal` で受け、`userId()` を service に渡す） | `CustomUserDetails` |
   | `config` | ログイン時に DB からユーザーを探し、`CustomUserDetails` に詰めて返す（`UserDetailsService` の実装） | `CustomUserDetailsService` |
 
@@ -187,6 +188,7 @@ tsumory/
 - API キーは環境変数 `ANTHROPIC_API_KEY` から読む。コードや設定ファイルに書かない
 - モデル・タイムアウト・リトライなどの呼び出しの設定とプロンプトは、[docs/phase1-spec.md](docs/phase1-spec.md) の「6. AI 連携」に従う
 - 日記は `DiaryAiService`（`@Service`）が Claude API で書く。クライアントは `AnthropicConfig`（`@Configuration`）の Bean
+- モデル・effort・`max_tokens`・タイムアウトは `application.yaml` の `anthropic.*` に書き、`ClaudeProperties` で受ける。コードに定数で書かない
 - 起動前に環境変数 `ANTHROPIC_API_KEY` を設定する
 
 ## 注意点
