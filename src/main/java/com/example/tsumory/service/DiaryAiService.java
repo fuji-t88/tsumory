@@ -72,20 +72,20 @@ public class DiaryAiService implements DiaryWriter {
                     e.statusCode(),
                     e.headers().values("request-id"),
                     elapsedMs(startedAt));
-            throw new DiaryGenerationException("Claude API call failed");
+            throw new DiaryGenerationException("Claude API call failed", e);
         } catch (AnthropicIoException e) {
             // タイムアウト（120 秒）や接続エラー
             log.warn(
                     "Claude API connection error: type={}, elapsedMs={}",
                     e.getClass().getSimpleName(),
                     elapsedMs(startedAt));
-            throw new DiaryGenerationException("Claude API call failed");
+            throw new DiaryGenerationException("Claude API call failed", e);
         } catch (AnthropicException e) {
             log.warn(
                     "Claude API client error: type={}, elapsedMs={}",
                     e.getClass().getSimpleName(),
                     elapsedMs(startedAt));
-            throw new DiaryGenerationException("Claude API call failed");
+            throw new DiaryGenerationException("Claude API call failed", e);
         }
 
         var stopReason = response.stopReason().orElse(null);

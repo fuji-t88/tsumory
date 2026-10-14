@@ -6,4 +6,8 @@ public class DiaryGenerationException extends RuntimeException {
     public DiaryGenerationException(String message) {
         super(message);
     }
+
+    public DiaryGenerationException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }
