@@ -39,6 +39,8 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
         // クライアントから送られた ID は使わない（ログに任意の文字列を書き込ませないため）
         var requestId = UUID.randomUUID().toString();
         MDC.put(REQUEST_ID, requestId);
+        // エラー画面を描くときには MDC はもう消えているので、500 の画面に出せるようリクエスト属性にも入れる
+        request.setAttribute(REQUEST_ID, requestId);
         currentUserId().ifPresent(userId -> MDC.put(USER_ID, userId.toString()));
         response.setHeader(REQUEST_ID_HEADER, requestId);
         var startedAt = System.nanoTime();

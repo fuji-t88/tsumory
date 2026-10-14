@@ -164,7 +164,7 @@ tsumory/
 本番で障害が起きたとき、ログだけでどのユーザーのどのリクエストかを特定できるようにする。
 
 - `config/RequestLoggingFilter` が、リクエストごとに SLF4J の MDC へ次の 2 つを入れ、リクエストが終わったら消す
-  - `requestId`：サーバーで作る UUID。クライアントから送られた値は使わない（ログに任意の文字列を書き込まれないようにするため）。応答ヘッダー `X-Request-Id` でも返す
+  - `requestId`：サーバーで作る UUID。クライアントから送られた値は使わない（ログに任意の文字列を書き込まれないようにするため）。応答ヘッダー `X-Request-Id` でも返す。500 のエラー画面にも出せるよう、リクエスト属性 `requestId` にも入れる（エラー画面を描くときには MDC はもう消えているが、リクエスト属性は残っている）。テンプレートでは `${requestId}` で読む
   - `userId`：ログイン中のユーザー ID（`CustomUserDetails#userId`）。未ログインなら付けない
 - `application.yaml` の `logging.pattern.correlation` で、すべてのログ行に `[requestId=… userId=…]` を付ける。各ログのメッセージに `userId` を書かなくても、ユーザーとリクエストが分かる
 - フィルターは `SecurityConfig` で Spring Security のチェーンの `SecurityContextHolderFilter` の直後に入れる（ログイン中のユーザーが分かり、ログイン処理や認可のログにもリクエスト ID が付くため）。`@Component` にはしない（サーブレットのフィルターとしても登録され、2 回動くため）
