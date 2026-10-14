@@ -1,6 +1,10 @@
 spring:
   application:
     name: tsumory
+  # 開発時はプロジェクト直下の .env（ANTHROPIC_API_KEY など）を読む。Spring Boot の標準機能なので依存の追加は不要。
+  # optional: なので、.env がない環境（本番など）では無視され、OS の環境変数を使う
+  config:
+    import: optional:file:.env[.properties]
   threads:
     virtual:
       enabled: true
@@ -13,7 +17,7 @@ spring:
       hibernate:
         format_sql: true
 
-# Claude API の呼び出しの設定（仕様 6 章）。API キーはここに書かず、環境変数 ANTHROPIC_API_KEY で渡す
+# Claude API の呼び出しの設定（仕様 6 章）。API キーはここに書かず、環境変数 ANTHROPIC_API_KEY か .env で渡す
 anthropic:
   model: claude-opus-5-5
   effort: medium
