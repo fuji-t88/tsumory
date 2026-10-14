@@ -16,14 +16,11 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
-/**
- * Claude API で日記を書く {@link DiaryWriter}（本物の実装）。
- *
- * <p>まだ Bean にしていない（Claude につなぐまでは {@link StubDiaryWriter} を使う）。Claude につなぐときは、このクラスに
- * {@code @Service} を付け、{@code AnthropicConfig} に {@code @Configuration} を付け、{@link StubDiaryWriter} を削除する。
- */
+/** Claude API で日記を書く {@link DiaryWriter}。クライアントは {@code AnthropicConfig} の Bean を使う。 */
 @Slf4j
+@Service
 @RequiredArgsConstructor
 public class DiaryAiService implements DiaryWriter {
 
