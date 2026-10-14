@@ -101,7 +101,7 @@ erDiagram
 
 | クラス | 変更 |
 |---|---|
-| `PostCategory`（追加） | カテゴリの列挙型。列挙子は上の表の値（`WORK`・`PRIVATE`・`LEARNING`・`OTHER`）。表示名を返す `label()` を持つ |
+| `PostCategory`（追加） | カテゴリの列挙型。列挙子は上の表の値（`WORK`・`PRIVATE`・`LEARNING`・`OTHER`）。表示名を `displayName` に持ち、Lombok の `@Getter`・`@RequiredArgsConstructor` で `getDisplayName()` とコンストラクタを作る（テンプレートでは `${post.category.displayName}` と書ける） |
 | `Post` | `category`（`@Enumerated(EnumType.STRING)`、NOT NULL）と `categorySetByUser` を足す |
 
 - 投稿時のコンストラクタは `category` を `OTHER`、`categorySetByUser` を `false` にする
