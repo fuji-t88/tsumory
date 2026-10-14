@@ -390,7 +390,7 @@ erDiagram
 
 | 項目 | 値 | 置き場所 |
 |---|---|---|
-| SDK | Anthropic Java SDK（環境変数から作るクライアント。Bean は `config/AnthropicConfig` で 1 つ作る） | コード |
+| SDK | Anthropic Java SDK（Bean は `config/AnthropicConfig` で 1 つ作る。API キーの読み方は CLAUDE.md の「AI（Claude API）」に従う） | コード |
 | モデル | `claude-opus-5-5` | `application.yaml`（`anthropic.model`） |
 | effort | `medium`（明示する） | `application.yaml`（`anthropic.effort`） |
 | `max_tokens` | 16000 | `application.yaml`（`anthropic.max-tokens`） |

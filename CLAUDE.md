@@ -186,6 +186,9 @@ tsumory/
 
 - Anthropic Java SDK を使い、HTTP を直接呼ばない
 - API キーは環境変数 `ANTHROPIC_API_KEY` から読む。コードや設定ファイルに書かない
+  - `AnthropicConfig` で `@Value("${ANTHROPIC_API_KEY}")` として受け、ビルダーの `apiKey(...)` に渡す。SDK の `fromEnv()` は `System.getenv()` を直接読み、Spring の `Environment`（OS の環境変数や `.env` など）を通らないので使わない
+  - キーが設定されていなければ、起動時にエラーになる
+  - API キーは `ClaudeProperties` に入れない（record の `toString()` で値が出てしまうため）
 - モデル・タイムアウト・リトライなどの呼び出しの設定とプロンプトは、[docs/phase1-spec.md](docs/phase1-spec.md) の「6. AI 連携」に従う
 - 日記は `DiaryAiService`（`@Service`）が Claude API で書く。クライアントは `AnthropicConfig`（`@Configuration`）の Bean
 - モデル・effort・`max_tokens`・タイムアウトは `application.yaml` の `anthropic.*` に書き、`ClaudeProperties` で受ける。コードに定数で書かない
