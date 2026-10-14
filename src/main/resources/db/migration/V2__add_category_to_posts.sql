@@ -3,8 +3,8 @@
 -- 値は PostCategory enum の name()（WORK / PRIVATE / LEARNING / OTHER）。
 -- NOT NULL DEFAULT 'OTHER':
 --   既存行にも値が入るので、アプリ層で NULL を扱わずに済む。
---   既定値が効くのは INSERT で列を省いたときだけ。分類に失敗したときに OTHER にするのは
---   アプリ層（PostClassifier が OTHER を返し、それを UPDATE する）の役目で、DB は面倒を見ない。
+--   既定値が効くのは INSERT で列を省いたときだけ。分類に失敗した新しいつぶやきが OTHER になるのは
+--   アプリ層（Post エンティティの初期値が OTHER）の役目で、DB は面倒を見ない。
 -- CHECK 制約は張らない:
 --   値の妥当性はアプリ層の enum で担保する。DB 制約にすると毎回マイグレーションが要る。
 ALTER TABLE posts
