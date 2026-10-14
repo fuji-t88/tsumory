@@ -8,6 +8,7 @@ import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.StopReason;
+import com.example.tsumory.config.ClaudeProperties;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -23,9 +24,6 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class DiaryAiService implements DiaryWriter {
-
-    private static final String MODEL = "claude-opus-5-5";
-    private static final long MAX_TOKENS = 16000L;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy年M月d日（E）", Locale.JAPANESE);
 
@@ -47,15 +45,16 @@ public class DiaryAiService implements DiaryWriter {
             """;
 
     private final AnthropicClient client;
+    private final ClaudeProperties properties;
 
     /** その日のつぶやきから日記を書く。API を 1 回だけ呼び、失敗してもリトライしない（失敗・拒否は DiaryGenerationException で知らせる）。 */
     @Override
     public String write(LocalDate date, List<String> contents) {
         var params = MessageCreateParams.builder()
-                .model(MODEL)
-                .maxTokens(MAX_TOKENS)
+                .model(properties.model())
+                .maxTokens(properties.maxTokens())
                 .outputConfig(OutputConfig.builder()
-                        .effort(OutputConfig.Effort.MEDIUM)
+                        .effort(OutputConfig.Effort.of(properties.effort()))
                         .build())
                 .system(SYSTEM_PROMPT)
                 .addUserMessage(buildUserMessage(date, contents))
