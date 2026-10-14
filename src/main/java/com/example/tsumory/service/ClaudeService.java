@@ -21,7 +21,7 @@ import org.springframework.stereotype.Service;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class DiaryAiService implements DiaryWriter {
+public class ClaudeService implements DiaryWriter {
 
     private static final long NANOS_PER_MILLI = 1_000_000;
 

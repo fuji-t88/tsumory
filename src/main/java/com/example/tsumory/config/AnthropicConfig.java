@@ -7,7 +7,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-// Claude API のクライアント。DiaryAiService が使う
+// Claude API のクライアント。ClaudeService が使う
 @Configuration
 @EnableConfigurationProperties(ClaudeProperties.class)
 public class AnthropicConfig {
