@@ -83,7 +83,6 @@ tsumory/
   | `service` | 日記を書く流れの組み立て（つぶやき集め → AI → 保存） | `DiaryGenerationService` |
   | `service` | AI 連携のインターフェース | `DiaryWriter` |
   | `service` | AI 連携（Claude API の呼び出し。`DiaryWriter` の実装） | `DiaryAiService` |
-  | `service` | AI 連携の仮実装（Claude API を呼ばない。`DiaryWriter` の実装。Claude につなぐまでの一時的なもので、最終的に削除する） | `StubDiaryWriter` |
   | `service` | 例外 | `ResourceNotFoundException` |
   | `repository` | DB アクセス（Spring Data JPA） | `PostRepository` |
   | `domain` | ドメインモデル（エンティティなど） | `Post` |
@@ -187,8 +186,8 @@ tsumory/
 - Anthropic Java SDK を使い、HTTP を直接呼ばない
 - API キーは環境変数 `ANTHROPIC_API_KEY` から読む。コードや設定ファイルに書かない
 - モデル・タイムアウト・リトライなどの呼び出しの設定とプロンプトは、[docs/phase1-spec.md](docs/phase1-spec.md) の「6. AI 連携」に従う
-- Claude につなぐまでは、仮実装 `StubDiaryWriter`（`@Component`）で日記を書く。`DiaryAiService` と `AnthropicConfig` はまだ Bean にしていないので、API キーがなくても起動できる
-- Claude につなぐときは、`StubDiaryWriter` を削除し（または `@Component` を外し）、`DiaryAiService` に `@Service`、`AnthropicConfig` に `@Configuration` を付けて、環境変数 `ANTHROPIC_API_KEY` を設定して起動する。`DiaryWriter` の Bean が 2 つあると起動しない
+- 日記は `DiaryAiService`（`@Service`）が Claude API で書く。クライアントは `AnthropicConfig`（`@Configuration`）の Bean
+- 起動前に環境変数 `ANTHROPIC_API_KEY` を設定する
 
 ## 注意点
 

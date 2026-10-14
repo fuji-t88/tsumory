@@ -384,14 +384,7 @@ erDiagram
 | `DiaryService` | DB アクセス。日記の取得と、今日の日記の保存（`saveDiary`。なければ INSERT、あれば上書き。保存だけがトランザクション） |
 | `DiaryWriter`（インターフェース） | AI の呼び出し。`String write(LocalDate date, List<String> contents)`。日付とつぶやきの本文（投稿順）を受け取り、日記の本文を返す。Claude API に依存しない。書けなかったとき（エラー・タイムアウト・書くことを断られた）は `DiaryGenerationException` を投げ。`DiaryGenerationService` は受けずにそのまま投げ、controller が受けてメッセージを出す |
 
-`DiaryWriter` の実装は 2 つあり、Bean にするのはどちらか 1 つだけにする（2 つとも Bean にすると起動しない）。
-
-| 実装 | 内容 | いまの状態 |
-|---|---|---|
-| `StubDiaryWriter` | Claude API を呼ばない仮実装。`[2026-10-07の日記（仮）]` の 1 行のあとに、つぶやきの本文を投稿順に改行でつないで返す | `@Component`。Claude につなぐまで使う一時的なもので、最終状態には残らない |
-| `DiaryAiService` | Claude API を呼ぶ本物の実装。下の「呼び出し」「プロンプト」に従う | まだ Bean にしていない（`AnthropicConfig` も同じ） |
-
-Claude につなぐときは、`StubDiaryWriter` を削除し（または `@Component` を外し）、`DiaryAiService` に `@Service`、`AnthropicConfig` に `@Configuration` を付ける。
+`DiaryWriter` の実装は `DiaryAiService`（`@Service`）だけ。Claude API を呼び、下の「呼び出し」「プロンプト」に従う。クライアントの Bean は `config/AnthropicConfig`（`@Configuration`）で作る。
 
 ### 呼び出し
 
@@ -483,7 +476,6 @@ spring:
 | `PostService` | 単体テスト（Mockito、固定の `Clock`） | 今日・昨日の範囲の計算（0:00 ちょうど、23:59:59、日付またぎ）、0:00 を過ぎた直後に前の日のつぶやきを編集できて一昨日の分はできない、編集で投稿時刻が変わらない、編集すると `isEdited()` が `true` になり、投稿しただけでは `false` |
 | `DiaryGenerationService` | 単体テスト（`DiaryWriter`・`DiaryService` をモック） | 0 件なら `NoPostsException` で AI を呼ばない、今日の日付とつぶやきの本文（投稿順）を渡して保存する、AI 呼び出しが失敗したら保存せずに `DiaryGenerationException` をそのまま投げる、`generateToday` が `NOT_SUPPORTED` である |
 | `DiaryService` | 単体テスト（repository をモック） | 今日・昨日以外の日付は `DiaryNotFoundException`、初回は INSERT、2 回目以降は上書き |
-| `StubDiaryWriter` | 単体テスト | 仮の日記の中身（見出しの日付、つぶやきの並び順） |
 | `DiaryAiService` | 単体テスト | ユーザーメッセージの組み立て（並び順、エスケープ） |
 | controller | `@WebMvcTest` + Spring Security Test | 未ログインはログイン画面へ、他人のつぶやき（`GET /posts/{id}/edit`・編集・削除）はメッセージを付けて `/` へリダイレクト、昨日の日記も表示できる、生成は成功なら今日の日記表示へ・つぶやき 0 件ならホームへ・AI 呼び出しの失敗なら今日の日記表示へ（それぞれのメッセージ付き）、一昨日・明日・不正な `{date}` は 404、CSRF トークンなしは 403、入力エラーの再表示（投稿フォーム・編集モード） |
 
