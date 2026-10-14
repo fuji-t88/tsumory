@@ -467,6 +467,9 @@ erDiagram
 
 ```yaml
 spring:
+  # 開発時はプロジェクト直下の .env を読む（なければ無視する）。CLAUDE.md の「開発環境」を参照
+  config:
+    import: optional:file:.env[.properties]
   jpa:
     open-in-view: false
     hibernate:

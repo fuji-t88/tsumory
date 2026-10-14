@@ -39,6 +39,10 @@
 - アプリは http://localhost:8080
 - DB の接続情報は Docker Compose 連携が自動で設定するので、`application.yaml` には書かない
 - データはボリューム `postgres-data` に永続化している。ボリューム名を変えるとデータが消えるので変えない
+- Claude API のキーは、プロジェクト直下の `.env` に `ANTHROPIC_API_KEY=sk-ant-...` と書く（`.gitignore` 済み。コミットしない）
+  - `application.yaml` の `spring.config.import: optional:file:.env[.properties]` で、Spring Boot の標準機能として読む。`.env` を読むためだけのライブラリ（dotenv 系など）は追加しない
+  - プロパティファイルとして読むので、`export` や値を囲む引用符は書かない（引用符も値に含まれてしまう）
+  - OS の環境変数が同じ名前で設定されていれば、そちらが優先される。本番は `.env` を置かず、OS の環境変数で渡す
 
 ## コマンド
 
