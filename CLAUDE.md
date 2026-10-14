@@ -95,7 +95,7 @@ tsumory/
   | `service` | 例外 | `ResourceNotFoundException` |
   | `repository` | DB アクセス（Spring Data JPA） | `PostRepository` |
   | `domain` | ドメインモデル（エンティティなど） | `Post` |
-  | `form` | Thymeleaf のフォーム入力（Bean Validation 付き） | `PostForm`、`SearchForm` |
+  | `form` | Thymeleaf のフォーム入力（Bean Validation 付き） | `PostForm`、`SearchForm`、`PostCategoryForm` |
   | `config` | 設定 | `SecurityConfig` |
   | `config` | 非同期処理の設定（`@EnableAsync`、MDC を引き継ぐ `TaskDecorator`。フェーズ 2） | `AsyncConfig` |
   | `config` | `application.yaml` の設定値を受ける record（`@ConfigurationProperties` + `@Validated`） | `ClaudeProperties` |
@@ -209,12 +209,12 @@ tsumory/
 - **認可**: `permitAll()` はログイン画面と静的リソース（`/webjars/**` など）だけ。それ以外は認証必須にする
 - **秘密情報**: API キーやパスワードをコード・設定ファイル・コミットに含めない。`.env` などはコミットしない
 - **ログ**: パスワード、API キー、セッション ID をログに出さない。つぶやきと日記の本文も個人的な内容なのでログに出さない
-  - 検索キーワードと、つぶやきのカテゴリ分類の結果（どのカテゴリになったか）も出さない。どちらもつぶやきや日記の内容を推測できるため（フェーズ 2）
+  - 検索キーワードと、つぶやきのカテゴリ（AI の判定・ユーザーが直した値とも。どのカテゴリになったか）も出さない。どちらもつぶやきや日記の内容を推測できるため（フェーズ 2）
   - 例外: 開発中は、`application.yaml` の `org.hibernate.orm.jdbc.bind: TRACE` で SQL のバインドパラメータの値を出してよい。本文が含まれるので、本番デプロイ時は必ず無効化する
 - **エラー表示**: スタックトレースや SQL などの内部情報を画面に出さない
 - **入力の受け取り**: リクエストを直接エンティティにバインドしない。必ず `form/` のクラスで受け、Bean Validation を通す（`@Valid`）
 - **プロンプトインジェクション**: つぶやきの本文をシステムプロンプトに埋め込まない。ユーザーメッセージ側にデータとして渡し、本文の中の指示に従わないようシステムプロンプトで指示する。AI の出力は表示用の文章としてだけ扱い、その内容で処理を分岐させない
-  - 例外: カテゴリ分類（フェーズ 2）の出力は、決められた候補の値（`PostCategory`）と照らし合わせた場合に限り、保存する値として使ってよい。候補にない値や読めない出力は使わずに捨てる。DB の検査制約でも同じ値に限る
+  - 例外: カテゴリ分類（フェーズ 2）の出力は、決められた候補の値（`PostCategory`）と照らし合わせた場合に限り、保存する値として使ってよい。候補にない値や読めない出力はそのまま使わず、`OTHER` として扱う。DB の検査制約でも同じ値に限る
 - **リダイレクト**: リクエストパラメータの URL にそのままリダイレクトしない（オープンリダイレクト）
 
 ## AI（Claude API）
