@@ -83,15 +83,21 @@ tsumory/
   | パッケージ | 役割 | クラス名 |
   |---|---|---|
   | `controller` | 画面のリクエストを受ける | `PostController` |
+  | `controller` | 日記一覧・検索の画面のリクエストを受ける（フェーズ 2） | `DiaryListController`、`SearchController` |
   | `service` | 業務ロジック・トランザクション | `PostService` |
   | `service` | 日記を書く流れの組み立て（つぶやき集め → AI → 保存） | `DiaryGenerationService` |
   | `service` | AI 連携のインターフェース | `DiaryWriter` |
   | `service` | AI 連携（Claude API の呼び出し。`DiaryWriter` の実装） | `ClaudeService` |
+  | `service` | つぶやきのカテゴリ分類の組み立て（イベントを受け → AI → 保存。フェーズ 2） | `PostClassificationService` |
+  | `service` | カテゴリ分類の AI 連携のインターフェース（フェーズ 2） | `PostClassifier` |
+  | `service` | カテゴリ分類の AI 連携（Claude API の呼び出し。`PostClassifier` の実装。フェーズ 2） | `ClaudePostClassifier` |
+  | `service` | カテゴリ分類の仮実装（Claude API を呼ばない。`PostClassifier` の実装。Claude につないだら削除する。フェーズ 2） | `StubPostClassifier` |
   | `service` | 例外 | `ResourceNotFoundException` |
   | `repository` | DB アクセス（Spring Data JPA） | `PostRepository` |
   | `domain` | ドメインモデル（エンティティなど） | `Post` |
-  | `form` | Thymeleaf のフォーム入力（Bean Validation 付き） | `PostForm` |
+  | `form` | Thymeleaf のフォーム入力（Bean Validation 付き） | `PostForm`、`SearchForm` |
   | `config` | 設定 | `SecurityConfig` |
+  | `config` | 非同期処理の設定（`@EnableAsync`、MDC を引き継ぐ `TaskDecorator`。フェーズ 2） | `AsyncConfig` |
   | `config` | `application.yaml` の設定値を受ける record（`@ConfigurationProperties` + `@Validated`） | `ClaudeProperties` |
   | `config` | リクエストごとにリクエスト ID とユーザー ID をログに付け、リクエストの結果を記録する（`OncePerRequestFilter`） | `RequestLoggingFilter` |
   | `config` | ログイン中のユーザー（`UserDetails` を実装する record。`@AuthenticationPrincipal` で受け、`userId()` を service に渡す） | `CustomUserDetails` |
@@ -125,6 +131,9 @@ tsumory/
 - **`var`**: 右辺から型が明らかなローカル変数に使う。型が読み取れない場合は書く
 - **Sequenced Collections**: 先頭・末尾は `getFirst()` / `getLast()` / `reversed()` を使い、`get(0)` や `get(size() - 1)` は書かない
 - **仮想スレッド**: 有効にしてあるので、ブロッキング I/O（DB、Claude API）は普通に同期で書く。並行処理は `Executors.newVirtualThreadPerTaskExecutor()` を使う
+  - リクエストの応答を待たせずに後から処理するとき（フェーズ 2 のカテゴリ分類など）は、`@Async` を使う。実行は Spring Boot の既定のタスク実行器（`spring.threads.virtual.enabled: true` で仮想スレッドになる）に任せ、`@Async` 用に自前のスレッドプールを定義しない
+  - トランザクションの確定後に動かす処理は `@TransactionalEventListener(phase = AFTER_COMMIT)` で受ける（確定前に別スレッドから読むと、まだ保存されていないため）
+  - 別スレッドには MDC（`requestId`・`userId`）を引き継ぐ。`config/AsyncConfig` の `TaskDecorator` で、呼び出し元の MDC を写してから実行し、終わったら消す
 - **日時**: `java.time` を使う。日記の日付は `LocalDate`、日時は `Instant` か `OffsetDateTime`。「今日」は `ZoneId.of("Asia/Tokyo")` を明示して求める（時刻の取り方は下の「時刻の取得」）
 - **Optional**: 見つからない可能性がある 1 件の戻り値は `Optional` にする。フィールドや引数には使わない
 
@@ -200,10 +209,12 @@ tsumory/
 - **認可**: `permitAll()` はログイン画面と静的リソース（`/webjars/**` など）だけ。それ以外は認証必須にする
 - **秘密情報**: API キーやパスワードをコード・設定ファイル・コミットに含めない。`.env` などはコミットしない
 - **ログ**: パスワード、API キー、セッション ID をログに出さない。つぶやきと日記の本文も個人的な内容なのでログに出さない
+  - 検索キーワードと、つぶやきのカテゴリ分類の結果（どのカテゴリになったか）も出さない。どちらもつぶやきや日記の内容を推測できるため（フェーズ 2）
   - 例外: 開発中は、`application.yaml` の `org.hibernate.orm.jdbc.bind: TRACE` で SQL のバインドパラメータの値を出してよい。本文が含まれるので、本番デプロイ時は必ず無効化する
 - **エラー表示**: スタックトレースや SQL などの内部情報を画面に出さない
 - **入力の受け取り**: リクエストを直接エンティティにバインドしない。必ず `form/` のクラスで受け、Bean Validation を通す（`@Valid`）
 - **プロンプトインジェクション**: つぶやきの本文をシステムプロンプトに埋め込まない。ユーザーメッセージ側にデータとして渡し、本文の中の指示に従わないようシステムプロンプトで指示する。AI の出力は表示用の文章としてだけ扱い、その内容で処理を分岐させない
+  - 例外: カテゴリ分類（フェーズ 2）の出力は、決められた候補の値（`PostCategory`）と照らし合わせた場合に限り、保存する値として使ってよい。候補にない値や読めない出力は使わずに捨てる。DB の検査制約でも同じ値に限る
 - **リダイレクト**: リクエストパラメータの URL にそのままリダイレクトしない（オープンリダイレクト）
 
 ## AI（Claude API）
@@ -213,9 +224,13 @@ tsumory/
   - `AnthropicConfig` で `@Value("${ANTHROPIC_API_KEY}")` として受け、ビルダーの `apiKey(...)` に渡す。SDK の `fromEnv()` は `System.getenv()` を直接読み、Spring の `Environment`（OS の環境変数や `.env` など）を通らないので使わない
   - キーが設定されていなければ、起動時にエラーになる
   - API キーは `ClaudeProperties` に入れない（record の `toString()` で値が出てしまうため）
-- モデル・タイムアウト・リトライなどの呼び出しの設定とプロンプトは、[docs/phase1-spec.md](docs/phase1-spec.md) の「6. AI 連携」に従う
-- 日記は `ClaudeService`（`@Service`）が Claude API で書く。クライアントは `AnthropicConfig`（`@Configuration`）の Bean
-- モデル・effort・`max_tokens`・タイムアウトは `application.yaml` の `anthropic.*` に書き、`ClaudeProperties` で受ける。コードに定数で書かない
+- モデル・タイムアウト・リトライなどの呼び出しの設定とプロンプトは、[docs/phase1-spec.md](docs/phase1-spec.md) の「6. AI 連携」（日記）と [docs/phase2-spec.md](docs/phase2-spec.md) の「7. AI 連携（カテゴリ分類）」に従う
+- Claude API を呼ぶクラスは次の 2 つ。どちらも `AnthropicConfig`（`@Configuration`）のクライアントの Bean を共有する
+  - `ClaudeService`（`@Service`）：日記を書く
+  - `ClaudePostClassifier`（`@Service`）：つぶやきのカテゴリを分類する（フェーズ 2）
+- モデル・effort・`max_tokens`・タイムアウトは `application.yaml` に書き、`ClaudeProperties` で受ける。コードに定数で書かない
+  - 日記：`anthropic.*`（`model`・`effort`・`max-tokens`。`timeout` はクライアント全体で共有）
+  - カテゴリ分類：`anthropic.classification.*`（`ClaudeProperties` の入れ子の record `Classification`）
 - 起動前に環境変数 `ANTHROPIC_API_KEY` を設定する
 
 ## 注意点
