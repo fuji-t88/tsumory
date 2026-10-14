@@ -93,6 +93,7 @@ tsumory/
   | `form` | Thymeleaf のフォーム入力（Bean Validation 付き） | `PostForm` |
   | `config` | 設定 | `SecurityConfig` |
   | `config` | `application.yaml` の設定値を受ける record（`@ConfigurationProperties` + `@Validated`） | `ClaudeProperties` |
+  | `config` | リクエストごとにリクエスト ID とユーザー ID をログに付け、リクエストの結果を記録する（`OncePerRequestFilter`） | `RequestLoggingFilter` |
   | `config` | ログイン中のユーザー（`UserDetails` を実装する record。`@AuthenticationPrincipal` で受け、`userId()` を service に渡す） | `CustomUserDetails` |
   | `config` | ログイン時に DB からユーザーを探し、`CustomUserDetails` に詰めて返す（`UserDetailsService` の実装） | `CustomUserDetailsService` |
 
@@ -156,7 +157,20 @@ tsumory/
   | INFO | 正常な業務イベント | つぶやきの投稿・編集・削除、日記の生成・保存 |
   | DEBUG | 開発時の調査用。本番では出さない | 変数の中身 |
 
-- 想定外の例外は service で受け止めて ERROR を出さず、そのまま投げる（Spring が 500 として記録する）
+- 想定外の例外は service で受け止めて ERROR を出さず、そのまま投げる（`RequestLoggingFilter` がリクエスト ID・ユーザー ID 付きの ERROR で記録し、500 を返す）
+
+#### リクエストの追跡
+
+本番で障害が起きたとき、ログだけでどのユーザーのどのリクエストかを特定できるようにする。
+
+- `config/RequestLoggingFilter` が、リクエストごとに SLF4J の MDC へ次の 2 つを入れ、リクエストが終わったら消す
+  - `requestId`：サーバーで作る UUID。クライアントから送られた値は使わない（ログに任意の文字列を書き込まれないようにするため）。応答ヘッダー `X-Request-Id` でも返す
+  - `userId`：ログイン中のユーザー ID（`CustomUserDetails#userId`）。未ログインなら付けない
+- `application.yaml` の `logging.pattern.correlation` で、すべてのログ行に `[requestId=… userId=…]` を付ける。各ログのメッセージに `userId` を書かなくても、ユーザーとリクエストが分かる
+- フィルターは `SecurityConfig` で Spring Security のチェーンの `SecurityContextHolderFilter` の直後に入れる（ログイン中のユーザーが分かり、ログイン処理や認可のログにもリクエスト ID が付くため）。`@Component` にはしない（サーブレットのフィルターとしても登録され、2 回動くため）
+- リクエストの終わりに `request completed: method, uri, status, elapsedMs` を INFO で出す。`uri` はパスだけで、クエリ文字列は出さない。静的リソース（`/css/**`・`/js/**`・`/webjars/**`）は対象にしない
+- 処理されなかった例外は、このフィルターがスタックトレース付きの ERROR で出してから 500 を返す（このときはまだ MDC が残っているため、例外のログにもリクエスト ID とユーザー ID が付く）
+- 仮想スレッドでも、1 つのリクエストは 1 つのスレッドで処理されるので MDC はそのまま使える。自分で別スレッドに処理を渡すときは、MDC を引き継ぐ
 
 ## 禁止事項
 

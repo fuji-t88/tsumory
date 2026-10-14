@@ -27,6 +27,9 @@ anthropic:
 # 開発中の SQL 可視化。bind パラメータにはつぶやきや日記の本文が含まれるため、
 # 本番デプロイ時は必ず無効化すること。
 logging:
+  # すべてのログ行にリクエスト ID とユーザー ID を付ける（値は RequestLoggingFilter が MDC に入れる）
+  pattern:
+    correlation: "[requestId=%X{requestId:-} userId=%X{userId:-}] "
   level:
     org.hibernate.SQL: DEBUG
     org.hibernate.orm.jdbc.bind: TRACE

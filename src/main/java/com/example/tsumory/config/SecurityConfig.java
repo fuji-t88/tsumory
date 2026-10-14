@@ -6,6 +6,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 
 @Configuration
 public class SecurityConfig {
@@ -20,7 +21,9 @@ public class SecurityConfig {
                         .anyRequest()
                         .authenticated())
                 .formLogin(form -> form.loginPage("/login").defaultSuccessUrl("/", true))
-                .logout(logout -> logout.logoutSuccessUrl("/login?logout"));
+                .logout(logout -> logout.logoutSuccessUrl("/login?logout"))
+                // ログイン中のユーザーが分かった直後に、リクエスト ID とユーザー ID をログに付ける（CLAUDE.md の「リクエストの追跡」）
+                .addFilterAfter(new RequestLoggingFilter(), SecurityContextHolderFilter.class);
         return http.build();
     }
 
