@@ -352,7 +352,7 @@ erDiagram
 今日の日記だけを書く。リクエストに日付は持たせない。処理は `DiaryGenerationService#generateToday(userId)` が行う。
 
 1. 今日のつぶやきを投稿時刻順に取得する（`PostService#findTodayPosts`）。0 件なら `NoPostsException` を投げる
-2. つぶやきの本文だけのリストにして、`DiaryWriter`（Claude 実装は `DiaryAiService`）に日記を書かせる。**DB のトランザクションの外で呼ぶ**（`@Transactional(propagation = NOT_SUPPORTED)`。API の応答を待つ間、DB 接続を握らないため）
+2. つぶやきの本文だけのリストにして、`DiaryWriter`（Claude 実装は `ClaudeService`）に日記を書かせる。**DB のトランザクションの外で呼ぶ**（`@Transactional(propagation = NOT_SUPPORTED)`。API の応答を待つ間、DB 接続を握らないため）
 3. 生成に成功したら、1 つのトランザクションで今日の日記として保存する（`DiaryService#saveDiary`）
    - 今日の日記がなければ INSERT
    - あれば `Diary#updateContent` で上書き
@@ -372,7 +372,7 @@ erDiagram
 | つぶやきが見つからない（他人のもの・削除済み・一昨日より前。`ResourceNotFoundException`） | 「つぶやきが見つかりませんでした」（`message`、`alert-warning`。今日のつぶやき画面に出す） |
 | AI 呼び出しの失敗（API エラー・タイムアウト・AI が生成を断った。`DiaryGenerationException`） | 「日記の生成に失敗しました。時間をおいて再度お試しください」（赤の `alert-danger`。日記表示に出す） |
 
-## 6. AI 連携（`service/DiaryWriter`、`service/DiaryAiService`）
+## 6. AI 連携（`service/DiaryWriter`、`service/ClaudeService`）
 
 ### 構成
 
@@ -384,7 +384,7 @@ erDiagram
 | `DiaryService` | DB アクセス。日記の取得と、今日の日記の保存（`saveDiary`。なければ INSERT、あれば上書き。保存だけがトランザクション） |
 | `DiaryWriter`（インターフェース） | AI の呼び出し。`String write(LocalDate date, List<String> contents)`。日付とつぶやきの本文（投稿順）を受け取り、日記の本文を返す。Claude API に依存しない。書けなかったとき（エラー・タイムアウト・書くことを断られた）は `DiaryGenerationException` を投げ。`DiaryGenerationService` は受けずにそのまま投げ、controller が受けてメッセージを出す |
 
-`DiaryWriter` の実装は `DiaryAiService`（`@Service`）だけ。Claude API を呼び、下の「呼び出し」「プロンプト」に従う。クライアントの Bean は `config/AnthropicConfig`（`@Configuration`）で作り、呼び出しの設定値は `config/ClaudeProperties` から読む。
+`DiaryWriter` の実装は `ClaudeService`（`@Service`）だけ。Claude API を呼び、下の「呼び出し」「プロンプト」に従う。クライアントの Bean は `config/AnthropicConfig`（`@Configuration`）で作り、呼び出しの設定値は `config/ClaudeProperties` から読む。
 
 ### 呼び出し
 
@@ -493,7 +493,7 @@ anthropic:
 | `PostService` | 単体テスト（Mockito、固定の `Clock`） | 今日・昨日の範囲の計算（0:00 ちょうど、23:59:59、日付またぎ）、0:00 を過ぎた直後に前の日のつぶやきを編集できて一昨日の分はできない、編集で投稿時刻が変わらない、編集すると `isEdited()` が `true` になり、投稿しただけでは `false` |
 | `DiaryGenerationService` | 単体テスト（`DiaryWriter`・`DiaryService` をモック） | 0 件なら `NoPostsException` で AI を呼ばない、今日の日付とつぶやきの本文（投稿順）を渡して保存する、AI 呼び出しが失敗したら保存せずに `DiaryGenerationException` をそのまま投げる、`generateToday` が `NOT_SUPPORTED` である |
 | `DiaryService` | 単体テスト（repository をモック） | 今日・昨日以外の日付は `DiaryNotFoundException`、初回は INSERT、2 回目以降は上書き |
-| `DiaryAiService` | 単体テスト | ユーザーメッセージの組み立て（並び順、エスケープ） |
+| `ClaudeService` | 単体テスト | ユーザーメッセージの組み立て（並び順、エスケープ） |
 | `ClaudeProperties` | `ApplicationContextRunner` | `anthropic.*` の値がバインドされる、不正な値（空のモデル、0 以下の `max-tokens`、未知の effort、タイムアウトなし）では起動しない |
 | controller | `@WebMvcTest` + Spring Security Test | 未ログインはログイン画面へ、他人のつぶやき（`GET /posts/{id}/edit`・編集・削除）はメッセージを付けて `/` へリダイレクト、昨日の日記も表示できる、生成は成功なら今日の日記表示へ・つぶやき 0 件ならホームへ・AI 呼び出しの失敗なら今日の日記表示へ（それぞれのメッセージ付き）、一昨日・明日・不正な `{date}` は 404、CSRF トークンなしは 403、入力エラーの再表示（投稿フォーム・編集モード） |
 
@@ -507,7 +507,7 @@ anthropic:
 2. Spring Security とログイン画面。`demo` でログインできることを確認
 3. 今日のつぶやき画面：投稿・一覧（今日と昨日の区画）
 4. 今日のつぶやき画面：編集モード（編集・削除。昨日の分も）
-5. 日記表示画面と `DiaryGenerationService`・`DiaryWriter`（まず `StubDiaryWriter` で動かし、そのあと `DiaryAiService` につなぐ）：日記の生成・表示
+5. 日記表示画面と `DiaryGenerationService`・`DiaryWriter`（まず `StubDiaryWriter` で動かし、そのあと `ClaudeService` につなぐ）：日記の生成・表示
 6. 日記の再生成と、失敗時のメッセージ。2 画面の行き来の導線
 7. 日記生成中のローディング表示と二重押下の防止（画面側）
 8. エラー画面と仕上げ

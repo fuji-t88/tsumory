@@ -86,7 +86,7 @@ tsumory/
   | `service` | 業務ロジック・トランザクション | `PostService` |
   | `service` | 日記を書く流れの組み立て（つぶやき集め → AI → 保存） | `DiaryGenerationService` |
   | `service` | AI 連携のインターフェース | `DiaryWriter` |
-  | `service` | AI 連携（Claude API の呼び出し。`DiaryWriter` の実装） | `DiaryAiService` |
+  | `service` | AI 連携（Claude API の呼び出し。`DiaryWriter` の実装） | `ClaudeService` |
   | `service` | 例外 | `ResourceNotFoundException` |
   | `repository` | DB アクセス（Spring Data JPA） | `PostRepository` |
   | `domain` | ドメインモデル（エンティティなど） | `Post` |
@@ -194,7 +194,7 @@ tsumory/
   - キーが設定されていなければ、起動時にエラーになる
   - API キーは `ClaudeProperties` に入れない（record の `toString()` で値が出てしまうため）
 - モデル・タイムアウト・リトライなどの呼び出しの設定とプロンプトは、[docs/phase1-spec.md](docs/phase1-spec.md) の「6. AI 連携」に従う
-- 日記は `DiaryAiService`（`@Service`）が Claude API で書く。クライアントは `AnthropicConfig`（`@Configuration`）の Bean
+- 日記は `ClaudeService`（`@Service`）が Claude API で書く。クライアントは `AnthropicConfig`（`@Configuration`）の Bean
 - モデル・effort・`max_tokens`・タイムアウトは `application.yaml` の `anthropic.*` に書き、`ClaudeProperties` で受ける。コードに定数で書かない
 - 起動前に環境変数 `ANTHROPIC_API_KEY` を設定する
 
