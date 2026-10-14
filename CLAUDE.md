@@ -167,7 +167,10 @@ tsumory/
   - `requestId`：リクエストヘッダー `X-Request-Id` が安全な書式（英数字と `.`・`_`・`-`、64 文字以内。定数 `SAFE_REQUEST_ID`）なら引き継ぎ、ヘッダーがないか書式に合わなければ UUID を作る（受け取った値をそのまま使うと、改行などで偽のログ行を紛れ込ませられるため）。応答ヘッダー `X-Request-Id` で同じ値を返し、クライアント・プロキシ・アプリのログを同じ ID でたどれるようにする。500 のエラー画面にも出せるよう、リクエスト属性 `requestId` にも入れる（エラー画面を描くときには MDC はもう消えているが、リクエスト属性は残っている）。テンプレートでは `${requestId}` で読む
   - `userId`：ログイン中のユーザー ID（`CustomUserDetails#userId`）。`Authentication` が `null` のとき（未ログイン）や、principal が `CustomUserDetails` でないときは付けない。判定は `instanceof` のパターンマッチングで書く
 - `finally` で、このフィルターが入れたキーだけを `MDC.remove()` で消す。消し忘れると、スレッドを使い回す環境で前のリクエストのユーザー情報が次のリクエストのログに混ざる。`MDC.clear()` は、同じスレッドでほかの部品が入れたキーまで消すので使わない
-- `application.yaml` の `logging.pattern.correlation` で、すべてのログ行に `[requestId=… userId=…]` を付ける。各ログのメッセージに `userId` を書かなくても、ユーザーとリクエストが分かる
+- `application.yaml` の `logging.pattern.level` を `"%5p [req=%X{requestId:-} user=%X{userId:-}]"` にして、すべてのログ行のレベルの直後に `[req=… user=…]` を付ける。各ログのメッセージに `userId` を書かなくても、ユーザーとリクエストが分かる
+  - `logging.pattern.console` は書き換えない（Spring Boot の標準の形式（日時・スレッド名・ロガー名）を活かし、変えるのはレベルの列だけにするため）
+  - `logging.pattern.correlation` は使わない（Spring Boot が分散トレーシングの `traceId`・`spanId` を出すための場所なので、空けておく）
+  - `%X{…:-}` は、値がないとき（未ログインなど）に空を出す書き方。未ログインのリクエストでは `user=` が空のまま出る
 - フィルターは `@Component` にし、`@Order(SecurityFilterProperties.DEFAULT_FILTER_ORDER + 1)` で Spring Security のフィルターの直後に動かす（Spring Security がログイン中のユーザーを `SecurityContextHolder` に入れたあとでないと、ユーザー ID を取れないため）。順序は数値で書かず、定数からの相対で指定する（Spring 側の基準が変わっても追従するため）。`SecurityConfig` のチェーンには入れない（2 か所に登録すると順序が分かりにくくなるため）
   - Spring Security が自分で応答を返すリクエスト（`POST /login`・`POST /logout`、未ログインでのログイン画面へのリダイレクト）はこのフィルターまで届かないので、リクエスト ID は付かない
 - リクエストの終わりに `request completed: method, uri, status, elapsedMs` を INFO で出す。`uri` はパスだけで、クエリ文字列は出さない。静的リソース（`/css/**`・`/js/**`・`/webjars/**`）は対象にしない
