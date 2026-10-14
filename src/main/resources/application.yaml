@@ -23,6 +23,13 @@ anthropic:
   effort: medium
   max-tokens: 16000
   timeout: 120s
+  # つぶやきのカテゴリ分類（docs/phase2-spec.md の「7. AI 連携（カテゴリ分類）」）
+  classification:
+    model: claude-opus-5-5
+    effort: low
+    max-tokens: 2000
+    # 投稿・編集の応答が分類を待つので、クライアント全体の timeout（120s）より短くする
+    timeout: 10s
 
 # 開発中の SQL 可視化。bind パラメータにはつぶやきや日記の本文が含まれるため、
 # 本番デプロイ時は必ず無効化すること。

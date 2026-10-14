@@ -20,7 +20,11 @@ class ClaudePropertiesTest {
         "anthropic.model=claude-opus-5-5",
         "anthropic.effort=medium",
         "anthropic.max-tokens=16000",
-        "anthropic.timeout=120s"
+        "anthropic.timeout=120s",
+        "anthropic.classification.model=claude-opus-5-5",
+        "anthropic.classification.effort=low",
+        "anthropic.classification.max-tokens=2000",
+        "anthropic.classification.timeout=10s"
     };
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
@@ -36,12 +40,24 @@ class ClaudePropertiesTest {
             assertThat(properties.effort()).isEqualTo("medium");
             assertThat(properties.maxTokens()).isEqualTo(16000);
             assertThat(properties.timeout()).isEqualTo(Duration.ofSeconds(120));
+            assertThat(properties.classification())
+                    .isEqualTo(new ClaudeProperties.Classification(
+                            "claude-opus-5-5", "low", 2000, Duration.ofSeconds(10)));
         });
     }
 
     @ParameterizedTest
     @ValueSource(
-            strings = {"anthropic.model=", "anthropic.max-tokens=0", "anthropic.effort=extreme", "anthropic.timeout="})
+            strings = {
+                "anthropic.model=",
+                "anthropic.max-tokens=0",
+                "anthropic.effort=extreme",
+                "anthropic.timeout=",
+                "anthropic.classification.model=",
+                "anthropic.classification.effort=none",
+                "anthropic.classification.max-tokens=0",
+                "anthropic.classification.timeout="
+            })
     void 不正な値では起動しない(String invalid) {
         runner.withPropertyValues(invalid).run(context -> assertThat(context).hasFailed());
     }
