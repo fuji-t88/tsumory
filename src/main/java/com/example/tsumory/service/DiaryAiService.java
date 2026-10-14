@@ -2,14 +2,12 @@ package com.example.tsumory.service;
 
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.errors.AnthropicException;
-import com.anthropic.errors.AnthropicIoException;
 import com.anthropic.errors.AnthropicServiceException;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.StopReason;
 import com.example.tsumory.config.ClaudeProperties;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -24,6 +22,8 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class DiaryAiService implements DiaryWriter {
+
+    private static final long NANOS_PER_MILLI = 1_000_000;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy年M月d日（E）", Locale.JAPANESE);
 
@@ -60,68 +60,83 @@ public class DiaryAiService implements DiaryWriter {
                 .addUserMessage(buildUserMessage(date, contents))
                 .build();
 
-        // ログには本文・プロンプト・例外のメッセージを出さず、種類・ステータス・ID・件数だけを出す
+        // ログには本文・プロンプト・例外のメッセージを出さず、日付・件数・文字数・処理時間・トークン数・ID などのメタ情報だけを出す
+        log.info("claude api call start: date={}, postsCount={}", date, contents.size());
         var startedAt = System.nanoTime();
         Message response;
         try {
             response = client.messages().create(params);
-        } catch (AnthropicServiceException e) {
-            log.warn(
-                    "Claude API error: type={}, status={}, requestId={}, elapsedMs={}",
-                    e.getClass().getSimpleName(),
-                    e.statusCode(),
-                    e.headers().values("request-id"),
-                    elapsedMs(startedAt));
-            throw new DiaryGenerationException("Claude API call failed", e);
-        } catch (AnthropicIoException e) {
-            // タイムアウト（120 秒）や接続エラー
-            log.warn(
-                    "Claude API connection error: type={}, elapsedMs={}",
-                    e.getClass().getSimpleName(),
-                    elapsedMs(startedAt));
-            throw new DiaryGenerationException("Claude API call failed", e);
         } catch (AnthropicException e) {
-            log.warn(
-                    "Claude API client error: type={}, elapsedMs={}",
-                    e.getClass().getSimpleName(),
-                    elapsedMs(startedAt));
-            throw new DiaryGenerationException("Claude API call failed", e);
+            // ネットワーク障害・レート制限・タイムアウト（120 秒）など。外部要因なので WARN（CLAUDE.md の「ログ」）
+            var elapsedMs = (System.nanoTime() - startedAt) / NANOS_PER_MILLI;
+            if (e instanceof AnthropicServiceException se) {
+                log.warn(
+                        "claude api call failed: date={}, elapsedMs={}, type={}, status={}, requestId={}",
+                        date,
+                        elapsedMs,
+                        e.getClass().getSimpleName(),
+                        se.statusCode(),
+                        se.headers().values("request-id").stream().findFirst().orElse("none"));
+            } else {
+                log.warn(
+                        "claude api call failed: date={}, elapsedMs={}, type={}",
+                        date,
+                        elapsedMs,
+                        e.getClass().getSimpleName());
+            }
+            throw new DiaryGenerationException("Failed to generate diary via Claude", e);
         }
 
-        var stopReason = response.stopReason().orElse(null);
-        log.info(
-                "Claude API responded: messageId={}, stopReason={}, inputTokens={}, outputTokens={}, elapsedMs={}",
-                response.id(),
-                stopReason,
-                response.usage().inputTokens(),
-                response.usage().outputTokens(),
-                elapsedMs(startedAt));
-        if (StopReason.REFUSAL.equals(stopReason)) {
+        var elapsedMs = (System.nanoTime() - startedAt) / NANOS_PER_MILLI;
+        var usage = response.usage();
+        var stopReason = response.stopReason().map(StopReason::asString).orElse("none");
+        if (response.stopReason().filter(StopReason.REFUSAL::equals).isPresent()) {
             log.warn(
-                    "Claude API refused: messageId={}, category={}",
+                    "claude api refused: date={}, elapsedMs={}, messageId={}, category={}",
+                    date,
+                    elapsedMs,
                     response.id(),
-                    response.stopDetails().map(details -> details.category()));
-            throw new DiaryGenerationException("Claude API refused");
+                    response.stopDetails()
+                            .flatMap(details -> details.category())
+                            .orElse(null));
+            throw new DiaryGenerationException("Claude refused to generate the diary");
         }
-        if (!StopReason.END_TURN.equals(stopReason)) {
-            log.warn("Claude API stopped unexpectedly: messageId={}, stopReason={}", response.id(), stopReason);
-            throw new DiaryGenerationException("Claude API call failed");
+        if (response.stopReason().filter(StopReason.END_TURN::equals).isEmpty()) {
+            log.warn(
+                    "claude api stopped unexpectedly: date={}, elapsedMs={}, messageId={}, stopReason={}, outputTokens={}",
+                    date,
+                    elapsedMs,
+                    response.id(),
+                    stopReason,
+                    usage.outputTokens());
+            throw new DiaryGenerationException("Claude stopped before finishing the diary");
         }
 
-        var content = response.content().stream()
+        var body = response.content().stream()
                 .flatMap(block -> block.text().stream())
-                .map(textBlock -> textBlock.text())
+                .map(text -> text.text())
                 .collect(Collectors.joining())
                 .strip();
-        if (content.isEmpty()) {
-            log.warn("Claude API returned no text: messageId={}", response.id());
-            throw new DiaryGenerationException("Claude API call failed");
+        if (body.isBlank()) {
+            log.warn(
+                    "claude api returned empty body: date={}, elapsedMs={}, messageId={}, stopReason={}",
+                    date,
+                    elapsedMs,
+                    response.id(),
+                    stopReason);
+            throw new DiaryGenerationException("Claude returned an empty body");
         }
-        return content;
-    }
-
-    private static long elapsedMs(long startedAt) {
-        return Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
+        log.info(
+                "claude api call succeeded: date={}, elapsedMs={}, messageId={}, inputTokens={}, outputTokens={}, "
+                        + "stopReason={}, bodyLength={}",
+                date,
+                elapsedMs,
+                response.id(),
+                usage.inputTokens(),
+                usage.outputTokens(),
+                stopReason,
+                body.length());
+        return body;
     }
 
     static String buildUserMessage(LocalDate date, List<String> contents) {
