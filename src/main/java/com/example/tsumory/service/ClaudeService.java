@@ -60,29 +60,26 @@ public class ClaudeService implements DiaryWriter {
                 .addUserMessage(buildUserMessage(date, contents))
                 .build();
 
-        // ログには本文・プロンプト・例外のメッセージを出さず、日付・件数・文字数・処理時間・トークン数・ID などのメタ情報だけを出す
+        // ログにはプロンプト・つぶやき・日記の本文を出さず、日付・件数・文字数・処理時間・トークン数・ID などのメタ情報だけを出す
         log.info("claude api call start: date={}, postsCount={}", date, contents.size());
         var startedAt = System.nanoTime();
         Message response;
         try {
             response = client.messages().create(params);
         } catch (AnthropicException e) {
-            // ネットワーク障害・レート制限・タイムアウト（120 秒）など。外部要因なので WARN（CLAUDE.md の「ログ」）
+            // ネットワーク障害・レート制限・タイムアウト（120 秒）など、外部 API が応答しない状態。
+            // 原因を調べられるよう、スタックトレース付きの ERROR で出す（CLAUDE.md の「ログ」）
             var elapsedMs = (System.nanoTime() - startedAt) / NANOS_PER_MILLI;
             if (e instanceof AnthropicServiceException se) {
-                log.warn(
-                        "claude api call failed: date={}, elapsedMs={}, type={}, status={}, requestId={}",
+                log.error(
+                        "claude api call failed: date={}, elapsedMs={}, status={}, requestId={}",
                         date,
                         elapsedMs,
-                        e.getClass().getSimpleName(),
                         se.statusCode(),
-                        se.headers().values("request-id").stream().findFirst().orElse("none"));
+                        se.headers().values("request-id").stream().findFirst().orElse("none"),
+                        e);
             } else {
-                log.warn(
-                        "claude api call failed: date={}, elapsedMs={}, type={}",
-                        date,
-                        elapsedMs,
-                        e.getClass().getSimpleName());
+                log.error("claude api call failed: date={}, elapsedMs={}", date, elapsedMs, e);
             }
             throw new DiaryGenerationException("Failed to generate diary via Claude", e);
         }
