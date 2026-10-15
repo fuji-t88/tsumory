@@ -326,7 +326,7 @@ erDiagram
 
 1. `SearchForm`（record。`q` は `@Size(max = 50)`、`category` は文字列）で受け取り、`@Valid` で検証する。エラーなら検索せずにフォームとメッセージを出す
 2. `q` は前後の空白を取り除く。`category` が `PostCategory` の値でなければ「すべて」として扱う（エラーにしない）
-3. `q` が空で、カテゴリも「すべて」なら検索しない。代わりに日記を新しい順にページングして返す（`SearchService#recentDiaries`。`DiaryRepository#findByUserIdOrderByDiaryDateDesc(userId, pageable)`）。controller は `Pageable` で受けるが、使うのはページ番号（`?page=`）だけで、件数（20 件）と並び順は service で固定する（リクエストの `size`・`sort` は受け付けない）。ユーザー入力を含まないので、派生クエリのままでよい
+3. `q` が空で、カテゴリも「すべて」なら検索しない。代わりに日記を新しい順にページングして返す（`SearchService#recentDiaries` が `DiaryService#searchDiaries` をキーワードなしで呼ぶ。中では `DiaryRepository#findByUserIdOrderByDiaryDateDesc(userId, pageable)`）。controller は `Pageable` で受けるが、使うのはページ番号（`?page=`）だけで、件数（20 件）と並び順は service で固定する（リクエストの `size`・`sort` は受け付けない）。ユーザー入力を含まないので、派生クエリのままでよい
 4. 次の条件で検索する。どちらも**ログイン中のユーザーのものだけ**を対象にする
 
    | 対象 | 条件 | 並び順 | 上限 |
@@ -336,7 +336,7 @@ erDiagram
 
 5. 「含む」は SQL の `LIKE` で調べる
    - JPQL の `@Query` とバインドパラメータで書く。文字列連結で組み立てない（CLAUDE.md の禁止事項「SQL インジェクション」）
-   - `q` の中の `!`・`%`・`_` の前に `!` を付けてから渡す（`SearchService#escapeLike`。`!` 自身を先に置き換える）。クエリは `LIKE CONCAT('%', LOWER(:keyword), '%') ESCAPE '!'` とし、`%` で囲むのは SQL 側で行う。ユーザーが `%` を入力しても、全件に一致させない（日記は `DiaryRepository#searchByContent`、つぶやきは `PostRepository#searchByKeyword` など。どちらも同じ決まり）
+   - `q` の中の `!`・`%`・`_` の前に `!` を付けてから渡す（`!` 自身を先に置き換える。逆だと、後から付けた `!` まで再エスケープしてしまう）。日記は `DiaryService#searchDiaries(userId, keyword, pageable)` が、キーワードが空（`null` や空白だけ）なら一覧（`findByUserIdOrderByDiaryDateDesc`）、あれば `escapeForLike` でエスケープして `searchByContent` と振り分ける。つぶやきは `SearchService#escapeLike` で同じ決まりでエスケープする。クエリは `LIKE CONCAT('%', LOWER(:keyword), '%') ESCAPE '!'` とし、`%` で囲むのは SQL 側で行う。ユーザーが `%` を入力しても、全件に一致させない（日記は `DiaryRepository#searchByContent`、つぶやきは `PostRepository#searchByKeyword` など。どちらも同じ決まり）
    - 英字の大文字・小文字は区別しない（両辺を `LOWER()` にする）。全角・半角、ひらがな・カタカナは区別する（「14. 未決事項」）
    - 上限を超えたかを知る方法：つぶやきは 51 件まで取得し、51 件目があれば `postsTruncated` を `true` にして 50 件を返す。日記は `Page<Diary>` で 1 ページ目（50 件）を取り、次のページがあれば（`hasNext()`）`diariesTruncated` を `true` にする
 6. 一致した部分の強調

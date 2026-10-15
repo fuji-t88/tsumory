@@ -16,6 +16,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 @ExtendWith(MockitoExtension.class)
 class DiaryServiceTest {
@@ -81,6 +85,45 @@ class DiaryServiceTest {
             assertThatThrownBy(() -> service.findByDate(USER_ID, date)).isInstanceOf(DiaryNotFoundException.class);
         }
         verify(diaryRepository, never()).findByUserIdAndDiaryDate(any(), any());
+    }
+
+    @Test
+    void searchDiaries_blankKeyword_returnsAllNewestFirst() {
+        var pageable = PageRequest.of(0, 20);
+        var page = new PageImpl<>(List.of(new Diary(user, DATE, "日記", NOW)));
+        when(diaryRepository.findByUserIdOrderByDiaryDateDesc(USER_ID, pageable))
+                .thenReturn(page);
+
+        // null も空白だけも、絞り込みのない一覧
+        assertThat(service.searchDiaries(USER_ID, null, pageable)).isSameAs(page);
+        assertThat(service.searchDiaries(USER_ID, " 　", pageable)).isSameAs(page);
+        verify(diaryRepository, never()).searchByContent(any(), any(), any());
+    }
+
+    @Test
+    void searchDiaries_withKeyword_searchesByContent() {
+        var pageable = PageRequest.of(0, 50);
+        when(diaryRepository.searchByContent(USER_ID, "カレー", pageable)).thenReturn(Page.empty());
+
+        service.searchDiaries(USER_ID, "カレー", pageable);
+
+        verify(diaryRepository).searchByContent(USER_ID, "カレー", pageable);
+        verify(diaryRepository, never()).findByUserIdOrderByDiaryDateDesc(any(), any());
+    }
+
+    @Test
+    void searchDiaries_escapesBangFirstThenWildcards() {
+        var pageable = PageRequest.of(0, 50);
+        when(diaryRepository.searchByContent(any(), any(), any())).thenReturn(Page.empty());
+
+        service.searchDiaries(USER_ID, "100%", pageable);
+        service.searchDiaries(USER_ID, "a_b", pageable);
+        // ! を先に二重化するので、後から付けた ! は再エスケープされない（"!!!%" になり "!!!!%" にはならない）
+        service.searchDiaries(USER_ID, "やった!%", pageable);
+
+        verify(diaryRepository).searchByContent(USER_ID, "100!%", pageable);
+        verify(diaryRepository).searchByContent(USER_ID, "a!_b", pageable);
+        verify(diaryRepository).searchByContent(USER_ID, "やった!!!%", pageable);
     }
 
     @Test

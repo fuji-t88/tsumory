@@ -8,6 +8,8 @@ import java.time.LocalDate;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,6 +57,26 @@ public class DiaryService {
         return diaryRepository
                 .findByUserIdAndDiaryDate(userId, date)
                 .map(diary -> DiaryItem.from(diary, PostService.ZONE));
+    }
+
+    /**
+     * 日記を新しい順に返す。キーワードが空（{@code null} や空白だけ）なら絞り込みのない一覧、あれば本文にキーワードを含む日記だけ。
+     *
+     * <p>一覧と検索で適したクエリが違うので、ここで振り分ける。{@code Pageable} は controller（または呼び出し側の service）が組み立てる。
+     */
+    @Transactional(readOnly = true)
+    public Page<Diary> searchDiaries(Long userId, String keyword, Pageable pageable) {
+        if (keyword == null || keyword.isBlank()) {
+            return diaryRepository.findByUserIdOrderByDiaryDateDesc(userId, pageable);
+        }
+        return diaryRepository.searchByContent(userId, escapeForLike(keyword), pageable);
+    }
+
+    // ESCAPE 文字 `!` 自身を先に二重化し、その後で
+    // LIKE のメタ文字 `%` `_` をエスケープする。
+    // 順序が逆だと、後から導入した `!` を再エスケープしてしまう。
+    private static String escapeForLike(String keyword) {
+        return keyword.replace("!", "!!").replace("%", "!%").replace("_", "!_");
     }
 
     /** 今日（日本時間）の日記を、なければ INSERT、あれば上書きする。 */

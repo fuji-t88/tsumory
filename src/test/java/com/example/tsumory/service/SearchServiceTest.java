@@ -14,7 +14,6 @@ import com.example.tsumory.domain.Diary;
 import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
 import com.example.tsumory.domain.User;
-import com.example.tsumory.repository.DiaryRepository;
 import com.example.tsumory.repository.PostRepository;
 import com.example.tsumory.service.HighlightedText.Segment;
 import java.time.Instant;
@@ -44,7 +43,7 @@ class SearchServiceTest {
     private PostRepository postRepository;
 
     @Mock
-    private DiaryRepository diaryRepository;
+    private DiaryService diaryService;
 
     @InjectMocks
     private SearchService service;
@@ -77,7 +76,7 @@ class SearchServiceTest {
     void search_keywordOnly_searchesPostsAndDiariesAndMergesNewestFirst() {
         when(postRepository.searchByKeyword(USER_ID, "カレー", LIMIT))
                 .thenReturn(List.of(post("夜もカレー", "2026-10-07T20:00:00"), post("昼のカレー", "2026-10-06T12:40:00")));
-        when(diaryRepository.searchByContent(USER_ID, "カレー", FIRST_PAGE))
+        when(diaryService.searchDiaries(USER_ID, "カレー", FIRST_PAGE))
                 .thenReturn(
                         new PageImpl<>(List.of(new Diary(user, LocalDate.of(2026, 10, 6), "カレーの日。", Instant.EPOCH))));
 
@@ -95,13 +94,15 @@ class SearchServiceTest {
     }
 
     @Test
-    void search_passesEscapedKeyword() {
+    void search_escapesKeywordForPostsAndLeavesDiariesToDiaryService() {
         when(postRepository.searchByKeyword(USER_ID, "100!%", LIMIT)).thenReturn(List.of());
-        when(diaryRepository.searchByContent(USER_ID, "100!%", FIRST_PAGE)).thenReturn(Page.empty());
+        when(diaryService.searchDiaries(USER_ID, "100%", FIRST_PAGE)).thenReturn(Page.empty());
 
         service.search(USER_ID, "100%", null);
 
-        verify(diaryRepository).searchByContent(USER_ID, "100!%", FIRST_PAGE);
+        // つぶやきはここでエスケープし、日記はエスケープ前のキーワードを DiaryService に渡す（二重にエスケープしない）
+        verify(postRepository).searchByKeyword(USER_ID, "100!%", LIMIT);
+        verify(diaryService).searchDiaries(USER_ID, "100%", FIRST_PAGE);
     }
 
     @Test
@@ -109,7 +110,7 @@ class SearchServiceTest {
         var hit = post("昼のカレーが辛すぎた", "2026-10-07T00:30:00");
         hit.assignCategory(PostCategory.PRIVATE);
         when(postRepository.searchByKeyword(USER_ID, "カレー", LIMIT)).thenReturn(List.of(hit));
-        when(diaryRepository.searchByContent(USER_ID, "カレー", FIRST_PAGE)).thenReturn(Page.empty());
+        when(diaryService.searchDiaries(USER_ID, "カレー", FIRST_PAGE)).thenReturn(Page.empty());
 
         var result =
                 (SearchHit.PostHit) service.search(USER_ID, "カレー", null).hits().getFirst();
@@ -128,7 +129,7 @@ class SearchServiceTest {
 
         service.search(USER_ID, "カレー", PostCategory.WORK);
 
-        verify(diaryRepository, never()).searchByContent(anyLong(), anyString(), any());
+        verify(diaryService, never()).searchDiaries(anyLong(), any(), any());
     }
 
     @Test
@@ -140,7 +141,7 @@ class SearchServiceTest {
 
         assertThat(result.hits()).hasSize(1);
         verify(postRepository, never()).searchByKeyword(anyLong(), anyString(), any());
-        verify(diaryRepository, never()).searchByContent(anyLong(), anyString(), any());
+        verify(diaryService, never()).searchDiaries(anyLong(), any(), any());
     }
 
     @Test
@@ -154,7 +155,7 @@ class SearchServiceTest {
         var diaries = IntStream.range(0, 50)
                 .mapToObj(i -> new Diary(user, LocalDate.of(2026, 1, 1).plusDays(i), "カレー", Instant.EPOCH))
                 .toList();
-        when(diaryRepository.searchByContent(USER_ID, "カレー", FIRST_PAGE))
+        when(diaryService.searchDiaries(USER_ID, "カレー", FIRST_PAGE))
                 .thenReturn(new PageImpl<>(diaries, FIRST_PAGE, 51));
 
         var result = service.search(USER_ID, "カレー", null);
@@ -167,7 +168,7 @@ class SearchServiceTest {
     @Test
     void recentDiaries_usesPageNumberOnlyWithFixedSize() {
         var diary = new Diary(user, LocalDate.of(2026, 10, 7), "寝坊した一日。", Instant.EPOCH);
-        when(diaryRepository.findByUserIdOrderByDiaryDateDesc(USER_ID, PageRequest.of(2, 20)))
+        when(diaryService.searchDiaries(USER_ID, null, PageRequest.of(2, 20)))
                 .thenReturn(new PageImpl<>(List.of(diary), PageRequest.of(2, 20), 41));
 
         // リクエストで size や sort を指定されても、件数と並び順は変えない

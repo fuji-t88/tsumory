@@ -3,7 +3,6 @@ package com.example.tsumory.service;
 import com.example.tsumory.domain.Diary;
 import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
-import com.example.tsumory.repository.DiaryRepository;
 import com.example.tsumory.repository.PostRepository;
 import java.time.LocalTime;
 import java.util.Comparator;
@@ -39,7 +38,7 @@ public class SearchService {
     static final int RECENT_PAGE_SIZE = 20;
 
     private final PostRepository postRepository;
-    private final DiaryRepository diaryRepository;
+    private final DiaryService diaryService;
 
     /**
      * キーワードとカテゴリで検索する。どちらも指定がないときは呼ばない（controller は代わりに {@link #recentDiaries} を出す）。
@@ -60,9 +59,10 @@ public class SearchService {
         } else {
             posts = postRepository.searchByKeywordAndCategory(userId, escaped, category, limit);
         }
-        // 日記は 1 ページ目（上限件数）だけを取り、次のページがあれば上限を超えたとみなす
+        // 日記は 1 ページ目（上限件数）だけを取り、次のページがあれば上限を超えたとみなす。
+        // キーワードのエスケープは DiaryService#searchDiaries が行うので、エスケープ前のキーワードを渡す
         var diaries = escaped != null && category == null
-                ? diaryRepository.searchByContent(userId, escaped, PageRequest.of(0, MAX_RESULTS))
+                ? diaryService.searchDiaries(userId, keyword, PageRequest.of(0, MAX_RESULTS))
                 : Page.<Diary>empty();
 
         var hits = Stream.concat(
@@ -78,15 +78,16 @@ public class SearchService {
      * （リクエストの {@code size}・{@code sort} を受け付けない）。
      */
     public Page<SearchHit> recentDiaries(Long userId, Pageable pageable) {
-        return diaryRepository
-                .findByUserIdOrderByDiaryDateDesc(userId, PageRequest.of(pageable.getPageNumber(), RECENT_PAGE_SIZE))
+        // キーワードなしなので、DiaryService#searchDiaries は絞り込みのない一覧を返す
+        return diaryService
+                .searchDiaries(userId, null, PageRequest.of(pageable.getPageNumber(), RECENT_PAGE_SIZE))
                 .map(diary -> toHit(diary, ""));
     }
 
     /**
-     * {@code LIKE} に渡すキーワードの、{@code !}・{@code %}・{@code _} の前に {@code !} を付ける（クエリの {@code ESCAPE '!'} に対応）。
-     * ユーザーが {@code %} を入力しても、ワイルドカードではなくただの文字として扱わせる。{@code !} 自身を先に置き換えないと、
-     * 付けた {@code !} まで二重にエスケープされる。
+     * つぶやきの検索用に、{@code LIKE} に渡すキーワードの {@code !}・{@code %}・{@code _} の前に {@code !} を付ける（クエリの
+     * {@code ESCAPE '!'} に対応）。日記の検索は {@code DiaryService#searchDiaries} の中で同じ決まりでエスケープする。{@code !} 自身を先に
+     * 置き換えないと、付けた {@code !} まで二重にエスケープされる。
      */
     static String escapeLike(String keyword) {
         return keyword.replace("!", "!!").replace("%", "!%").replace("_", "!_");
