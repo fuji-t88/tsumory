@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tsumory - 日記一覧</title>
+    <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body class="bg-body-tertiary">
+<!--/* ほかの画面と同じ共通ヘッダー（メニューの選択中は「日記一覧」） */-->
+<header th:replace="~{fragments/header :: header('diaries')}"></header>
+
+<main class="container py-4" style="max-width: 720px;">
+    <h2 class="h4 mb-3">日記一覧</h2>
+
+    <!-- 検索フォーム -->
+    <form th:action="@{/diary}" method="get" class="mb-4">
+        <div class="input-group">
+            <input type="text" name="keyword" class="form-control" th:value="${keyword}" maxlength="50"
+                   placeholder="日記の内容を検索" aria-label="日記の内容を検索"
+                   th:classappend="${keywordError != null} ? 'is-invalid'">
+            <button class="btn btn-outline-secondary" type="submit">検索</button>
+        </div>
+        <p th:if="${keywordError != null}" th:text="${keywordError}" class="text-danger small mb-0 mt-1" role="alert">
+            50 文字以内で入力してください
+        </p>
+    </form>
+
+    <!-- 日記一覧 -->
+    <div th:if="${diaries.isEmpty()}" class="text-center text-muted my-5">
+        <p>日記が見つかりません。</p>
+    </div>
+    <div th:each="diary : ${diaries}" class="card shadow-sm mb-3">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start gap-3">
+                <div>
+                    <h3 class="h6 card-title" th:text="|${#temporals.format(diary.diaryDate, 'yyyy年M月d日')}の日記|"></h3>
+                    <p class="card-text text-body-secondary small mb-0"
+                       th:text="${#strings.abbreviate(diary.content, 100)}"></p>
+                </div>
+                <a th:href="@{/diary/{date}(date=${diary.diaryDate})}"
+                   class="btn btn-outline-secondary btn-sm flex-shrink-0">詳細</a>
+            </div>
+        </div>
+    </div>
+
+    <!--/* ページ送り（キーワードを引き継ぐ）。10 件ずつで、2 ページ以上あるときだけ出す */-->
+    <nav th:if="${diaries.totalPages > 1}" class="d-flex justify-content-between" aria-label="ページ送り">
+        <a th:if="${diaries.hasPrevious()}"
+           th:href="@{/diary(keyword=${keyword}, page=${diaries.number - 1})}">← 新しい日記</a>
+        <span th:unless="${diaries.hasPrevious()}"></span>
+        <a th:if="${diaries.hasNext()}"
+           th:href="@{/diary(keyword=${keyword}, page=${diaries.number + 1})}">古い日記 →</a>
+    </nav>
+</main>
+</body>
+</html>

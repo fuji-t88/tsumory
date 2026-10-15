@@ -8,7 +8,7 @@ import java.time.ZoneId;
 /** 画面に出す日記。生成時刻は日本時間。 */
 public record DiaryItem(LocalDate diaryDate, String content, LocalTime generatedTime) {
 
-    static DiaryItem from(Diary diary, ZoneId zone) {
+    public static DiaryItem from(Diary diary, ZoneId zone) {
         return new DiaryItem(
                 diary.getDiaryDate(), diary.getContent(), LocalTime.ofInstant(diary.getGeneratedAt(), zone));
     }

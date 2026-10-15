@@ -26,6 +26,7 @@ import com.example.tsumory.domain.User;
 import com.example.tsumory.repository.UserRepository;
 import com.example.tsumory.service.DiaryGenerationException;
 import com.example.tsumory.service.DiaryGenerationService;
+import com.example.tsumory.service.DiaryItem;
 import com.example.tsumory.service.DiaryNotFoundException;
 import com.example.tsumory.service.DiaryService;
 import com.example.tsumory.service.InvalidDiaryDateException;
@@ -45,6 +46,9 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -94,6 +98,79 @@ class DiaryControllerTest {
                 .thenThrow(new DiaryNotFoundException(TODAY.plusDays(1)));
         when(postService.isEditableDate(TODAY)).thenReturn(true);
         when(postService.isEditableDate(YESTERDAY)).thenReturn(true);
+    }
+
+    // --- 日記の一覧（GET /diary） ---
+
+    @Test
+    void 日記の一覧を日付と本文の先頭と詳細リンク付きで出す() throws Exception {
+        var longContent = "あ".repeat(120);
+        when(diaryService.searchDiaries(USER_ID, "", PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(
+                        List.of(new Diary(user, TODAY, longContent, NOW), new Diary(user, YESTERDAY, "短い日記", NOW)),
+                        PageRequest.of(0, 10),
+                        2));
+
+        var result = mockMvc.perform(get("/diary").with(user(PRINCIPAL)))
+                .andExpect(status().isOk())
+                .andExpect(view().name("diary-list"))
+                .andReturn();
+        var html = result.getResponse().getContentAsString();
+
+        assertThat(html)
+                .contains("日記一覧")
+                .contains("2026年10月7日の日記")
+                // 100 文字を超える本文は、末尾を「...」にして 100 文字に収める
+                .contains("あ".repeat(97) + "...")
+                .doesNotContain("あ".repeat(98))
+                .contains("短い日記")
+                .contains("href=\"/diary/2026-10-07\"")
+                .contains(">詳細</a>")
+                .containsPattern("href=\"/diaries\" class=\"nav-link active\"")
+                .doesNotContain("ページ送り");
+        // テンプレートにはエンティティではなく表示用の DiaryItem を渡す
+        assertThat(((Page<?>) result.getModelAndView().getModel().get("diaries")).getContent())
+                .allMatch(DiaryItem.class::isInstance);
+    }
+
+    @Test
+    void キーワードは前後の空白を取り除いてserviceに渡しフォームに残す() throws Exception {
+        when(diaryService.searchDiaries(USER_ID, "カレー", PageRequest.of(0, 10))).thenReturn(Page.empty());
+
+        mockMvc.perform(get("/diary").param("keyword", " カレー ").with(user(PRINCIPAL)))
+                .andExpect(content().string(containsString("value=\"カレー\"")))
+                .andExpect(content().string(containsString("日記が見つかりません。")));
+    }
+
+    @Test
+    void ページ送りはキーワードを引き継ぎ負のページは0として扱う() throws Exception {
+        var diaries = java.util.stream.IntStream.range(0, 10)
+                .mapToObj(i -> new Diary(user, TODAY.minusDays(i), "カレーの日" + i, NOW))
+                .toList();
+        when(diaryService.searchDiaries(USER_ID, "カレー", PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(diaries, PageRequest.of(0, 10), 25));
+
+        mockMvc.perform(get("/diary")
+                        .param("keyword", "カレー")
+                        .param("page", "-1")
+                        .with(user(PRINCIPAL)))
+                .andExpect(content()
+                        .string(containsString("href=\"/diary?keyword=%E3%82%AB%E3%83%AC%E3%83%BC&amp;page=1\"")))
+                .andExpect(content().string(not(containsString("新しい日記</a>"))));
+    }
+
+    @Test
+    void 五十一文字のキーワードはエラーを出して検索しない() throws Exception {
+        mockMvc.perform(get("/diary").param("keyword", "あ".repeat(51)).with(user(PRINCIPAL)))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("50 文字以内で入力してください")));
+
+        verify(diaryService, never()).searchDiaries(any(), any(), any());
+    }
+
+    @Test
+    void 未ログインの日記の一覧はログイン画面へ() throws Exception {
+        mockMvc.perform(get("/diary")).andExpect(redirectedUrl("/login"));
     }
 
     // --- この日のつぶやき ---

@@ -4,6 +4,7 @@ import com.example.tsumory.config.CustomUserDetails;
 import com.example.tsumory.domain.PostCategory;
 import com.example.tsumory.service.DiaryGenerationException;
 import com.example.tsumory.service.DiaryGenerationService;
+import com.example.tsumory.service.DiaryItem;
 import com.example.tsumory.service.DiaryService;
 import com.example.tsumory.service.InvalidDiaryDateException;
 import com.example.tsumory.service.NoPostsException;
@@ -12,6 +13,8 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
@@ -20,6 +23,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 @Controller
@@ -29,6 +33,14 @@ public class DiaryController {
 
     static final String NO_POSTS_MESSAGE = "つぶやきがないため日記を生成できません";
     static final String FUTURE_DATE_MESSAGE = "未来の日付の日記は表示できません";
+    static final String KEYWORD_TOO_LONG_MESSAGE = "50 文字以内で入力してください";
+
+    /** 日記の一覧（{@code GET /diary}）で 1 ページに出す件数。 */
+    static final int DIARY_LIST_PAGE_SIZE = 10;
+
+    /** キーワードの上限（文字数）。検索画面と同じ。 */
+    static final int KEYWORD_MAX_LENGTH = 50;
+
     static final String GENERATION_FAILED_MESSAGE = "日記の生成に失敗しました。時間をおいて再度お試しください";
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
@@ -38,6 +50,37 @@ public class DiaryController {
     private final DiaryGenerationService diaryGenerationService;
     private final PostService postService;
     private final Clock clock;
+
+    // クラスに @RequestMapping("/diary") があるため、
+    // メソッド側のパスはすべて相対で書く
+    /**
+     * 日記の一覧（{@code GET /diary}）。キーワードがあれば本文で絞り込み、新しい順に {@link #DIARY_LIST_PAGE_SIZE} 件ずつ出す。
+     *
+     * <p>一覧と検索の振り分けとキーワードのエスケープは {@link DiaryService#searchDiaries} が行う。テンプレートにはエンティティではなく
+     * 表示用の {@link DiaryItem} を渡す。
+     */
+    @GetMapping
+    public String diaryList(
+            @AuthenticationPrincipal CustomUserDetails principal,
+            @RequestParam(name = "keyword", required = false) String keyword,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            Model model) {
+        var userId = principal.userId();
+        var trimmed = keyword == null ? "" : keyword.strip();
+        var pageable = PageRequest.of(Math.max(0, page), DIARY_LIST_PAGE_SIZE);
+        model.addAttribute("keyword", trimmed);
+        if (trimmed.length() > KEYWORD_MAX_LENGTH) {
+            // 検索画面（SearchForm）と同じ上限。超えたら検索せずにメッセージを出す
+            model.addAttribute("keywordError", KEYWORD_TOO_LONG_MESSAGE);
+            model.addAttribute("diaries", Page.<DiaryItem>empty(pageable));
+            return "diary-list";
+        }
+        var diaries = diaryService
+                .searchDiaries(userId, trimmed, pageable)
+                .map(diary -> DiaryItem.from(diary, clock.getZone()));
+        model.addAttribute("diaries", diaries);
+        return "diary-list";
+    }
 
     @GetMapping("/{date}")
     public String view(

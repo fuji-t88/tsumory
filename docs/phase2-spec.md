@@ -128,6 +128,7 @@ erDiagram
 | 今日のつぶやき（変更） | `/` | `templates/home.html` | 共通ヘッダーにそろえ、各つぶやきにカテゴリを出す。編集モードでカテゴリも直せる |
 | 日記表示（変更） | `/diary/{date}` | `templates/diary.html` | 登録日から今日までの日付を開ける。その日の日記を書く・作り直す。その日のつぶやきを読み、カテゴリを直す |
 | 日記一覧（追加） | `/diaries` | `templates/diaries.html` | 月ごとに、日記とつぶやきのある日を並べる。リストとカレンダーを切り替える |
+| 日記の一覧（追加） | `/diary` | `templates/diary-list.html` | 日記だけを新しい順に 10 件ずつ並べ、本文で絞り込める（書籍の作りに合わせる。月ごとの日記一覧とは別） |
 | 検索（追加） | `/search` | `templates/search.html` | キーワードとカテゴリで、つぶやきと日記を探す |
 
 ### 画面遷移
@@ -256,6 +257,17 @@ erDiagram
    - 今日のセルは枠線で示す
 6. **月の移動**：下に「← 9月」「11月 →」のリンク。登録月より前、今月より後へは移れない（リンクにせず薄く表示する）
 
+### 日記の一覧（追加。`templates/diary-list.html`、`/diary`）
+
+日記だけを新しい順に並べ、本文で絞り込める一覧（書籍の作りに合わせる）。月ごとの日記一覧（`/diaries`）とは別の画面で、ヘッダーのメニューの選択中は「日記一覧」にする（メニューのリンク先は `/diaries` のまま）。`DiaryController#diaryList` が `diaries`（表示用の `DiaryItem` の `Page`）・`keyword`（前後の空白を取り除いたキーワード）・`keywordError`（入力エラーのときだけ）を渡す。
+
+1. **ヘッダー**（共通ヘッダー。選択中は「日記一覧」）
+2. **見出し**「日記一覧」
+3. **検索フォーム**（`GET /diary`）：キーワードの入力欄（`name="keyword"`、`maxlength="50"`、プレースホルダー「日記の内容を検索」）と「検索」ボタン。51 文字以上なら、入力欄の下に赤字で「50 文字以内で入力してください」
+4. **日記のカード**（新しい順に 10 件ずつ）：見出し「2026年10月7日の日記」、本文の先頭（`#strings.abbreviate(diary.content, 100)`。100 文字を超えたら末尾を「...」にして 100 文字に収める）、右に「詳細」ボタン（`/diary/{その日}`）
+   - 0 件なら「日記が見つかりません。」
+5. **ページ送り**（2 ページ以上あるときだけ）：「← 新しい日記」「古い日記 →」。キーワードを引き継ぐ（`/diary?keyword=...&page=N`）
+
 ### 検索（追加。`templates/search.html`、`/search`）
 
 `SearchController#search` が `searchForm`（`q`・`category`）・`categories`（カテゴリの一覧）・`results`（検索結果。検索していなければ `null`）・`postsTruncated`・`diariesTruncated` を渡す。上から次の順に並べる。
@@ -322,6 +334,14 @@ erDiagram
    - つぶやきの件数：その月のつぶやきの `posted_at` だけを取得し、Java で日本時間の日付ごとに数える（SQL でタイムゾーンを変換して集計しない。「今日」の決め方を `Clock` と `ZoneId` の 1 か所にそろえるため）
 3. 日ごとの情報（日付・日記の書き出し・日記があるか・つぶやきの件数）を `DiaryDaySummary`（record）のリストにして返す
 4. カレンダー表示のときは、月の 1 日の曜日に合わせて前を空けた 7 列の行に並べる（`DiaryCalendarWeek` などの record にまとめ、テンプレートでは日付の計算をしない）
+
+### 日記の一覧 `GET /diary?keyword=...&page=N`
+
+1. `keyword`（`@RequestParam`、任意）と `page`（`@RequestParam`、既定 `0`）で受け取る。キーワードは前後の空白を取り除く
+2. キーワードが 51 文字以上なら検索せず、空の一覧とメッセージ「50 文字以内で入力してください」を出す（検索画面と同じ上限）
+3. `PageRequest.of(Math.max(0, page), 10)` を組み立て、`DiaryService#searchDiaries(userId, keyword, pageable)` に渡す。キーワードが空なら全部の日記を新しい順に、あれば本文にキーワードを含む日記を返す（振り分けとエスケープは service が行う。「検索」と同じ決まり）
+4. 結果の `Page<Diary>` を、表示用の `DiaryItem` の `Page` に詰め替えて渡す（エンティティを画面に渡さない）
+5. ログイン中のユーザーの日記だけを対象にする。キーワードはログに出さない
 
 ### 検索 `GET /search?q=...&category=...`
 
