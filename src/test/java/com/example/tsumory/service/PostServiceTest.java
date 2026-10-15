@@ -3,8 +3,10 @@ package com.example.tsumory.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -329,6 +331,107 @@ class PostServiceTest {
     }
 
     @Test
+    void create_classifiesOutsideTheTransactionAndSavesInside() {
+        // Claude API の応答を待つ間に DB 接続を握らない：判定 → トランザクション開始 → 保存 → コミット の順
+        var service = serviceAt("2026-10-08T12:00:00");
+
+        service.create(USER_ID, "会議の資料をまとめた");
+
+        var order = inOrder(categoryClassifier, transactionManager, postRepository);
+        order.verify(categoryClassifier).classify("会議の資料をまとめた");
+        order.verify(transactionManager).getTransaction(any());
+        order.verify(postRepository).save(any());
+        order.verify(transactionManager).commit(any());
+    }
+
+    @Test
+    void create_checksTheLimitAgainstTheSameDateInsideTheTransaction() {
+        // 上限の確かめ直しは、最初に求めた「今日」で行う（判定を待つ間に 0 時をまたいでも、投稿時刻の日付で数える）
+        var service = serviceAt("2026-10-08T23:59:59");
+
+        service.create(USER_ID, "おやすみ");
+
+        verify(postRepository, times(2)).countByUserIdAndDate(USER_ID, LocalDate.of(2026, 10, 8), PostService.ZONE);
+    }
+
+    @Test
+    void edit_classifiesOutsideTheTransactionAndSavesInside() {
+        var service = serviceAt("2026-10-08T12:00:00");
+        var post = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
+
+        service.edit(USER_ID, POST_ID, "資格の勉強をした", post.getCategory());
+
+        var order = inOrder(categoryClassifier, transactionManager);
+        order.verify(categoryClassifier).classify("資格の勉強をした");
+        order.verify(transactionManager).getTransaction(any());
+        order.verify(transactionManager).commit(any());
+    }
+
+    @Test
+    void edit_othersPost_throwsNotFoundWithoutClassifying() {
+        // 他人のつぶやきは、存在しない場合と区別しない（IDOR 対策）
+        var service = serviceAt("2026-10-08T12:00:00");
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, "書き換え", PostCategory.OTHER))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(categoryClassifier, never()).classify(any());
+        verify(transactionManager, never()).getTransaction(any());
+    }
+
+    @Test
+    void edit_postDeletedWhileClassifying_throwsNotFoundAndRollsBack() {
+        // 判定を待つ間に、別のタブから削除された場合（トランザクションの中で読み直すと見つからない）
+        var service = serviceAt("2026-10-08T12:00:00");
+        var post = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID))
+                .thenReturn(Optional.of(post))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, "取引先とランチ", post.getCategory()))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(transactionManager).rollback(any());
+        verify(transactionManager, never()).commit(any());
+    }
+
+    @Test
+    void getEditablePost_returnsTodaysPostAsItem() {
+        var service = serviceAt("2026-10-08T12:00:00");
+        var post = new Post(user, "ランチ", jst("2026-10-08T11:30:00"));
+        post.assignCategory(PostCategory.PRIVATE);
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
+
+        var item = service.getEditablePost(USER_ID, POST_ID);
+
+        assertThat(item.content()).isEqualTo("ランチ");
+        assertThat(item.postedTime()).isEqualTo(LocalTime.of(11, 30));
+        assertThat(item.category()).isEqualTo(PostCategory.PRIVATE);
+        assertThat(item.edited()).isFalse();
+    }
+
+    @Test
+    void getEditablePost_othersPostOrDayBeforeYesterday_throwsNotFound() {
+        var service = serviceAt("2026-10-08T12:00:00");
+        when(postRepository.findByIdAndUserId(99L, USER_ID)).thenReturn(Optional.empty());
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID))
+                .thenReturn(Optional.of(new Post(user, "おととい", jst("2026-10-06T23:59:59"))));
+
+        assertThatThrownBy(() -> service.getEditablePost(USER_ID, 99L)).isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(() -> service.getEditablePost(USER_ID, POST_ID))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void countPosts_passesDateAndClockZone() {
+        var service = serviceAt("2026-10-08T12:00:00");
+        when(postRepository.countByUserIdAndDate(USER_ID, LocalDate.of(2026, 10, 1), PostService.ZONE))
+                .thenReturn(5L);
+
+        assertThat(service.countPosts(USER_ID, LocalDate.of(2026, 10, 1))).isEqualTo(5L);
+    }
+
+    @Test
     void edit_keepsPostedAtAndMarksEdited() {
         var service = serviceAt("2026-10-08T12:00:00");
         var post = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
@@ -398,6 +501,17 @@ class PostServiceTest {
 
         assertThatThrownBy(() -> service.updateCategory(USER_ID, POST_ID, PostCategory.WORK))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void delete_postFromDayBeforeYesterday_throwsNotFound() {
+        // 本文の編集と同じく、消せるのは今日と昨日のつぶやきだけ
+        var service = serviceAt("2026-10-08T00:00:30");
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID))
+                .thenReturn(Optional.of(new Post(user, "おやすみ", jst("2026-10-06T23:59:59"))));
+
+        assertThatThrownBy(() -> service.delete(USER_ID, POST_ID)).isInstanceOf(ResourceNotFoundException.class);
+        verify(postRepository, never()).delete(any());
     }
 
     @Test
