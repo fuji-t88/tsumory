@@ -8,7 +8,8 @@
     <link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
 <body>
-<header th:replace="~{fragments/header :: header}"></header>
+<!--/* 今日の日記なら「今日」、それ以外の日なら「日記一覧」を選択中にする */-->
+<header th:replace="~{fragments/header :: header(${date == today} ? 'today' : 'diaries')}"></header>
 <main class="container app-container pb-5">
 
     <!--/* フラッシュメッセージ（日記の生成に失敗したとき） */-->
@@ -29,7 +30,8 @@
                 <p class="text-pre-wrap" th:text="${diary.content}">日記の本文</p>
                 <p class="text-secondary small" th:text="|${generatedAtTime} に作成|">21:30 に作成</p>
             </div>
-            <form th:action="@{/diary/generate}" method="post" class="js-diary-generate">
+            <!--/* 書く・作り直すのは今日の日記だけなので、今日の画面にだけ出す */-->
+            <form th:if="${date == today}" th:action="@{/diary/generate}" method="post" class="js-diary-generate">
                 <button type="submit" class="btn btn-outline-primary">作り直す</button>
             </form>
         </th:block>
@@ -37,7 +39,7 @@
         <!--/* 日記なし：「日記を書く」（書くのは今日の日記） */-->
         <th:block th:if="${diary == null}">
             <p id="diary-content">まだ日記はありません</p>
-            <form th:action="@{/diary/generate}" method="post" class="js-diary-generate">
+            <form th:if="${date == today}" th:action="@{/diary/generate}" method="post" class="js-diary-generate">
                 <button type="submit" class="btn btn-primary">日記を書く</button>
             </form>
         </th:block>

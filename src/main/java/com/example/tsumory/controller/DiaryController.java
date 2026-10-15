@@ -40,6 +40,8 @@ public class DiaryController {
             Model model) {
         var diary = diaryService.findByDate(principal.userId(), date);
         model.addAttribute("date", date);
+        // 今日の画面かどうかで、ヘッダーの選択中のメニューと「日記を書く」「作り直す」を出すかを決める
+        model.addAttribute("today", LocalDate.now(clock));
         model.addAttribute("diary", diary.orElse(null));
         diary.ifPresent(d -> model.addAttribute(
                 "generatedAtTime",

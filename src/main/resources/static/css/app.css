@@ -13,3 +13,30 @@
 .text-pre-wrap {
     white-space: pre-wrap;
 }
+
+/* ヘッダーのメニュー。3 つを横に均等に並べ、選択中は太字・下線にする */
+.app-menu .nav-link {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--bs-secondary-color);
+}
+
+.app-menu .nav-link.active {
+    color: var(--bs-body-color);
+    font-weight: bold;
+    text-decoration: underline;
+    text-underline-offset: 6px;
+}
+
+/* 日記一覧：日記のない日のカードは破線 */
+.diary-day-empty {
+    border-style: dashed;
+}
+
+/* カレンダー：今日のマスは枠線 */
+.calendar-today {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: -2px;
+}

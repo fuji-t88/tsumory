@@ -140,6 +140,20 @@ class DiaryControllerTest {
     }
 
     @Test
+    void 今日以外の日記には書く作り直すボタンを出さず日記一覧を選択中にする() throws Exception {
+        // 書く・作り直すのは今日の日記だけなので、過去の日の画面から押せないようにする
+        when(diaryService.findByDate(USER_ID, YESTERDAY))
+                .thenReturn(Optional.of(new Diary(user, YESTERDAY, "昨日の日記", Instant.parse("2026-10-06T14:00:00Z"))));
+
+        mockMvc.perform(get("/diary/2026-10-06").with(user(PRINCIPAL)))
+                .andExpect(content().string(not(containsString(">作り直す</button>"))))
+                .andExpect(content().string(not(containsString("action=\"/diary/generate\""))))
+                .andExpect(content().string(containsString("href=\"/diaries\" class=\"nav-link active\"")));
+        mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
+                .andExpect(content().string(containsString("href=\"/\" class=\"nav-link active\"")));
+    }
+
+    @Test
     void 一昨日と明日の日記は404() throws Exception {
         mockMvc.perform(get("/diary/2026-10-05").with(user(PRINCIPAL))).andExpect(status().isNotFound());
         mockMvc.perform(get("/diary/2026-10-08").with(user(PRINCIPAL))).andExpect(status().isNotFound());

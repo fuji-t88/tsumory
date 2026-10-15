@@ -1,17 +1,37 @@
 <!DOCTYPE html>
 <html lang="ja" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <body>
-<header th:fragment="header" class="border-bottom mb-3">
+<!--/* current：選択中のメニュー（'today'・'diaries'・'search'） */-->
+<header th:fragment="header(current)" class="border-bottom mb-3 bg-white">
     <div class="container app-container d-flex align-items-center justify-content-between py-2">
         <a th:href="@{/}" class="navbar-brand fw-bold">Tsumory</a>
         <div class="d-flex align-items-center gap-2">
             <span class="text-secondary small" sec:authentication="name">demo</span>
             <!-- ログアウトは CSRF トークン付きの POST なので、リンクではなくフォームのボタンにする -->
-            <form th:action="@{/logout}" method="post">
+            <form th:action="@{/logout}" method="post" class="m-0">
                 <button type="submit" class="btn btn-outline-secondary btn-sm">ログアウト</button>
             </form>
         </div>
     </div>
+    <nav class="container app-container" aria-label="メニュー">
+        <ul class="nav nav-fill app-menu">
+            <li class="nav-item">
+                <a th:href="@{/}" class="nav-link"
+                   th:classappend="${current == 'today'} ? 'active'"
+                   th:attr="aria-current=${current == 'today'} ? 'page'">今日</a>
+            </li>
+            <li class="nav-item">
+                <a th:href="@{/diaries}" class="nav-link"
+                   th:classappend="${current == 'diaries'} ? 'active'"
+                   th:attr="aria-current=${current == 'diaries'} ? 'page'">日記一覧</a>
+            </li>
+            <li class="nav-item">
+                <a th:href="@{/search}" class="nav-link"
+                   th:classappend="${current == 'search'} ? 'active'"
+                   th:attr="aria-current=${current == 'search'} ? 'page'">検索</a>
+            </li>
+        </ul>
+    </nav>
 </header>
 </body>
 </html>
