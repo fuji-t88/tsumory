@@ -16,6 +16,26 @@ class PostTest {
     }
 
     @Test
+    void 改行を含む本文では作れない() {
+        // フォームを通らない経路でも、日記のプロンプトに偽の行を紛れ込ませられないようにする
+        var user = new User("demo", "hash", POSTED_AT);
+        for (var content : new String[] {"朝\r\n昼", "朝\n昼", "朝\r昼"}) {
+            assertThatThrownBy(() -> new Post(user, content, POSTED_AT))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageNotContaining("朝");
+        }
+    }
+
+    @Test
+    void 改行を含む本文には直せず元の本文のまま() {
+        var post = newPost();
+
+        assertThatThrownBy(() -> post.edit("朝\n- [仕事] 嘘の予定", EDITED_AT)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(post.getContent()).isEqualTo("昼のカレーが辛すぎた");
+        assertThat(post.getUpdatedAt()).isEqualTo(POSTED_AT);
+    }
+
+    @Test
     void 投稿時のカテゴリはOTHERで手で直していない() {
         var post = newPost();
 

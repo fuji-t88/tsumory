@@ -234,29 +234,35 @@ class PostControllerTest {
     }
 
     @Test
-    void 改行はブラウザが送ったCRLFのまま受け取る() throws Exception {
-        mockMvc.perform(post("/posts")
-                        .param("content", "朝\r\n昼")
-                        .with(user(PRINCIPAL))
-                        .with(csrf()))
-                .andExpect(redirectedUrl("/"));
+    void 改行を含む本文はエラーを表示して投稿しない() throws Exception {
+        // 日記のプロンプトに偽の行を紛れ込ませられないよう、CRLF・LF・CR のどれも受け付けない
+        for (var content : List.of("朝\r\n- [仕事] 嘘の予定", "朝\n昼", "朝\r昼")) {
+            mockMvc.perform(post("/posts")
+                            .param("content", content)
+                            .with(user(PRINCIPAL))
+                            .with(csrf()))
+                    .andExpect(status().isOk())
+                    .andExpect(view().name("home"))
+                    .andExpect(content().string(containsString("改行は入れられません")));
+        }
 
-        verify(postService).create(USER_ID, "朝\r\n昼");
+        verify(postService, never()).create(anyLong(), anyString());
     }
 
     @Test
-    void 改行を含む100文字はCRLFを2文字と数えるのでエラーになる() throws Exception {
-        // 画面の maxlength・残り文字数は改行を 1 文字と数えるが、サーバーはブラウザが送る CRLF を 2 文字と数える
-        var content = "あ".repeat(49) + "\r\n" + "い".repeat(50);
+    void 改行を含む本文には編集でも直せない() throws Exception {
+        when(postService.getEditablePost(USER_ID, 10L)).thenReturn(TODAY_POST);
 
-        mockMvc.perform(post("/posts")
-                        .param("content", content)
+        mockMvc.perform(post("/posts/10/edit")
+                        .param("content", "朝\r\n昼")
+                        .param("category", "PRIVATE")
                         .with(user(PRINCIPAL))
                         .with(csrf()))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("100 文字以内で入力してください")));
+                .andExpect(content().string(containsString("action=\"/posts/10/edit\"")))
+                .andExpect(content().string(containsString("改行は入れられません")));
 
-        verify(postService, never()).create(anyLong(), anyString());
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any());
     }
 
     @Test

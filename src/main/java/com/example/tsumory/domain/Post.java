@@ -49,16 +49,21 @@ public class Post {
     @Column(nullable = false)
     private boolean categorySetByUser = false;
 
+    /** @throws IllegalArgumentException 本文に改行が含まれるとき */
     public Post(User user, String content, Instant now) {
         this.user = user;
-        this.content = content;
+        this.content = requireSingleLine(content);
         this.postedAt = now;
         this.updatedAt = now;
     }
 
-    /** 本文と更新時刻を変える。投稿時刻とカテゴリは変えない（判定し直すまでは前のカテゴリのまま）。 */
+    /**
+     * 本文と更新時刻を変える。投稿時刻とカテゴリは変えない（判定し直すまでは前のカテゴリのまま）。
+     *
+     * @throws IllegalArgumentException 本文に改行が含まれるとき
+     */
     public void edit(String content, Instant now) {
-        this.content = content;
+        this.content = requireSingleLine(content);
         this.updatedAt = now;
     }
 
@@ -78,5 +83,18 @@ public class Post {
 
     public boolean isEdited() {
         return updatedAt.isAfter(postedAt);
+    }
+
+    /**
+     * 本文に改行を入れさせない。日記のプロンプトでは 1 行に 1 つぶやきを並べるので、改行で偽の行を紛れ込ませられないようにする。
+     *
+     * <p>フォーム（{@code PostForm}・{@code PostEditForm}）でも拒否しているが、フォームを通らない経路や、将来チェックが外れたときに備えてここでも守る。
+     * 本文の値はメッセージに入れない（ログや画面に出ることがあるため）。
+     */
+    private static String requireSingleLine(String content) {
+        if (content.indexOf('\n') >= 0 || content.indexOf('\r') >= 0) {
+            throw new IllegalArgumentException("Post content must not contain line breaks");
+        }
+        return content;
     }
 }
