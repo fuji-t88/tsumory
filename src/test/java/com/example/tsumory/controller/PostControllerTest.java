@@ -2,6 +2,7 @@ package com.example.tsumory.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -100,8 +101,33 @@ class PostControllerTest {
     @Test
     void 各つぶやきにカテゴリのバッジを出す() throws Exception {
         mockMvc.perform(get("/").with(user(PRINCIPAL)))
-                .andExpect(content().string(containsString("badge rounded-pill text-bg-success\">プライベート</span>")))
-                .andExpect(content().string(containsString("badge rounded-pill text-bg-secondary\">その他</span>")));
+                // th:switch で、カテゴリに合う色のバッジだけを出す
+                .andExpect(content()
+                        .string(matchesPattern("(?s).*<span class=\"badge bg-success\">\\s*<span>プライベート</span>.*")))
+                .andExpect(content()
+                        .string(matchesPattern("(?s).*<span class=\"badge bg-secondary\">\\s*<span>その他</span>.*")))
+                .andExpect(content().string(not(containsString("badge bg-primary"))))
+                .andExpect(content().string(not(containsString("badge bg-info"))));
+    }
+
+    @Test
+    void 各つぶやきに今のカテゴリを選んだカテゴリ変更フォームを出す() throws Exception {
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                .contains("action=\"/posts/10/category\"")
+                .contains("action=\"/posts/11/category\"")
+                .contains("<label for=\"category-10\" class=\"visually-hidden\">カテゴリ</label>")
+                // 10 は「プライベート」、11 は「その他」を選んだ状態
+                .containsPattern("id=\"category-10\"[^<]*>\\s*(<option[^>]*>[^<]*</option>\\s*)*"
+                        + "<option value=\"PRIVATE\"\\s+selected=\"selected\">")
+                .containsPattern("id=\"category-11\"[^<]*>\\s*(<option[^>]*>[^<]*</option>\\s*)*"
+                        + "<option value=\"OTHER\"\\s+selected=\"selected\">")
+                // th:action なので CSRF トークンが入る
+                .containsPattern("action=\"/posts/10/category\"[\\s\\S]*?name=\"_csrf\"");
     }
 
     @Test
@@ -288,7 +314,7 @@ class PostControllerTest {
                         .with(user(PRINCIPAL))
                         .with(csrf()))
                 .andExpect(redirectedUrl("/"))
-                .andExpect(flash().attribute("message", "今日のつぶやきは 16 件までです"));
+                .andExpect(flash().attribute("message", "今日の投稿は 16 件に達しました"));
     }
 
     @Test

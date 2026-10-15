@@ -31,7 +31,7 @@ public class PostController {
     static final String POST_NOT_FOUND_MESSAGE = "つぶやきが見つかりませんでした";
 
     /** 今日のつぶやきが上限に達しているのに投稿されたとき（別のタブから送った場合など）のメッセージ。 */
-    static final String POST_LIMIT_MESSAGE = "今日のつぶやきは " + PostService.DAILY_POST_LIMIT + " 件までです";
+    private static final String DAILY_LIMIT_MESSAGE = "今日の投稿は " + PostService.DAILY_POST_LIMIT + " 件に達しました";
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
@@ -41,26 +41,27 @@ public class PostController {
     @GetMapping("/")
     public String index(@AuthenticationPrincipal CustomUserDetails principal, Model model) {
         model.addAttribute("postForm", new PostForm(null));
-        populateHomeModel(principal.userId(), null, model);
+        populateHomeModel(principal.userId(), model, null);
         return "home";
     }
 
     @PostMapping("/posts")
-    public String post(
+    public String create(
+            @Valid @ModelAttribute("postForm") PostForm postForm,
+            BindingResult binding,
             @AuthenticationPrincipal CustomUserDetails principal,
-            @Valid @ModelAttribute("postForm") PostForm form,
-            BindingResult bindingResult,
             Model model,
-            RedirectAttributes redirectAttributes) {
-        if (bindingResult.hasErrors()) {
-            populateHomeModel(principal.userId(), null, model);
+            RedirectAttributes flash) {
+        var userId = principal.userId();
+        if (binding.hasErrors()) {
+            populateHomeModel(userId, model, null);
             return "home";
         }
         try {
-            postService.create(principal.userId(), form.content());
+            postService.create(userId, postForm.content());
         } catch (DailyPostLimitExceededException e) {
             // ログは PostService が INFO で出しているので、ここでは出さない
-            redirectAttributes.addFlashAttribute("message", POST_LIMIT_MESSAGE);
+            flash.addFlashAttribute("message", DAILY_LIMIT_MESSAGE);
         }
         return "redirect:/";
     }
@@ -75,7 +76,7 @@ public class PostController {
             var post = postService.getEditablePost(principal.userId(), id);
             model.addAttribute("postForm", new PostForm(null));
             model.addAttribute("postEditForm", new PostEditForm(post.content(), post.category()));
-            populateHomeModel(principal.userId(), toView(post), model);
+            populateHomeModel(principal.userId(), model, toView(post));
             return "home";
         } catch (ResourceNotFoundException e) {
             return redirectWithNotFound(redirectAttributes);
@@ -95,7 +96,7 @@ public class PostController {
                 // 入力エラーでも、編集できないつぶやきなら再表示せずに戻す
                 var post = postService.getEditablePost(principal.userId(), id);
                 model.addAttribute("postForm", new PostForm(null));
-                populateHomeModel(principal.userId(), toView(post), model);
+                populateHomeModel(principal.userId(), model, toView(post));
                 return "home";
             }
             postService.edit(principal.userId(), id, form.content(), form.category());
@@ -141,7 +142,7 @@ public class PostController {
      * ホーム画面（通常モード・編集モード）の値を詰める。今日の日付・今日のつぶやき・投稿の上限と上限に達したか・
      * 今日の日記（なければ {@code null}）・編集中のつぶやき（編集モードでなければ {@code null}）・カテゴリの選択肢。
      */
-    private void populateHomeModel(Long userId, PostView editingPost, Model model) {
+    private void populateHomeModel(Long userId, Model model, PostView editingPost) {
         // 「今日」はここで 1 回だけ求める（途中で 0 時をまたいでもずれない）
         var today = postService.today();
         var posts = postService.findPosts(userId, today);
