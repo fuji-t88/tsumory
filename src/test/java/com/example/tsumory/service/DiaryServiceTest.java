@@ -109,27 +109,37 @@ class DiaryServiceTest {
         verify(diaryRepository, never()).findByUserIdAndDiaryDate(any(), any());
     }
 
+    // searchDiaries はキーワードの有無で委譲先を切り替える。分岐の数（2 つ）だけ、委譲先と、その結果がそのまま返ることを確かめる。
+    // 戻り値は、Spring Data の Page を返すメソッドでよく使う PageImpl と PageRequest で組み立てる
+
     @Test
     void searchDiaries_blankKeyword_returnsAllNewestFirst() {
-        var pageable = PageRequest.of(0, 20);
-        var page = new PageImpl<>(List.of(new Diary(user, DATE, "日記", NOW)));
+        // given
+        var pageable = PageRequest.of(0, 10);
+        var page = new PageImpl<>(List.of(new Diary(user, DATE, "日記", NOW)), pageable, 1);
         when(diaryRepository.findByUserIdOrderByDiaryDateDesc(USER_ID, pageable))
                 .thenReturn(page);
 
-        // null も空白だけも、絞り込みのない一覧
+        // when & then：null・空文字・空白だけは、どれも絞り込みのない一覧
         assertThat(service.searchDiaries(USER_ID, null, pageable)).isSameAs(page);
+        assertThat(service.searchDiaries(USER_ID, "", pageable)).isSameAs(page);
         assertThat(service.searchDiaries(USER_ID, " 　", pageable)).isSameAs(page);
         verify(diaryRepository, never()).searchByContent(any(), any(), any());
     }
 
     @Test
     void searchDiaries_withKeyword_searchesByContent() {
-        var pageable = PageRequest.of(0, 50);
-        when(diaryRepository.searchByContent(USER_ID, "カレー", pageable)).thenReturn(Page.empty());
+        // given
+        var pageable = PageRequest.of(0, 10);
+        var page = new PageImpl<>(List.of(new Diary(user, DATE, "カレーの日", NOW)), pageable, 1);
+        when(diaryRepository.searchByContent(USER_ID, "カレー", pageable)).thenReturn(page);
 
-        service.searchDiaries(USER_ID, "カレー", pageable);
+        // when
+        var result = service.searchDiaries(USER_ID, "カレー", pageable);
 
-        verify(diaryRepository).searchByContent(USER_ID, "カレー", pageable);
+        // then：検索用のメソッドに委譲し、その結果をそのまま返す。一覧用のメソッドは呼ばない
+        assertThat(result).isSameAs(page);
+        assertThat(result.getContent()).extracting(Diary::getContent).containsExactly("カレーの日");
         verify(diaryRepository, never()).findByUserIdOrderByDiaryDateDesc(any(), any());
     }
 
