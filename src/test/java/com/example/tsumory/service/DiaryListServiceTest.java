@@ -54,7 +54,9 @@ class DiaryListServiceTest {
         lenient()
                 .when(diaryRepository.findByUserIdAndDiaryDateBetweenOrderByDiaryDateDesc(any(), any(), any()))
                 .thenReturn(List.of());
-        lenient().when(postRepository.findPostedAtInRange(any(), any(), any())).thenReturn(List.of());
+        lenient()
+                .when(postRepository.findPostedAtByUserIdAndMonth(any(), any(), any()))
+                .thenReturn(List.of());
     }
 
     private static Instant jst(String dateTime) {
@@ -70,7 +72,7 @@ class DiaryListServiceTest {
         when(diaryRepository.findByUserIdAndDiaryDateBetweenOrderByDiaryDateDesc(
                         USER_ID, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)))
                 .thenReturn(List.of(diary(LocalDate.of(2026, 10, 7), "寝坊した一日。")));
-        when(postRepository.findPostedAtInRange(USER_ID, jst("2026-10-01T00:00:00"), jst("2026-11-01T00:00:00")))
+        when(postRepository.findPostedAtByUserIdAndMonth(USER_ID, OCTOBER, PostService.ZONE))
                 .thenReturn(
                         List.of(jst("2026-10-07T08:00:00"), jst("2026-10-07T12:40:00"), jst("2026-10-12T21:00:00")));
 
@@ -86,7 +88,7 @@ class DiaryListServiceTest {
     @Test
     void summarize_countsPostsByJstDate() {
         // 23:59 は 10/7、0:00 は 10/8 に数える（UTC ではどちらも 10/7）
-        when(postRepository.findPostedAtInRange(any(), any(), any()))
+        when(postRepository.findPostedAtByUserIdAndMonth(any(), any(), any()))
                 .thenReturn(List.of(jst("2026-10-07T23:59:00"), jst("2026-10-08T00:00:00")));
 
         var summary = service.summarize(USER_ID, OCTOBER);

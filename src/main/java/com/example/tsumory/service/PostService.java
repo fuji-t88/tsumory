@@ -5,7 +5,6 @@ import com.example.tsumory.domain.PostCategory;
 import com.example.tsumory.repository.PostRepository;
 import com.example.tsumory.repository.UserRepository;
 import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -44,21 +43,25 @@ public class PostService {
         return date.equals(today) || date.equals(today.minusDays(1));
     }
 
-    /** その日（日本時間）のつぶやきを投稿時刻の古い順に返す。 */
+    /** その日（日本時間）のつぶやきを、画面に出す形にして投稿時刻の古い順に返す。 */
     public List<PostItem> findPosts(Long userId, LocalDate date) {
-        return postRepository.findInRange(userId, startOf(date), startOf(date.plusDays(1))).stream()
+        return findPostsByDate(userId, date).stream()
                 .map(post -> PostItem.from(post, ZONE))
                 .toList();
     }
 
+    /** 任意の日付（日本時間）のつぶやきを、投稿時刻の古い順に返す。日付から時刻の範囲への変換はリポジトリが行う。 */
+    public List<Post> findPostsByDate(Long userId, LocalDate date) {
+        return postRepository.findByUserIdAndDate(userId, date, clock.getZone());
+    }
+
     /** 今日（日本時間）のつぶやきを投稿時刻の古い順に返す。日記を書く材料にする。 */
     public List<Post> findTodayPosts(Long userId) {
-        var today = today();
-        return postRepository.findInRange(userId, startOf(today), startOf(today.plusDays(1)));
+        return findPostsByDate(userId, LocalDate.now(clock));
     }
 
     public long countPosts(Long userId, LocalDate date) {
-        return postRepository.countInRange(userId, startOf(date), startOf(date.plusDays(1)));
+        return postRepository.countByUserIdAndDate(userId, date, clock.getZone());
     }
 
     /** 編集モードで開くつぶやきを返す。自分の今日か昨日のつぶやきでなければ {@link ResourceNotFoundException}。 */
@@ -174,9 +177,5 @@ public class PostService {
             throw new ResourceNotFoundException("Post", postId);
         }
         return post;
-    }
-
-    private static Instant startOf(LocalDate date) {
-        return date.atStartOfDay(ZONE).toInstant();
     }
 }

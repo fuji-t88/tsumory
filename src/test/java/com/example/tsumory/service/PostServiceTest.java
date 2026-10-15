@@ -91,17 +91,28 @@ class PostServiceTest {
         // UTC ではまだ 10/7 だが、日本時間では 10/8 の 0:30
         var service = serviceAt("2026-10-08T00:30:00");
         var post = new Post(user, "おはよう", jst("2026-10-08T00:10:00"));
-        when(postRepository.findInRange(USER_ID, jst("2026-10-08T00:00:00"), jst("2026-10-09T00:00:00")))
+        when(postRepository.findByUserIdAndDate(USER_ID, LocalDate.of(2026, 10, 8), PostService.ZONE))
                 .thenReturn(List.of(post));
 
         assertThat(service.findTodayPosts(USER_ID)).containsExactly(post);
     }
 
     @Test
+    void findPostsByDate_passesAnyDateAndClockZone() {
+        // 今日・昨日に限らず、任意の日付のつぶやきを取れる
+        var service = serviceAt("2026-10-08T12:00:00");
+        var post = new Post(user, "先週のランチ", jst("2026-10-01T12:00:00"));
+        when(postRepository.findByUserIdAndDate(USER_ID, LocalDate.of(2026, 10, 1), PostService.ZONE))
+                .thenReturn(List.of(post));
+
+        assertThat(service.findPostsByDate(USER_ID, LocalDate.of(2026, 10, 1))).containsExactly(post);
+    }
+
+    @Test
     void findPosts_searchesFromJstMidnightToNextMidnight() {
         var service = serviceAt("2026-10-08T12:00:00");
         var post = new Post(user, "おはよう", jst("2026-10-08T07:30:00"));
-        when(postRepository.findInRange(USER_ID, jst("2026-10-08T00:00:00"), jst("2026-10-09T00:00:00")))
+        when(postRepository.findByUserIdAndDate(USER_ID, LocalDate.of(2026, 10, 8), PostService.ZONE))
                 .thenReturn(List.of(post));
 
         var items = service.findPosts(USER_ID, LocalDate.of(2026, 10, 8));
@@ -158,7 +169,7 @@ class PostServiceTest {
     void create_allowsUpToTheDailyLimit() {
         // UTC ではまだ 10/7 だが、日本時間では 10/8 の 0:30。日本時間の今日の件数で数える
         var service = serviceAt("2026-10-08T00:30:00");
-        when(postRepository.countInRange(USER_ID, jst("2026-10-08T00:00:00"), jst("2026-10-09T00:00:00")))
+        when(postRepository.countByUserIdAndDate(USER_ID, LocalDate.of(2026, 10, 8), PostService.ZONE))
                 .thenReturn((long) PostService.DAILY_POST_LIMIT - 1);
 
         service.create(USER_ID, "16 件目");
@@ -169,7 +180,7 @@ class PostServiceTest {
     @Test
     void create_rejectsWhenDailyLimitReached_withoutCallingClaude() {
         var service = serviceAt("2026-10-08T12:00:00");
-        when(postRepository.countInRange(USER_ID, jst("2026-10-08T00:00:00"), jst("2026-10-09T00:00:00")))
+        when(postRepository.countByUserIdAndDate(USER_ID, LocalDate.of(2026, 10, 8), PostService.ZONE))
                 .thenReturn((long) PostService.DAILY_POST_LIMIT);
 
         assertThatThrownBy(() -> service.create(USER_ID, "17 件目"))
@@ -184,7 +195,7 @@ class PostServiceTest {
     void create_rejectsWhenLimitIsReachedWhileClassifying() {
         // 判定を待つ間に、別のタブから 16 件目が投稿された
         var service = serviceAt("2026-10-08T12:00:00");
-        when(postRepository.countInRange(USER_ID, jst("2026-10-08T00:00:00"), jst("2026-10-09T00:00:00")))
+        when(postRepository.countByUserIdAndDate(USER_ID, LocalDate.of(2026, 10, 8), PostService.ZONE))
                 .thenReturn((long) PostService.DAILY_POST_LIMIT - 1, (long) PostService.DAILY_POST_LIMIT);
 
         assertThatThrownBy(() -> service.create(USER_ID, "17 件目")).isInstanceOf(DailyPostLimitExceededException.class);

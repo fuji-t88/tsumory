@@ -4,7 +4,6 @@ import com.example.tsumory.domain.Diary;
 import com.example.tsumory.repository.DiaryRepository;
 import com.example.tsumory.repository.PostRepository;
 import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -55,9 +54,9 @@ public class DiaryListService {
         var diaries = diaryRepository.findByUserIdAndDiaryDateBetweenOrderByDiaryDateDesc(userId, first, last).stream()
                 .collect(Collectors.toMap(Diary::getDiaryDate, Function.identity()));
         // SQL でタイムゾーンを変換せず、投稿時刻を日本時間の日付にしてから数える
-        var postCounts = postRepository.findPostedAtInRange(userId, startOf(first), startOf(last.plusDays(1))).stream()
-                .collect(Collectors.groupingBy(
-                        postedAt -> LocalDate.ofInstant(postedAt, PostService.ZONE), Collectors.counting()));
+        var zone = clock.getZone();
+        var postCounts = postRepository.findPostedAtByUserIdAndMonth(userId, month, zone).stream()
+                .collect(Collectors.groupingBy(postedAt -> LocalDate.ofInstant(postedAt, zone), Collectors.counting()));
 
         return new DiaryMonthSummary(
                 month,
@@ -123,9 +122,5 @@ public class DiaryListService {
         }
         // 絵文字などのサロゲートペアを途中で切らないよう、文字（コードポイント）単位で数える
         return oneLine.substring(0, oneLine.offsetByCodePoints(0, EXCERPT_LENGTH)) + "…";
-    }
-
-    private static Instant startOf(LocalDate date) {
-        return date.atStartOfDay(PostService.ZONE).toInstant();
     }
 }

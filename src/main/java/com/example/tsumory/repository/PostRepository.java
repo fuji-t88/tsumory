@@ -3,6 +3,9 @@ package com.example.tsumory.repository;
 import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Limit;
@@ -15,7 +18,34 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     /** 投稿 ID とユーザー ID の両方を条件に取得する。他人のつぶやきなら空。 */
     Optional<Post> findByIdAndUserId(Long id, Long userId);
 
-    /** 投稿時刻が {@code from} 以上 {@code to} 未満のつぶやきを、投稿時刻の古い順に返す。 */
+    // 日付（LocalDate）から投稿時刻（Instant）の範囲への変換は、以下の default メソッドにまとめる。
+    // Service は日付とタイムゾーン（clock.getZone()）を渡すだけでよく、範囲の組み立てはこのリポジトリに閉じる。
+    // 範囲は「その日 0:00 以上、翌日 0:00 未満」の半開区間で比べる。終わりを LocalTime.MAX（23:59:59.999999999）にして
+    // BETWEEN で両端を含めると、DB（マイクロ秒まで）で丸められて翌日 0:00 ちょうどの投稿まで入ることがあるため。
+
+    /** その日（{@code zone} での日付）のつぶやきを、投稿時刻の古い順に返す。 */
+    default List<Post> findByUserIdAndDate(Long userId, LocalDate date, ZoneId zone) {
+        return findInRange(userId, startOf(date, zone), startOf(date.plusDays(1), zone));
+    }
+
+    /** その日（{@code zone} での日付）のつぶやきの件数を返す。 */
+    default long countByUserIdAndDate(Long userId, LocalDate date, ZoneId zone) {
+        return countInRange(userId, startOf(date, zone), startOf(date.plusDays(1), zone));
+    }
+
+    /** 日記一覧：その月（{@code zone} での日付）のつぶやきの、投稿時刻だけを返す。 */
+    default List<Instant> findPostedAtByUserIdAndMonth(Long userId, YearMonth month, ZoneId zone) {
+        return findPostedAtInRange(
+                userId,
+                startOf(month.atDay(1), zone),
+                startOf(month.plusMonths(1).atDay(1), zone));
+    }
+
+    private static Instant startOf(LocalDate date, ZoneId zone) {
+        return date.atStartOfDay(zone).toInstant();
+    }
+
+    /** 投稿時刻が {@code from} 以上 {@code to} 未満のつぶやきを、投稿時刻の古い順に返す。日付で取るときは {@link #findByUserIdAndDate} を使う。 */
     @Query("""
             SELECT p FROM Post p
             WHERE p.user.id = :userId AND p.postedAt >= :from AND p.postedAt < :to

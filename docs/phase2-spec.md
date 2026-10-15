@@ -287,6 +287,8 @@ erDiagram
 - この判定は service の 1 か所（`DiaryService#isAvailableDate(userId, date)`）にまとめ、日記表示・日記生成・日記一覧のカレンダーで使う
 - **つぶやきを編集・削除できる日付**はフェーズ 1 のまま今日と昨日（`PostService#isEditableDate`）。2 つの判定を混ぜない
 - 月（日記一覧）は、登録月から今月まで。それ以外の月や `yyyy-MM` でない値は 404
+- **日付（`LocalDate`）からつぶやきの投稿時刻（`Instant`）の範囲への変換**は、`PostRepository` の default メソッド（`findByUserIdAndDate(userId, date, zone)`・`countByUserIdAndDate`・`findPostedAtByUserIdAndMonth(userId, month, zone)`）の 1 か所にまとめる。service は日付とタイムゾーン（`clock.getZone()`）を渡すだけで、範囲を組み立てない
+  - 範囲は「その日 0:00 以上、翌日 0:00 未満」の半開区間で比べる（`@Query` の `findInRange` など）。終わりを `LocalTime.MAX`（23:59:59.999999999）にして `BETWEEN` で両端を含めると、DB（マイクロ秒まで）で丸められて翌日 0:00 ちょうどの投稿まで入ることがあるため
 
 ### 日記表示 `GET /diary/{date}`
 
@@ -524,6 +526,7 @@ anthropic:
 | `DiaryService#isAvailableDate` | 単体テスト（固定の `Clock`） | 登録日・今日は開ける、登録日の前日・明日は開けない、0:00 ちょうどの境目 |
 | `DiaryGenerationService#generate` | 単体テスト（`DiaryWriter`・`DiaryService` をモック） | 過去の日付でもその日のつぶやきを渡してその日の日記として保存する、範囲外の日付は生成しない、0 件なら `NoPostsException` |
 | `ClaudeService#buildUserMessage` | 単体テスト | 投稿順のまま `- [カテゴリ] 本文` の形で並ぶ、判定できなかったつぶやきは「その他」、本文の `<`・`>`・`&` のエスケープ |
+| `PostRepository` の default メソッド | 単体テスト（クエリのメソッドをモックにし、default メソッドだけを動かす） | 日付からの範囲が「その日 0:00 以上、翌日 0:00 未満」になる、タイムゾーンで範囲が変わる、月の範囲が翌月 1 日 0:00 の手前まで |
 | 日記一覧の集計 | 単体テスト | 日記とつぶやきのある日だけが新しい順に並ぶ、つぶやきの件数を日本時間の日付で数える（23:59 と 0:00 の境目）、書き出しの 60 文字と改行の置き換え、カレンダーの 1 日の曜日の空け方 |
 | 検索 | 単体テスト（repository をモック） | キーワードの `!`・`%`・`_` のエスケープ（`!` 方式）、キーワードなしのときに日記を新しい順にページングする（ページ番号だけを使い、件数と並び順は固定）、カテゴリを選んだら日記を検索しない、上限を超えたときの `truncated`、強調の区切り（大文字・小文字、先頭・末尾・複数の一致）、日記の切り出し |
 | `PostService` | 単体テスト（`PostCategoryClassifier` をモック） | 投稿で判定したカテゴリが入って保存される、判定できなければ `OTHER` のまま保存される、本文の編集で分類し直す・判定できなければ前のカテゴリのまま、本文が変わらない編集・手で直したつぶやき・同じリクエストでカテゴリを直した編集では分類を呼ばない、カテゴリだけを直したときは分類を呼ばず `updated_at` も変えない、`create`・`edit` が `NOT_SUPPORTED` である、15 件までは投稿でき 16 件に達していれば分類を呼ばずに `DailyPostLimitExceededException`、分類を待つ間に上限に達したら保存しない、件数を日本時間の今日で数える |
