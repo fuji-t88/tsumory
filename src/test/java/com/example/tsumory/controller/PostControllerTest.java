@@ -121,6 +121,9 @@ class PostControllerTest {
                 .contains("action=\"/posts/10/category\"")
                 .contains("action=\"/posts/11/category\"")
                 .contains("<label for=\"category-10\" class=\"visually-hidden\">カテゴリ</label>")
+                // 選んだ瞬間に送信するので、送信ボタンは置かない
+                .contains("id=\"category-10\" name=\"category\" onchange=\"this.form.submit()\"")
+                .doesNotContain(">変更</button>")
                 // 10 は「プライベート」、11 は「その他」を選んだ状態
                 .containsPattern("id=\"category-10\"[^<]*>\\s*(<option[^>]*>[^<]*</option>\\s*)*"
                         + "<option value=\"PRIVATE\"\\s+selected=\"selected\">")

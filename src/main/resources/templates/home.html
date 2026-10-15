@@ -77,14 +77,13 @@
                                 <!-- カテゴリ変更フォーム -->
                                 <form th:action="@{/posts/{id}/category(id=${post.id})}" method="post" class="d-inline">
                                     <label th:for="|category-${post.id}|" class="visually-hidden">カテゴリ</label>
-                                    <select th:id="|category-${post.id}|" name="category"
+                                    <select th:id="|category-${post.id}|" name="category" onchange="this.form.submit()"
                                             class="form-select form-select-sm d-inline-block w-auto py-0">
                                         <option th:each="c : ${categories}" th:value="${c.name()}"
                                                 th:text="${c.displayName}" th:selected="${c == post.category}">
                                             プライベート
                                         </option>
                                     </select>
-                                    <button type="submit" class="btn btn-link btn-sm p-0">変更</button>
                                 </form>
                             </div>
                         </div>

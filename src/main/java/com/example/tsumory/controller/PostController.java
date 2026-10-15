@@ -153,13 +153,13 @@ public class PostController {
         model.addAttribute(
                 "diary", diaryService.findDiaryForSummary(userId, today).orElse(null));
         model.addAttribute("editingPost", editingPost);
+        // ホーム描画の全経路（通常表示・入力エラーの再表示）がカテゴリの選択肢を受け取れるよう、共有ヘルパーに置く
         model.addAttribute("categories", PostCategory.values());
     }
 
     /** 投稿時刻を表示用の文字列にして、画面専用の {@link PostView} に詰める。 */
     private static PostView toView(PostItem post) {
-        return new PostView(
-                post.id(), post.content(), post.postedTime().format(TIME_FORMAT), post.edited(), post.category());
+        return new PostView(post.id(), post.postedTime().format(TIME_FORMAT), post.content(), post.category());
     }
 
     // ログは PostService が WARN で出しているので、ここでは出さない
