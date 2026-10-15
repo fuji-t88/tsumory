@@ -8,8 +8,8 @@
     <link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
 <body class="bg-body-tertiary">
-<!--/* ほかの画面と同じ共通ヘッダー（メニューの選択中は「日記一覧」） */-->
-<header th:replace="~{fragments/header :: header('diaries')}"></header>
+<!--/* ほかの画面と同じ共通ヘッダー（メニューの選択中は「日記一覧」（/diary）） */-->
+<header th:replace="~{fragments/header :: header('diaryList')}"></header>
 
 <main class="container py-4" style="max-width: 720px;">
     <h2 class="h4 mb-3">日記一覧</h2>

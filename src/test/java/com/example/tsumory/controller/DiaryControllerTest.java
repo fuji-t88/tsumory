@@ -126,7 +126,7 @@ class DiaryControllerTest {
                 .contains("短い日記")
                 .contains("href=\"/diary/2026-10-07\"")
                 .contains(">詳細</a>")
-                .containsPattern("href=\"/diaries\" class=\"nav-link active\"")
+                .containsPattern("href=\"/diary\" class=\"nav-link active\"")
                 .doesNotContain("ページ送り");
         // テンプレートにはエンティティではなく表示用の DiaryItem を渡す
         assertThat(((Page<?>) result.getModelAndView().getModel().get("diaries")).getContent())
@@ -335,7 +335,7 @@ class DiaryControllerTest {
                 .andExpect(content().string(containsString(">生成し直す</button>")))
                 .andExpect(content().string(containsString("action=\"/diary/2026-10-02/generate\"")))
                 .andExpect(content().string(containsString("10月7日 21:30 に作成")))
-                .andExpect(content().string(containsString("href=\"/diaries\" class=\"nav-link active\"")));
+                .andExpect(content().string(containsString("href=\"/diary\" class=\"nav-link active\"")));
         mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
                 .andExpect(content().string(containsString("href=\"/\" class=\"nav-link active\"")));
     }

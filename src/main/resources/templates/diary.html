@@ -9,7 +9,7 @@
 </head>
 <body>
 <!--/* 今日の日記なら「今日」、それ以外の日なら「日記一覧」を選択中にする */-->
-<header th:replace="~{fragments/header :: header(${date == today} ? 'today' : 'diaries')}"></header>
+<header th:replace="~{fragments/header :: header(${date == today} ? 'today' : 'diaryList')}"></header>
 <main class="container app-container pb-5">
 
     <!--/* フラッシュメッセージ（日記の生成に失敗したとき） */-->

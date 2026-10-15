@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <body>
-<!--/* current：選択中のメニュー（'today'・'diaries'・'search'） */-->
+<!--/* current：選択中のメニュー（'today'・'diaryList'・'calendar'・'search'） */-->
 <header th:fragment="header(current)" class="border-bottom mb-3 bg-white">
     <div class="container app-container d-flex align-items-center justify-content-between py-2">
         <a th:href="@{/}" class="navbar-brand fw-bold">Tsumory</a>
@@ -21,9 +21,14 @@
                    th:attr="aria-current=${current == 'today'} ? 'page'">今日</a>
             </li>
             <li class="nav-item">
+                <a th:href="@{/diary}" class="nav-link"
+                   th:classappend="${current == 'diaryList'} ? 'active'"
+                   th:attr="aria-current=${current == 'diaryList'} ? 'page'">日記一覧</a>
+            </li>
+            <li class="nav-item">
                 <a th:href="@{/diaries}" class="nav-link"
-                   th:classappend="${current == 'diaries'} ? 'active'"
-                   th:attr="aria-current=${current == 'diaries'} ? 'page'">日記一覧</a>
+                   th:classappend="${current == 'calendar'} ? 'active'"
+                   th:attr="aria-current=${current == 'calendar'} ? 'page'">カレンダー</a>
             </li>
             <li class="nav-item">
                 <a th:href="@{/search}" class="nav-link"

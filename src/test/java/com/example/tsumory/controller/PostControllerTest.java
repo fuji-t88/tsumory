@@ -134,6 +134,20 @@ class PostControllerTest {
     }
 
     @Test
+    void ナビゲーションに日記一覧とカレンダーへのリンクを出し今日を選択中にする() throws Exception {
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                .containsPattern("href=\"/\" class=\"nav-link active\"\\s+aria-current=\"page\">今日</a>")
+                .contains("href=\"/diary\" class=\"nav-link\">日記一覧</a>")
+                .contains("href=\"/diaries\" class=\"nav-link\">カレンダー</a>")
+                .contains("href=\"/search\" class=\"nav-link\">検索</a>");
+    }
+
+    @Test
     void ナビゲーションにログアウトボタンを表示する() throws Exception {
         mockMvc.perform(get("/").with(user(PRINCIPAL)))
                 .andExpect(content().string(containsString("action=\"/logout\"")))
