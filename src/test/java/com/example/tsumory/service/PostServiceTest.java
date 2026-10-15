@@ -542,11 +542,37 @@ class PostServiceTest {
     }
 
     @Test
-    void updateCategory_othersPost_throwsNotFound() {
-        var service = serviceAt("2026-10-08T12:00:00");
-        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.empty());
+    void updateCategory_updatesOwnPost() {
+        // given
+        var clock = Clock.fixed(Instant.parse("2026-05-23T01:00:00Z"), ZoneId.of("Asia/Tokyo"));
+        var postService = new PostService(
+                postRepository, userRepository, categoryClassifier, new TransactionTemplate(transactionManager), clock);
+        var userId = 1L;
+        var postId = 1L;
+        var owner = new User("testuser", "encoded", Instant.now(clock));
+        var post = new Post(owner, "テスト", Instant.now(clock));
+        when(postRepository.findByIdAndUserId(postId, userId)).thenReturn(Optional.of(post));
 
-        assertThatThrownBy(() -> service.updateCategory(USER_ID, POST_ID, PostCategory.WORK))
+        // when
+        postService.updateCategory(userId, postId, PostCategory.WORK);
+
+        // then
+        assertThat(post.getCategory()).isEqualTo(PostCategory.WORK);
+    }
+
+    @Test
+    void updateCategory_throwsForOtherUsersPost() {
+        // given
+        var clock = Clock.fixed(Instant.parse("2026-05-23T01:00:00Z"), ZoneId.of("Asia/Tokyo"));
+        var postService = new PostService(
+                postRepository, userRepository, categoryClassifier, new TransactionTemplate(transactionManager), clock);
+        var userId = 1L;
+        var postId = 1L;
+        // 削除と同じガード：持ち主を条件に取得し、見つからなければ専用の例外（他人のつぶやきと存在しないつぶやきを区別しない）
+        when(postRepository.findByIdAndUserId(postId, userId)).thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> postService.updateCategory(userId, postId, PostCategory.WORK))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -562,22 +588,37 @@ class PostServiceTest {
     }
 
     @Test
-    void delete_othersPost_throwsNotFound() {
-        var service = serviceAt("2026-10-08T12:00:00");
-        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.empty());
+    void delete_deletesOwnPost() {
+        // given
+        var clock = Clock.fixed(Instant.parse("2026-05-23T01:00:00Z"), ZoneId.of("Asia/Tokyo"));
+        var postService = new PostService(
+                postRepository, userRepository, categoryClassifier, new TransactionTemplate(transactionManager), clock);
+        var userId = 1L;
+        var postId = 1L;
+        var owner = new User("testuser", "encoded", Instant.now(clock));
+        var post = new Post(owner, "削除対象", Instant.now(clock));
+        when(postRepository.findByIdAndUserId(postId, userId)).thenReturn(Optional.of(post));
 
-        assertThatThrownBy(() -> service.delete(USER_ID, POST_ID)).isInstanceOf(ResourceNotFoundException.class);
-        verify(postRepository, never()).delete(any());
+        // when
+        postService.delete(userId, postId);
+
+        // then
+        verify(postRepository).delete(post);
     }
 
     @Test
-    void delete_ownPost() {
-        var service = serviceAt("2026-10-08T12:00:00");
-        var post = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
-        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
+    void delete_throwsForOtherUsersPost() {
+        // given
+        var clock = Clock.fixed(Instant.parse("2026-05-23T01:00:00Z"), ZoneId.of("Asia/Tokyo"));
+        var postService = new PostService(
+                postRepository, userRepository, categoryClassifier, new TransactionTemplate(transactionManager), clock);
+        var userId = 1L;
+        var postId = 1L;
+        when(postRepository.findByIdAndUserId(postId, userId)).thenReturn(Optional.empty());
 
-        service.delete(USER_ID, POST_ID);
-
-        verify(postRepository).delete(post);
+        // when & then
+        assertThatThrownBy(() -> postService.delete(userId, postId)).isInstanceOf(ResourceNotFoundException.class);
+        // 例外が投げられたことだけでなく、実際に削除されなかったことまで確かめる（ガードにバグがあっても削除が通ってしまうのを見逃さない）
+        verify(postRepository, never()).delete(any());
     }
 }
