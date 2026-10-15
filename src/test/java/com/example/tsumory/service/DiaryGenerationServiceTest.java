@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.example.tsumory.domain.Diary;
 import com.example.tsumory.domain.Post;
+import com.example.tsumory.domain.PostCategory;
 import com.example.tsumory.domain.User;
 import java.time.Clock;
 import java.time.Instant;
@@ -60,10 +61,13 @@ class DiaryGenerationServiceTest {
     }
 
     @Test
-    void generateToday_passesTodayAndContentsInOrderAndSaves() {
-        when(postService.findTodayPosts(USER_ID))
-                .thenReturn(List.of(new Post(user, "寝坊した", NOW), new Post(user, "昼のカレーが辛すぎた", NOW)));
-        when(diaryWriter.write(TODAY, List.of("寝坊した", "昼のカレーが辛すぎた"))).thenReturn("寝坊した一日。");
+    void generateToday_passesTodayAndPostsWithCategoriesInOrderAndSaves() {
+        var overslept = new Post(user, "寝坊した", NOW);
+        var meeting = new Post(user, "会議が長引いた", NOW);
+        meeting.assignCategory(PostCategory.WORK);
+        when(postService.findTodayPosts(USER_ID)).thenReturn(List.of(overslept, meeting));
+        // 本文だけでなくカテゴリも使えるよう、つぶやきをそのまま投稿順で渡す
+        when(diaryWriter.write(TODAY, List.of(overslept, meeting))).thenReturn("寝坊した一日。");
         when(diaryService.saveDiary(USER_ID, "寝坊した一日。")).thenReturn(diary);
 
         assertThat(service.generateToday(USER_ID)).isSameAs(diary);

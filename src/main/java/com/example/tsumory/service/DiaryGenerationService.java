@@ -1,7 +1,6 @@
 package com.example.tsumory.service;
 
 import com.example.tsumory.domain.Diary;
-import com.example.tsumory.domain.Post;
 import java.time.Clock;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
@@ -30,8 +29,7 @@ public class DiaryGenerationService {
             throw new NoPostsException();
         }
         var today = LocalDate.now(clock);
-        var contents = posts.stream().map(Post::getContent).toList();
-        var generated = diaryWriter.write(today, contents);
+        var generated = diaryWriter.write(today, posts);
         return diaryService.saveDiary(userId, generated);
     }
 }

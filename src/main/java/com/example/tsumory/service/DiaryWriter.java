@@ -1,16 +1,17 @@
 package com.example.tsumory.service;
 
+import com.example.tsumory.domain.Post;
 import java.time.LocalDate;
 import java.util.List;
 
-/** その日のつぶやきの本文から、日記の本文を書く。 */
+/** その日のつぶやきから、日記の本文を書く。 */
 public interface DiaryWriter {
 
     /**
      * @param date 日記の日付
-     * @param contents その日のつぶやきの本文（投稿時刻の古い順）
+     * @param posts その日のつぶやき（投稿時刻の古い順）。本文とカテゴリを使う
      * @return 日記の本文
      * @throws DiaryGenerationException エラー・タイムアウトや、書くことを断られたなどで書けなかったとき
      */
-    String write(LocalDate date, List<String> contents);
+    String write(LocalDate date, List<Post> posts);
 }
