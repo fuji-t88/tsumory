@@ -35,7 +35,7 @@ public class SearchService {
     static final int EXCERPT_AFTER = 60;
 
     /** キーワードなしで開いたときに、1 ページに出す日記の件数。 */
-    static final int RECENT_PAGE_SIZE = 20;
+    public static final int RECENT_PAGE_SIZE = 20;
 
     private final PostRepository postRepository;
     private final DiaryService diaryService;

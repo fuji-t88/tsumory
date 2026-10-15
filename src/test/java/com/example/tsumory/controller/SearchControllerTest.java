@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,7 +29,6 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -39,7 +37,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -107,15 +104,30 @@ class SearchControllerTest {
     }
 
     @Test
-    void ページ番号はPageableでserviceに渡す() throws Exception {
+    void ページ番号だけを受け取り件数は固定してserviceに渡す() throws Exception {
         when(searchService.recentDiaries(any(), any())).thenReturn(Page.empty());
 
-        var html = html("/search?page=2");
+        // size を指定されても、件数は変えない
+        var html = html("/search?page=2&size=1000");
 
         assertThat(html).contains("まだ日記はありません");
-        var captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(searchService).recentDiaries(eq(USER_ID), captor.capture());
-        assertThat(captor.getValue().getPageNumber()).isEqualTo(2);
+        verify(searchService).recentDiaries(USER_ID, PageRequest.of(2, SearchService.RECENT_PAGE_SIZE));
+    }
+
+    @Test
+    void 負のページ番号は0として扱う() throws Exception {
+        when(searchService.recentDiaries(any(), any())).thenReturn(Page.empty());
+
+        html("/search?page=-3");
+
+        verify(searchService).recentDiaries(USER_ID, PageRequest.of(0, SearchService.RECENT_PAGE_SIZE));
+    }
+
+    @Test
+    void 数字でないページ番号は404() throws Exception {
+        mockMvc.perform(get("/search?page=abc").with(user(PRINCIPAL))).andExpect(status().isNotFound());
+
+        verify(searchService, never()).recentDiaries(any(), any());
     }
 
     @Test

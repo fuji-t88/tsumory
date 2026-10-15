@@ -327,7 +327,7 @@ erDiagram
 
 1. `SearchForm`（record。`q` は `@Size(max = 50)`、`category` は文字列）で受け取り、`@Valid` で検証する。エラーなら検索せずにフォームとメッセージを出す
 2. `q` は前後の空白を取り除く。`category` が `PostCategory` の値でなければ「すべて」として扱う（エラーにしない）
-3. `q` が空で、カテゴリも「すべて」なら検索しない。代わりに日記を新しい順にページングして返す（`SearchService#recentDiaries` が `DiaryService#searchDiaries` をキーワードなしで呼ぶ。中では `DiaryRepository#findByUserIdOrderByDiaryDateDesc(userId, pageable)`）。controller は `Pageable` で受けるが、使うのはページ番号（`?page=`）だけで、件数（20 件）と並び順は service で固定する（リクエストの `size`・`sort` は受け付けない）。ユーザー入力を含まないので、派生クエリのままでよい
+3. `q` が空で、カテゴリも「すべて」なら検索しない。代わりに日記を新しい順にページングして返す（`SearchService#recentDiaries` が `DiaryService#searchDiaries` をキーワードなしで呼ぶ。中では `DiaryRepository#findByUserIdOrderByDiaryDateDesc(userId, pageable)`）。controller はページ番号を `@RequestParam(name = "page", defaultValue = "0") int page` で受け、`PageRequest.of(Math.max(0, page), SearchService.RECENT_PAGE_SIZE)` を組み立てて渡す（件数 20 件と並び順は固定。リクエストの `size`・`sort` は受け付けない。負の番号は 0、数字でない値は 404）。ユーザー入力を含まないので、派生クエリのままでよい
 4. 次の条件で検索する。どちらも**ログイン中のユーザーのものだけ**を対象にする
 
    | 対象 | 条件 | 並び順 | 上限 |
