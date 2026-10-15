@@ -16,7 +16,7 @@ import java.util.stream.IntStream;
  * <p>本文は、実際に使われそうな日本語のつぶやき・日記にする（「テスト」「日記」のような中身のない文字列にしない）。時刻は
  * {@code "2026-10-08T12:00:00"} のような日本時間の文字列で指定する。
  */
-public final class TestData {
+public final class TestFixtures {
 
     public static final ZoneId JST = ZoneId.of("Asia/Tokyo");
 
@@ -69,7 +69,7 @@ public final class TestData {
             new SamplePost(BAKERY, PostCategory.PRIVATE),
             new SamplePost(GOOD_NIGHT, PostCategory.PRIVATE));
 
-    private TestData() {}
+    private TestFixtures() {}
 
     /** 日本時間の日時の文字列（{@code "2026-10-08T12:00:00"}）を {@link Instant} にする。 */
     public static Instant jst(String dateTime) {

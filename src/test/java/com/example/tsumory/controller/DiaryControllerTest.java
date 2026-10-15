@@ -1,7 +1,7 @@
 package com.example.tsumory.controller;
 
-import static com.example.tsumory.domain.TestData.diaries;
-import static com.example.tsumory.domain.TestData.hanako;
+import static com.example.tsumory.domain.TestFixtures.diaries;
+import static com.example.tsumory.domain.TestFixtures.hanako;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;

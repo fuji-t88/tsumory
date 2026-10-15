@@ -1,9 +1,9 @@
 package com.example.tsumory.service;
 
-import static com.example.tsumory.domain.TestData.clockAt;
-import static com.example.tsumory.domain.TestData.diary;
-import static com.example.tsumory.domain.TestData.hanako;
-import static com.example.tsumory.domain.TestData.jst;
+import static com.example.tsumory.domain.TestFixtures.clockAt;
+import static com.example.tsumory.domain.TestFixtures.diary;
+import static com.example.tsumory.domain.TestFixtures.hanako;
+import static com.example.tsumory.domain.TestFixtures.jst;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;

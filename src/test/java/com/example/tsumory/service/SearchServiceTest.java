@@ -1,11 +1,11 @@
 package com.example.tsumory.service;
 
-import static com.example.tsumory.domain.TestData.STUDY;
-import static com.example.tsumory.domain.TestData.diaries;
-import static com.example.tsumory.domain.TestData.diary;
-import static com.example.tsumory.domain.TestData.hanako;
-import static com.example.tsumory.domain.TestData.post;
-import static com.example.tsumory.domain.TestData.posts;
+import static com.example.tsumory.domain.TestFixtures.STUDY;
+import static com.example.tsumory.domain.TestFixtures.diaries;
+import static com.example.tsumory.domain.TestFixtures.diary;
+import static com.example.tsumory.domain.TestFixtures.hanako;
+import static com.example.tsumory.domain.TestFixtures.post;
+import static com.example.tsumory.domain.TestFixtures.posts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;

@@ -1,19 +1,19 @@
 package com.example.tsumory.service;
 
-import static com.example.tsumory.domain.TestData.BAKERY;
-import static com.example.tsumory.domain.TestData.GOOD_NIGHT;
-import static com.example.tsumory.domain.TestData.LUNCH;
-import static com.example.tsumory.domain.TestData.LUNCH_WITH_CLIENT;
-import static com.example.tsumory.domain.TestData.MEETING;
-import static com.example.tsumory.domain.TestData.NOW;
-import static com.example.tsumory.domain.TestData.OVERSLEPT;
-import static com.example.tsumory.domain.TestData.STUDY;
-import static com.example.tsumory.domain.TestData.TODAY;
-import static com.example.tsumory.domain.TestData.clockAt;
-import static com.example.tsumory.domain.TestData.hanako;
-import static com.example.tsumory.domain.TestData.jst;
-import static com.example.tsumory.domain.TestData.mockPosts;
-import static com.example.tsumory.domain.TestData.post;
+import static com.example.tsumory.domain.TestFixtures.BAKERY;
+import static com.example.tsumory.domain.TestFixtures.GOOD_NIGHT;
+import static com.example.tsumory.domain.TestFixtures.LUNCH;
+import static com.example.tsumory.domain.TestFixtures.LUNCH_WITH_CLIENT;
+import static com.example.tsumory.domain.TestFixtures.MEETING;
+import static com.example.tsumory.domain.TestFixtures.NOW;
+import static com.example.tsumory.domain.TestFixtures.OVERSLEPT;
+import static com.example.tsumory.domain.TestFixtures.STUDY;
+import static com.example.tsumory.domain.TestFixtures.TODAY;
+import static com.example.tsumory.domain.TestFixtures.clockAt;
+import static com.example.tsumory.domain.TestFixtures.hanako;
+import static com.example.tsumory.domain.TestFixtures.jst;
+import static com.example.tsumory.domain.TestFixtures.mockPosts;
+import static com.example.tsumory.domain.TestFixtures.post;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -51,7 +51,7 @@ class PostServiceTest {
     private static final Long USER_ID = 1L;
     private static final Long POST_ID = 10L;
 
-    /** 今日（{@link com.example.tsumory.domain.TestData#TODAY}）の 11:00 に投稿したつぶやきの時刻。 */
+    /** 今日（{@link com.example.tsumory.domain.TestFixtures#TODAY}）の 11:00 に投稿したつぶやきの時刻。 */
     private static final String THIS_MORNING = "2026-10-08T11:00:00";
 
     @Mock

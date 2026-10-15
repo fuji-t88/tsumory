@@ -1,12 +1,12 @@
 package com.example.tsumory.service;
 
-import static com.example.tsumory.domain.TestData.DIARY_CONTENT;
-import static com.example.tsumory.domain.TestData.NOW;
-import static com.example.tsumory.domain.TestData.TODAY;
-import static com.example.tsumory.domain.TestData.clockAt;
-import static com.example.tsumory.domain.TestData.diary;
-import static com.example.tsumory.domain.TestData.hanako;
-import static com.example.tsumory.domain.TestData.jst;
+import static com.example.tsumory.domain.TestFixtures.DIARY_CONTENT;
+import static com.example.tsumory.domain.TestFixtures.NOW;
+import static com.example.tsumory.domain.TestFixtures.TODAY;
+import static com.example.tsumory.domain.TestFixtures.clockAt;
+import static com.example.tsumory.domain.TestFixtures.diary;
+import static com.example.tsumory.domain.TestFixtures.hanako;
+import static com.example.tsumory.domain.TestFixtures.jst;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -38,7 +38,7 @@ class DiaryServiceTest {
 
     private static final Long USER_ID = 1L;
 
-    /** 花子の登録日（日本時間）。TestData の登録日時（2026-10-01 0:00）の日付。 */
+    /** 花子の登録日（日本時間）。TestFixtures の登録日時（2026-10-01 0:00）の日付。 */
     private static final LocalDate REGISTERED_DATE = LocalDate.of(2026, 10, 1);
 
     /** 先週の日付。登録日より後で、一昨日より前。 */
@@ -55,7 +55,7 @@ class DiaryServiceTest {
 
     private final User user = hanako();
 
-    // 今は TestData の基準（2026-10-08 12:00、日本時間）
+    // 今は TestFixtures の基準（2026-10-08 12:00、日本時間）
     private DiaryService service;
 
     @BeforeEach

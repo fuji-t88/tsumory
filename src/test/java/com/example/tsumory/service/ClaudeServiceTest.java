@@ -1,11 +1,11 @@
 package com.example.tsumory.service;
 
-import static com.example.tsumory.domain.TestData.LUNCH;
-import static com.example.tsumory.domain.TestData.MEETING;
-import static com.example.tsumory.domain.TestData.NOW;
-import static com.example.tsumory.domain.TestData.OVERSLEPT;
-import static com.example.tsumory.domain.TestData.hanako;
-import static com.example.tsumory.domain.TestData.post;
+import static com.example.tsumory.domain.TestFixtures.LUNCH;
+import static com.example.tsumory.domain.TestFixtures.MEETING;
+import static com.example.tsumory.domain.TestFixtures.NOW;
+import static com.example.tsumory.domain.TestFixtures.OVERSLEPT;
+import static com.example.tsumory.domain.TestFixtures.hanako;
+import static com.example.tsumory.domain.TestFixtures.post;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.tsumory.domain.Post;
@@ -22,7 +22,7 @@ class ClaudeServiceTest {
     // buildUserMessage はクライアントも設定も使わない
     private final ClaudeService service = new ClaudeService(null, null);
 
-    /** 今（TestData の基準の時刻）に投稿し、AI がカテゴリを判定したつぶやき。 */
+    /** 今（TestFixtures の基準の時刻）に投稿し、AI がカテゴリを判定したつぶやき。 */
     private Post categorized(String content, PostCategory category) {
         return post(user, content, NOW, category);
     }

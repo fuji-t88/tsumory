@@ -1,15 +1,15 @@
 package com.example.tsumory.service;
 
-import static com.example.tsumory.domain.TestData.DIARY_CONTENT;
-import static com.example.tsumory.domain.TestData.MEETING;
-import static com.example.tsumory.domain.TestData.NOW;
-import static com.example.tsumory.domain.TestData.OVERSLEPT;
-import static com.example.tsumory.domain.TestData.TODAY;
-import static com.example.tsumory.domain.TestData.clockAt;
-import static com.example.tsumory.domain.TestData.diary;
-import static com.example.tsumory.domain.TestData.hanako;
-import static com.example.tsumory.domain.TestData.mockPosts;
-import static com.example.tsumory.domain.TestData.post;
+import static com.example.tsumory.domain.TestFixtures.DIARY_CONTENT;
+import static com.example.tsumory.domain.TestFixtures.MEETING;
+import static com.example.tsumory.domain.TestFixtures.NOW;
+import static com.example.tsumory.domain.TestFixtures.OVERSLEPT;
+import static com.example.tsumory.domain.TestFixtures.TODAY;
+import static com.example.tsumory.domain.TestFixtures.clockAt;
+import static com.example.tsumory.domain.TestFixtures.diary;
+import static com.example.tsumory.domain.TestFixtures.hanako;
+import static com.example.tsumory.domain.TestFixtures.mockPosts;
+import static com.example.tsumory.domain.TestFixtures.post;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -53,7 +53,7 @@ class DiaryGenerationServiceTest {
 
     @BeforeEach
     void setUp() {
-        // 今日は TestData の基準（2026-10-08、日本時間）
+        // 今日は TestFixtures の基準（2026-10-08、日本時間）
         service = new DiaryGenerationService(postService, diaryService, diaryWriter, clockAt(NOW));
 
         lenient().when(diaryService.isAvailableDate(any(), any())).thenReturn(true);
