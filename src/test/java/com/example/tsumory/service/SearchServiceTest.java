@@ -1,5 +1,11 @@
 package com.example.tsumory.service;
 
+import static com.example.tsumory.domain.TestData.STUDY;
+import static com.example.tsumory.domain.TestData.diaries;
+import static com.example.tsumory.domain.TestData.diary;
+import static com.example.tsumory.domain.TestData.hanako;
+import static com.example.tsumory.domain.TestData.post;
+import static com.example.tsumory.domain.TestData.posts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
@@ -10,18 +16,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.example.tsumory.domain.Diary;
 import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
 import com.example.tsumory.domain.User;
 import com.example.tsumory.repository.PostRepository;
 import com.example.tsumory.service.HighlightedText.Segment;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
-import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -48,14 +50,11 @@ class SearchServiceTest {
     @InjectMocks
     private SearchService service;
 
-    private final User user = new User("demo", "hash", Instant.EPOCH);
+    private final User user = hanako();
 
-    private static Instant jst(String dateTime) {
-        return LocalDateTime.parse(dateTime).atZone(PostService.ZONE).toInstant();
-    }
-
-    private Post post(String content, String postedAt) {
-        return new Post(user, content, jst(postedAt));
+    /** 花子が {@code postedAt}（日本時間）に投稿したつぶやき。 */
+    private Post postAt(String content, String postedAt) {
+        return post(user, content, postedAt);
     }
 
     private static final PageRequest FIRST_PAGE = PageRequest.of(0, 50);
@@ -65,9 +64,9 @@ class SearchServiceTest {
         assertThat(SearchService.escapeLike("Curry")).isEqualTo("Curry");
         // ユーザーが % や _ を入力しても、全件や任意の 1 文字に一致させない
         assertThat(SearchService.escapeLike("100%")).isEqualTo("100!%");
-        assertThat(SearchService.escapeLike("a_b")).isEqualTo("a!_b");
+        assertThat(SearchService.escapeLike("snake_case")).isEqualTo("snake!_case");
         // エスケープ文字の ! 自身も、先にエスケープする（二重にならない）
-        assertThat(SearchService.escapeLike("やった!%")).isEqualTo("やった!!!%");
+        assertThat(SearchService.escapeLike("達成率100%!")).isEqualTo("達成率100!%!!");
         // ESCAPE '!' にしたので、\ は普通の文字
         assertThat(SearchService.escapeLike("C:\tmp")).isEqualTo("C:\tmp");
     }
@@ -75,10 +74,11 @@ class SearchServiceTest {
     @Test
     void search_keywordOnly_searchesPostsAndDiariesAndMergesNewestFirst() {
         when(postRepository.searchByKeyword(USER_ID, "カレー", LIMIT))
-                .thenReturn(List.of(post("夜もカレー", "2026-10-07T20:00:00"), post("昼のカレー", "2026-10-06T12:40:00")));
-        when(diaryService.searchDiaries(USER_ID, "カレー", FIRST_PAGE))
                 .thenReturn(
-                        new PageImpl<>(List.of(new Diary(user, LocalDate.of(2026, 10, 6), "カレーの日。", Instant.EPOCH))));
+                        List.of(postAt("夜もカレーにした", "2026-10-07T20:00:00"), postAt("昼は社食のカレー", "2026-10-06T12:40:00")));
+        when(diaryService.searchDiaries(USER_ID, "カレー", FIRST_PAGE))
+                .thenReturn(new PageImpl<>(List.of(
+                        diary(user, LocalDate.of(2026, 10, 6), "昼も夜もカレーだったことに、寝る前に気づいた。", "2026-10-06T22:00:00"))));
 
         var result = service.search(USER_ID, "カレー", null);
 
@@ -107,7 +107,7 @@ class SearchServiceTest {
 
     @Test
     void search_postHitHasJstTimeHighlightAndCategory() {
-        var hit = post("昼のカレーが辛すぎた", "2026-10-07T00:30:00");
+        var hit = postAt("昼のカレーが辛すぎた", "2026-10-07T00:30:00");
         hit.assignCategory(PostCategory.PRIVATE);
         when(postRepository.searchByKeyword(USER_ID, "カレー", LIMIT)).thenReturn(List.of(hit));
         when(diaryService.searchDiaries(USER_ID, "カレー", FIRST_PAGE)).thenReturn(Page.empty());
@@ -135,7 +135,7 @@ class SearchServiceTest {
     @Test
     void search_categoryOnly_searchesPostsByCategory() {
         when(postRepository.searchByCategory(USER_ID, PostCategory.LEARNING, LIMIT))
-                .thenReturn(List.of(post("資格の勉強", "2026-10-07T20:00:00")));
+                .thenReturn(List.of(post(user, STUDY, "2026-10-07T20:00:00", PostCategory.LEARNING)));
 
         var result = service.search(USER_ID, "", PostCategory.LEARNING);
 
@@ -146,19 +146,15 @@ class SearchServiceTest {
 
     @Test
     void search_moreThan50_returns50AndMarksTruncated() {
-        var posts = IntStream.range(0, 51)
-                .mapToObj(i -> post("カレー" + i, "2026-10-07T12:00:00"))
-                .toList();
+        // 検索の中身（どの本文が一致するか）はリポジトリのモックで決めるので、ここでは件数だけを見る
+        // つぶやきは上限より 1 件多い 51 件
         when(postRepository.searchByKeyword(eq(USER_ID), anyString(), eq(LIMIT)))
-                .thenReturn(posts);
-        // 日記は 51 件目以降が次のページにある
-        var diaries = IntStream.range(0, 50)
-                .mapToObj(i -> new Diary(user, LocalDate.of(2026, 1, 1).plusDays(i), "カレー", Instant.EPOCH))
-                .toList();
-        when(diaryService.searchDiaries(USER_ID, "カレー", FIRST_PAGE))
-                .thenReturn(new PageImpl<>(diaries, FIRST_PAGE, 51));
+                .thenReturn(posts(user, 51, "2026-10-07T09:00:00"));
+        // 日記は 1 ページ目の 50 件。51 件目以降が次のページにある
+        when(diaryService.searchDiaries(USER_ID, "会議", FIRST_PAGE))
+                .thenReturn(new PageImpl<>(diaries(user, 50, LocalDate.of(2026, 8, 1)), FIRST_PAGE, 51));
 
-        var result = service.search(USER_ID, "カレー", null);
+        var result = service.search(USER_ID, "会議", null);
 
         assertThat(result.hits()).hasSize(100);
         assertThat(result.postsTruncated()).isTrue();
@@ -167,7 +163,7 @@ class SearchServiceTest {
 
     @Test
     void recentDiaries_usesPageNumberOnlyWithFixedSize() {
-        var diary = new Diary(user, LocalDate.of(2026, 10, 7), "寝坊した一日。", Instant.EPOCH);
+        var diary = diary(user, LocalDate.of(2026, 10, 7), "寝坊した一日。", "2026-10-07T22:00:00");
         when(diaryService.searchDiaries(USER_ID, null, PageRequest.of(2, 20)))
                 .thenReturn(new PageImpl<>(List.of(diary), PageRequest.of(2, 20), 41));
 

@@ -1,5 +1,7 @@
 package com.example.tsumory.controller;
 
+import static com.example.tsumory.domain.TestData.diaries;
+import static com.example.tsumory.domain.TestData.hanako;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
@@ -86,7 +88,7 @@ class DiaryControllerTest {
     @MockitoBean
     private UserRepository userRepository;
 
-    private final User user = new User("demo", "hash", Instant.EPOCH);
+    private final User user = hanako();
 
     @BeforeEach
     void setUp() {
@@ -144,9 +146,8 @@ class DiaryControllerTest {
 
     @Test
     void ページ送りはキーワードを引き継ぎ負のページは0として扱う() throws Exception {
-        var diaries = java.util.stream.IntStream.range(0, 10)
-                .mapToObj(i -> new Diary(user, TODAY.minusDays(i), "カレーの日" + i, NOW))
-                .toList();
+        // 全 25 件のうち、1 ページ目の 10 件
+        var diaries = diaries(user, 10, TODAY.minusDays(9));
         when(diaryService.searchDiaries(USER_ID, "カレー", PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(diaries, PageRequest.of(0, 10), 25));
 

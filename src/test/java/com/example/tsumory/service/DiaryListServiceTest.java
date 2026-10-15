@@ -1,5 +1,9 @@
 package com.example.tsumory.service;
 
+import static com.example.tsumory.domain.TestData.clockAt;
+import static com.example.tsumory.domain.TestData.diary;
+import static com.example.tsumory.domain.TestData.hanako;
+import static com.example.tsumory.domain.TestData.jst;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
@@ -11,10 +15,7 @@ import com.example.tsumory.domain.Diary;
 import com.example.tsumory.domain.User;
 import com.example.tsumory.repository.DiaryRepository;
 import com.example.tsumory.repository.PostRepository;
-import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,18 +39,14 @@ class DiaryListServiceTest {
     @Mock
     private DiaryService diaryService;
 
-    private final User user = new User("demo", "hash", Instant.EPOCH);
+    private final User user = hanako();
 
     private DiaryListService service;
 
     @BeforeEach
     void setUp() {
-        // 今日は 2026-10-15（日本時間）。登録日は 2026-09-10
-        service = new DiaryListService(
-                diaryRepository,
-                postRepository,
-                diaryService,
-                Clock.fixed(jst("2026-10-15T12:00:00"), PostService.ZONE));
+        // 今日は 2026-10-15（日本時間）。登録日は 2026-09-10（DiaryService のモックで決める）
+        service = new DiaryListService(diaryRepository, postRepository, diaryService, clockAt("2026-10-15T12:00:00"));
         lenient().when(diaryService.registeredDate(USER_ID)).thenReturn(LocalDate.of(2026, 9, 10));
         lenient()
                 .when(diaryRepository.findByUserIdAndDiaryDateBetweenOrderByDiaryDateDesc(any(), any(), any()))
@@ -59,19 +56,16 @@ class DiaryListServiceTest {
                 .thenReturn(List.of());
     }
 
-    private static Instant jst(String dateTime) {
-        return LocalDateTime.parse(dateTime).atZone(PostService.ZONE).toInstant();
-    }
-
-    private Diary diary(LocalDate date, String content) {
-        return new Diary(user, date, content, Instant.EPOCH);
+    /** その日の 21:30（日本時間）に書いた日記。 */
+    private Diary diaryOn(LocalDate date, String content) {
+        return diary(user, date, content, date + "T21:30:00");
     }
 
     @Test
     void summarize_listsDaysWithDiaryOrPostsNewestFirst() {
         when(diaryRepository.findByUserIdAndDiaryDateBetweenOrderByDiaryDateDesc(
                         USER_ID, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)))
-                .thenReturn(List.of(diary(LocalDate.of(2026, 10, 7), "寝坊した一日。")));
+                .thenReturn(List.of(diaryOn(LocalDate.of(2026, 10, 7), "寝坊した一日。")));
         when(postRepository.findPostedAtByUserIdAndMonth(USER_ID, OCTOBER, PostService.ZONE))
                 .thenReturn(
                         List.of(jst("2026-10-07T08:00:00"), jst("2026-10-07T12:40:00"), jst("2026-10-12T21:00:00")));

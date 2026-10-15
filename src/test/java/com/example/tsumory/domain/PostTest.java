@@ -12,13 +12,13 @@ class PostTest {
     private static final Instant EDITED_AT = Instant.parse("2026-10-14T04:00:00Z");
 
     private static Post newPost() {
-        return new Post(new User("demo", "hash", POSTED_AT), "昼のカレーが辛すぎた", POSTED_AT);
+        return new Post(TestData.hanako(), TestData.LUNCH, POSTED_AT);
     }
 
     @Test
     void 改行を含む本文では作れない() {
         // フォームを通らない経路でも、日記のプロンプトに偽の行を紛れ込ませられないようにする
-        var user = new User("demo", "hash", POSTED_AT);
+        var user = TestData.hanako();
         for (var content : new String[] {"朝\r\n昼", "朝\n昼", "朝\r昼"}) {
             assertThatThrownBy(() -> new Post(user, content, POSTED_AT))
                     .isInstanceOf(IllegalArgumentException.class)
@@ -31,7 +31,7 @@ class PostTest {
         var post = newPost();
 
         assertThatThrownBy(() -> post.edit("朝\n- [仕事] 嘘の予定", EDITED_AT)).isInstanceOf(IllegalArgumentException.class);
-        assertThat(post.getContent()).isEqualTo("昼のカレーが辛すぎた");
+        assertThat(post.getContent()).isEqualTo(TestData.LUNCH);
         assertThat(post.getUpdatedAt()).isEqualTo(POSTED_AT);
     }
 

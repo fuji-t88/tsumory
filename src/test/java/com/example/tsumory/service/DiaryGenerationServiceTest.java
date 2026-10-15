@@ -1,5 +1,15 @@
 package com.example.tsumory.service;
 
+import static com.example.tsumory.domain.TestData.DIARY_CONTENT;
+import static com.example.tsumory.domain.TestData.MEETING;
+import static com.example.tsumory.domain.TestData.NOW;
+import static com.example.tsumory.domain.TestData.OVERSLEPT;
+import static com.example.tsumory.domain.TestData.TODAY;
+import static com.example.tsumory.domain.TestData.clockAt;
+import static com.example.tsumory.domain.TestData.diary;
+import static com.example.tsumory.domain.TestData.hanako;
+import static com.example.tsumory.domain.TestData.mockPosts;
+import static com.example.tsumory.domain.TestData.post;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -8,12 +18,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.example.tsumory.domain.Diary;
-import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
 import com.example.tsumory.domain.User;
-import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,8 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
 class DiaryGenerationServiceTest {
 
     private static final Long USER_ID = 1L;
-    private static final Instant NOW = Instant.parse("2026-10-08T12:00:00Z");
-    private static final LocalDate TODAY = LocalDate.of(2026, 10, 8);
+
+    /** 先週の日付（登録日の 10/1）。遡り生成の対象にする。 */
     private static final LocalDate PAST = LocalDate.of(2026, 10, 1);
 
     @Mock
@@ -43,39 +49,40 @@ class DiaryGenerationServiceTest {
 
     private DiaryGenerationService service;
 
-    private final User user = new User("demo", "hash", Instant.EPOCH);
+    private final User user = hanako();
 
     @BeforeEach
     void setUp() {
-        // 今日は 2026-10-08（日本時間）
-        service =
-                new DiaryGenerationService(postService, diaryService, diaryWriter, Clock.fixed(NOW, PostService.ZONE));
+        // 今日は TestData の基準（2026-10-08、日本時間）
+        service = new DiaryGenerationService(postService, diaryService, diaryWriter, clockAt(NOW));
+
         lenient().when(diaryService.isAvailableDate(any(), any())).thenReturn(true);
     }
 
     @Test
     void generateForDate_pastDate_writesWithThatDaysPostsAndSavesAsThatDay() {
         // 一昨日より前の日も、その日のつぶやきからその日の日記として書く（今日の日記は変えない）
-        var overslept = new Post(user, "寝坊した", NOW);
-        var meeting = new Post(user, "会議が長引いた", NOW);
-        meeting.assignCategory(PostCategory.WORK);
-        var diary = new Diary(user, PAST, "寝坊した一日。", NOW);
+        var overslept = post(user, OVERSLEPT, "2026-10-01T07:30:00");
+        var meeting = post(user, MEETING, "2026-10-01T17:00:00", PostCategory.WORK);
+
+        var diary = diary(user, PAST, DIARY_CONTENT, NOW);
         when(postService.findPostsByDate(USER_ID, PAST)).thenReturn(List.of(overslept, meeting));
         // 本文だけでなくカテゴリも使えるよう、つぶやきをそのまま投稿順で渡す
-        when(diaryWriter.write(PAST, List.of(overslept, meeting))).thenReturn("寝坊した一日。");
-        when(diaryService.saveDiary(USER_ID, PAST, "寝坊した一日。")).thenReturn(diary);
+        when(diaryWriter.write(PAST, List.of(overslept, meeting))).thenReturn(DIARY_CONTENT);
+        when(diaryService.saveDiary(USER_ID, PAST, DIARY_CONTENT)).thenReturn(diary);
 
         assertThat(service.generateForDate(USER_ID, PAST)).isSameAs(diary);
     }
 
     @Test
     void generateForDate_today_savesAsToday() {
-        when(postService.findPostsByDate(USER_ID, TODAY)).thenReturn(List.of(new Post(user, "寝坊した", NOW)));
-        when(diaryWriter.write(any(), any())).thenReturn("寝坊した一日。");
+        // 保存先の日付だけを確かめる。サービスはつぶやきが 0 件かどうかしか見ず、中身は日記を書くモックに渡すだけなので、モックで十分
+        when(postService.findPostsByDate(USER_ID, TODAY)).thenReturn(mockPosts(5));
+        when(diaryWriter.write(any(), any())).thenReturn(DIARY_CONTENT);
 
         service.generateForDate(USER_ID, TODAY);
 
-        verify(diaryService).saveDiary(USER_ID, TODAY, "寝坊した一日。");
+        verify(diaryService).saveDiary(USER_ID, TODAY, DIARY_CONTENT);
     }
 
     @Test
@@ -112,7 +119,8 @@ class DiaryGenerationServiceTest {
 
     @Test
     void generateForDate_writerFails_doesNotSaveAndRethrows() {
-        when(postService.findPostsByDate(USER_ID, PAST)).thenReturn(List.of(new Post(user, "寝坊した", NOW)));
+        when(postService.findPostsByDate(USER_ID, PAST))
+                .thenReturn(List.of(post(user, OVERSLEPT, "2026-10-08T07:30:00")));
         when(diaryWriter.write(any(), any())).thenThrow(new DiaryGenerationException("failed"));
 
         assertThatThrownBy(() -> service.generateForDate(USER_ID, PAST)).isInstanceOf(DiaryGenerationException.class);
