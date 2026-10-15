@@ -16,6 +16,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,7 +54,7 @@ class DiaryServiceTest {
         service = new DiaryService(diaryRepository, userRepository, Clock.fixed(NOW, PostService.ZONE));
         lenient().when(userRepository.getReferenceById(USER_ID)).thenReturn(user);
         lenient().when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
-        lenient().when(diaryRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(diaryRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -193,7 +194,7 @@ class DiaryServiceTest {
         var saved = service.saveDiary(USER_ID, DATE, "寝坊した一日。");
 
         var captor = ArgumentCaptor.forClass(Diary.class);
-        verify(diaryRepository).saveAndFlush(captor.capture());
+        verify(diaryRepository).save(captor.capture());
         assertThat(captor.getValue().getDiaryDate()).isEqualTo(DATE);
         assertThat(captor.getValue().getContent()).isEqualTo("寝坊した一日。");
         assertThat(captor.getValue().getGeneratedAt()).isEqualTo(NOW);
@@ -209,10 +210,54 @@ class DiaryServiceTest {
         service.saveDiary(USER_ID, past, "先週の日記");
 
         var captor = ArgumentCaptor.forClass(Diary.class);
-        verify(diaryRepository).saveAndFlush(captor.capture());
+        verify(diaryRepository).save(captor.capture());
         assertThat(captor.getValue().getDiaryDate()).isEqualTo(past);
         assertThat(captor.getValue().getGeneratedAt()).isEqualTo(NOW);
         verify(diaryRepository, never()).findByUserIdAndDiaryDate(USER_ID, DATE);
+    }
+
+    @Test
+    void saveDiary_createsNewDiary() {
+        // given
+        var clock = Clock.fixed(Instant.parse("2026-05-23T01:00:00Z"), ZoneId.of("Asia/Tokyo"));
+        var diaryService = new DiaryService(diaryRepository, userRepository, clock);
+        var userId = 1L;
+        var content = "今日の日記です。";
+        var today = LocalDate.now(clock);
+        var user = new User("testuser", "encoded", Instant.now(clock));
+        when(diaryRepository.findByUserIdAndDiaryDate(userId, today)).thenReturn(Optional.empty());
+        when(userRepository.getReferenceById(userId)).thenReturn(user);
+        // JPA の save() は保存したエンティティを返すので、渡された日記をそのまま返す
+        when(diaryRepository.save(any(Diary.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // when
+        Diary result = diaryService.saveDiary(userId, today, content);
+
+        // then
+        assertThat(result.getContent()).isEqualTo(content);
+        assertThat(result.getDiaryDate()).isEqualTo(today);
+        verify(diaryRepository).save(any(Diary.class));
+    }
+
+    @Test
+    void saveDiary_updatesExistingDiary() {
+        // given
+        var clock = Clock.fixed(Instant.parse("2026-05-23T01:00:00Z"), ZoneId.of("Asia/Tokyo"));
+        var diaryService = new DiaryService(diaryRepository, userRepository, clock);
+        var userId = 1L;
+        var today = LocalDate.now(clock);
+        var user = new User("testuser", "encoded", Instant.now(clock));
+        var existing = new Diary(user, today, "古い日記", Instant.now(clock).minusSeconds(3600));
+        when(diaryRepository.findByUserIdAndDiaryDate(userId, today)).thenReturn(Optional.of(existing));
+
+        // when
+        var newContent = "新しい日記です。";
+        Diary result = diaryService.saveDiary(userId, today, newContent);
+
+        // then
+        assertThat(result.getContent()).isEqualTo(newContent);
+        // 既存の日記は updateContent で上書きし、新しく save しない（JPA が変更を検知して書き込む）
+        verify(diaryRepository, never()).save(any(Diary.class));
     }
 
     @Test
@@ -225,6 +270,6 @@ class DiaryServiceTest {
         assertThat(saved).isSameAs(existing);
         assertThat(existing.getContent()).isEqualTo("新しい日記");
         assertThat(existing.getGeneratedAt()).isEqualTo(NOW);
-        verify(diaryRepository, never()).saveAndFlush(any());
+        verify(diaryRepository, never()).save(any());
     }
 }

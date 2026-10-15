@@ -90,8 +90,8 @@ public class DiaryService {
             log.info("Diary updated: userId={}, date={}, diaryId={}", userId, date, diary.getId());
             return diary;
         }
-        var diary =
-                diaryRepository.saveAndFlush(new Diary(userRepository.getReferenceById(userId), date, content, now));
+        // ID は DB の自動採番（IDENTITY）なので、save の時点で INSERT され、ログに出す ID が入る
+        var diary = diaryRepository.save(new Diary(userRepository.getReferenceById(userId), date, content, now));
         log.info("Diary created: userId={}, date={}, diaryId={}", userId, date, diary.getId());
         return diary;
     }
