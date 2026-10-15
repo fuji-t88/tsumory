@@ -5,6 +5,7 @@ import com.example.tsumory.domain.PostCategory;
 import com.example.tsumory.service.DiaryGenerationException;
 import com.example.tsumory.service.DiaryGenerationService;
 import com.example.tsumory.service.DiaryService;
+import com.example.tsumory.service.InvalidDiaryDateException;
 import com.example.tsumory.service.NoPostsException;
 import com.example.tsumory.service.PostService;
 import java.time.Clock;
@@ -27,9 +28,11 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 public class DiaryController {
 
     static final String NO_POSTS_MESSAGE = "つぶやきがないため日記を生成できません";
+    static final String FUTURE_DATE_MESSAGE = "未来の日付の日記は表示できません";
     static final String GENERATION_FAILED_MESSAGE = "日記の生成に失敗しました。時間をおいて再度お試しください";
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("M月d日 HH:mm");
 
     private final DiaryService diaryService;
     private final DiaryGenerationService diaryGenerationService;
@@ -43,12 +46,15 @@ public class DiaryController {
             Model model) {
         var diary = diaryService.findByDate(principal.userId(), date);
         model.addAttribute("date", date);
-        // 今日の画面かどうかで、ヘッダーの選択中のメニューと「日記を書く」「作り直す」を出すかを決める
+        // 今日の画面かどうかで、ヘッダーの選択中のメニューを決める
         model.addAttribute("today", LocalDate.now(clock));
         model.addAttribute("diary", diary.orElse(null));
-        diary.ifPresent(d -> model.addAttribute(
-                "generatedAtTime",
-                d.getGeneratedAt().atZone(clock.getZone()).toLocalTime().format(TIME_FORMATTER)));
+        // 作成時刻。日記の日付と作成日が同じなら「HH:mm」、違えば（後から遡って書いた日記）「M月d日 HH:mm」
+        diary.ifPresent(d -> {
+            var generatedAt = d.getGeneratedAt().atZone(clock.getZone());
+            var format = generatedAt.toLocalDate().equals(date) ? TIME_FORMATTER : DATE_TIME_FORMATTER;
+            model.addAttribute("generatedAtLabel", generatedAt.format(format));
+        });
         // この日のつぶやき（投稿時刻の古い順）。日記表示では読むだけ
         model.addAttribute(
                 "posts",
@@ -61,20 +67,35 @@ public class DiaryController {
         return "diary";
     }
 
-    @PostMapping("/generate")
-    public String generate(@AuthenticationPrincipal CustomUserDetails principal, RedirectAttributes flash) {
+    /**
+     * その画面の日付の日記を書く・作り直す（遡り生成）。成功したら {@code /diary/{date}} に戻る。
+     *
+     * <ul>
+     *   <li>未来の日付・つぶやき 0 件：メッセージを付けて {@code /}（ホーム）へ
+     *   <li>AI の呼び出しの失敗：メッセージを付けて {@code /diary/{date}} へ（前の日記はそのまま残る）
+     *   <li>登録日より前の日付は {@code DiaryNotFoundException}、形式が不正な日付は {@link NotFoundExceptionHandler} で 404
+     * </ul>
+     *
+     * <p>日付は URL で受け取るので、生成中に 0 時をまたいでも、押した画面の日付の日記として保存される。
+     */
+    @PostMapping("/{date}/generate")
+    public String generateDiaryForDate(
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @AuthenticationPrincipal CustomUserDetails principal,
+            RedirectAttributes flash) {
         var userId = principal.userId();
-        var today = LocalDate.now(clock);
         try {
-            var diary = diaryGenerationService.generateToday(userId);
-            // 生成中に 0 時をまたぐと、押したときの「今日」と保存された日記の日付がずれるので、保存された日付へ移る
-            return "redirect:/diary/" + diary.getDiaryDate();
+            diaryGenerationService.generateForDate(userId, date);
+        } catch (InvalidDiaryDateException e) {
+            flash.addFlashAttribute("message", FUTURE_DATE_MESSAGE);
+            return "redirect:/";
         } catch (NoPostsException e) {
             flash.addFlashAttribute("message", NO_POSTS_MESSAGE);
             return "redirect:/";
         } catch (DiaryGenerationException e) {
+            // 原稿にはないが、Claude API の失敗で 500 にならないよう、フェーズ 1 と同じくメッセージを出して戻す
             flash.addFlashAttribute("message", GENERATION_FAILED_MESSAGE);
-            return "redirect:/diary/" + today;
         }
+        return "redirect:/diary/" + date;
     }
 }

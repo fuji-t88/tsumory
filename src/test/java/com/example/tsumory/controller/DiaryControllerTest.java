@@ -28,6 +28,7 @@ import com.example.tsumory.service.DiaryGenerationException;
 import com.example.tsumory.service.DiaryGenerationService;
 import com.example.tsumory.service.DiaryNotFoundException;
 import com.example.tsumory.service.DiaryService;
+import com.example.tsumory.service.InvalidDiaryDateException;
 import com.example.tsumory.service.NoPostsException;
 import com.example.tsumory.service.PostItem;
 import com.example.tsumory.service.PostService;
@@ -167,7 +168,7 @@ class DiaryControllerTest {
     }
 
     @Test
-    void 日記があれば本文と日本時間の作成時刻と作り直すボタンを出す() throws Exception {
+    void 日記があれば本文と日本時間の作成時刻と生成し直すボタンを出す() throws Exception {
         // 12:30Z は日本時間の 21:30
         when(diaryService.findByDate(USER_ID, TODAY))
                 .thenReturn(Optional.of(new Diary(user, TODAY, "寝坊した一日。", Instant.parse("2026-10-07T12:30:00Z"))));
@@ -178,19 +179,52 @@ class DiaryControllerTest {
                 .andExpect(content().string(containsString("2026年10月7日（水）の日記")))
                 .andExpect(content().string(containsString("寝坊した一日。")))
                 .andExpect(content().string(containsString("21:30 に作成")))
-                .andExpect(content().string(containsString(">作り直す</button>")));
+                .andExpect(content().string(containsString(">生成し直す</button>")));
+    }
+
+    private void stubPosts(LocalDate date, int count) {
+        var posts = java.util.stream.IntStream.range(0, count)
+                .mapToObj(i -> new PostItem((long) i, "つぶやき" + i, LocalTime.of(9, i), false, PostCategory.OTHER))
+                .toList();
+        when(postService.findPosts(USER_ID, date)).thenReturn(posts);
     }
 
     @Test
-    void 日記がなければ日記を書くボタンを出す() throws Exception {
+    void 日記がなくつぶやきがあれば件数と日記を生成ボタンを出す() throws Exception {
+        stubPosts(TODAY, 3);
+
         mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
-                .andExpect(content().string(containsString("まだ日記はありません")))
-                .andExpect(content().string(containsString(">日記を書く</button>")))
-                .andExpect(content().string(not(containsString(">作り直す</button>"))));
+                .andExpect(content().string(containsString("この日の日記はまだありません")))
+                .andExpect(content().string(containsString("この日のつぶやき 3 件から日記を書きます")))
+                .andExpect(content().string(containsString("action=\"/diary/2026-10-07/generate\"")))
+                .andExpect(content().string(containsString(">日記を生成</button>")))
+                .andExpect(content().string(not(containsString(">生成し直す</button>"))));
+    }
+
+    @Test
+    void 日記もつぶやきもなければボタンを出さない() throws Exception {
+        mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
+                .andExpect(content().string(containsString("この日の日記はまだありません")))
+                .andExpect(content().string(containsString("この日のつぶやきはありません")))
+                .andExpect(content().string(not(containsString(">日記を生成</button>"))))
+                .andExpect(content().string(not(containsString("/generate\""))));
+    }
+
+    @Test
+    void 日記があればつぶやきが0件でも生成し直すボタンを出す() throws Exception {
+        // つぶやきを全部消した日も「生成し直す」は出す（押すとメッセージが出て、日記はそのまま残る）
+        when(diaryService.findByDate(USER_ID, TODAY))
+                .thenReturn(Optional.of(new Diary(user, TODAY, "寝坊した一日。", Instant.parse("2026-10-07T12:30:00Z"))));
+
+        mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
+                .andExpect(content().string(containsString(">生成し直す</button>")))
+                .andExpect(content().string(containsString("action=\"/diary/2026-10-07/generate\"")));
     }
 
     @Test
     void 生成中のローディング表示と二重押下防止のスクリプトを読み込む() throws Exception {
+        stubPosts(TODAY, 1);
+
         mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
                 .andExpect(content().string(containsString("src=\"/js/diary-generate.js\"")))
                 .andExpect(content().string(containsString("id=\"diary-loading\"")))
@@ -214,14 +248,16 @@ class DiaryControllerTest {
     }
 
     @Test
-    void 今日以外の日記には書く作り直すボタンを出さず日記一覧を選択中にする() throws Exception {
-        // 書く・作り直すのは今日の日記だけなので、過去の日の画面から押せないようにする
-        when(diaryService.findByDate(USER_ID, YESTERDAY))
-                .thenReturn(Optional.of(new Diary(user, YESTERDAY, "昨日の日記", Instant.parse("2026-10-06T14:00:00Z"))));
+    void 過去の日の画面でもその日の日記を生成と生成し直すボタンを出し日記一覧を選択中にする() throws Exception {
+        // 遡って書いた日記：作成日が日記の日付と違うので「M月d日 HH:mm に作成」
+        var old = TODAY.minusDays(5);
+        when(diaryService.findByDate(USER_ID, old))
+                .thenReturn(Optional.of(new Diary(user, old, "先週の日記", Instant.parse("2026-10-07T12:30:00Z"))));
 
-        mockMvc.perform(get("/diary/2026-10-06").with(user(PRINCIPAL)))
-                .andExpect(content().string(not(containsString(">作り直す</button>"))))
-                .andExpect(content().string(not(containsString("action=\"/diary/generate\""))))
+        mockMvc.perform(get("/diary/2026-10-02").with(user(PRINCIPAL)))
+                .andExpect(content().string(containsString(">生成し直す</button>")))
+                .andExpect(content().string(containsString("action=\"/diary/2026-10-02/generate\"")))
+                .andExpect(content().string(containsString("10月7日 21:30 に作成")))
                 .andExpect(content().string(containsString("href=\"/diaries\" class=\"nav-link active\"")));
         mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
                 .andExpect(content().string(containsString("href=\"/\" class=\"nav-link active\"")));
@@ -252,53 +288,77 @@ class DiaryControllerTest {
     // --- 日記生成（generate） ---
 
     @Test
-    void 生成に成功したら今日の日記表示へ() throws Exception {
-        when(diaryGenerationService.generateToday(USER_ID)).thenReturn(new Diary(user, TODAY, "日記", NOW));
+    void 生成に成功したらその日の日記表示へ() throws Exception {
+        var past = LocalDate.of(2026, 10, 2);
+        when(diaryGenerationService.generateForDate(USER_ID, past)).thenReturn(new Diary(user, past, "日記", NOW));
 
-        mockMvc.perform(post("/diary/generate").with(user(PRINCIPAL)).with(csrf()))
-                .andExpect(redirectedUrl("/diary/2026-10-07"))
+        mockMvc.perform(post("/diary/2026-10-02/generate").with(user(PRINCIPAL)).with(csrf()))
+                .andExpect(redirectedUrl("/diary/2026-10-02"))
                 .andExpect(flash().attributeCount(0));
     }
 
     @Test
-    void 生成中に0時をまたいだら保存された日記の日付へ() throws Exception {
-        // 押したときは 10/7（Clock）だが、保存は 10/8 の日記として行われた場合
-        var tomorrow = TODAY.plusDays(1);
-        when(diaryGenerationService.generateToday(USER_ID)).thenReturn(new Diary(user, tomorrow, "日記", NOW));
-
-        mockMvc.perform(post("/diary/generate").with(user(PRINCIPAL)).with(csrf()))
-                .andExpect(redirectedUrl("/diary/2026-10-08"));
-    }
-
-    @Test
     void つぶやきが0件ならメッセージを付けてホームへ() throws Exception {
-        when(diaryGenerationService.generateToday(USER_ID)).thenThrow(new NoPostsException());
+        when(diaryGenerationService.generateForDate(USER_ID, YESTERDAY)).thenThrow(new NoPostsException());
 
-        mockMvc.perform(post("/diary/generate").with(user(PRINCIPAL)).with(csrf()))
+        mockMvc.perform(post("/diary/2026-10-06/generate").with(user(PRINCIPAL)).with(csrf()))
                 .andExpect(redirectedUrl("/"))
-                .andExpect(flash().attribute("message", DiaryController.NO_POSTS_MESSAGE));
+                .andExpect(flash().attribute("message", "つぶやきがないため日記を生成できません"));
     }
 
     @Test
-    void AIの呼び出しが失敗したらメッセージを付けて今日の日記表示へ() throws Exception {
-        when(diaryGenerationService.generateToday(USER_ID)).thenThrow(new DiaryGenerationException("failed"));
+    void 未来の日付ならメッセージを付けてホームへ() throws Exception {
+        when(diaryGenerationService.generateForDate(USER_ID, TODAY.plusDays(1)))
+                .thenThrow(new InvalidDiaryDateException(TODAY.plusDays(1)));
 
-        mockMvc.perform(post("/diary/generate").with(user(PRINCIPAL)).with(csrf()))
+        mockMvc.perform(post("/diary/2026-10-08/generate").with(user(PRINCIPAL)).with(csrf()))
+                .andExpect(redirectedUrl("/"))
+                .andExpect(flash().attribute("message", "未来の日付の日記は表示できません"));
+    }
+
+    @Test
+    void AIの呼び出しが失敗したらメッセージを付けてその日の日記表示へ() throws Exception {
+        when(diaryGenerationService.generateForDate(USER_ID, TODAY)).thenThrow(new DiaryGenerationException("failed"));
+
+        mockMvc.perform(post("/diary/2026-10-07/generate").with(user(PRINCIPAL)).with(csrf()))
                 .andExpect(redirectedUrl("/diary/2026-10-07"))
                 .andExpect(flash().attribute("message", DiaryController.GENERATION_FAILED_MESSAGE));
     }
 
     @Test
-    void CSRFトークンなしの生成は403() throws Exception {
-        mockMvc.perform(post("/diary/generate").with(user(PRINCIPAL))).andExpect(status().isForbidden());
+    void 登録日より前の日付と形式が不正な日付の生成は404() throws Exception {
+        var beforeRegistration = LocalDate.of(2026, 9, 1);
+        when(diaryGenerationService.generateForDate(USER_ID, beforeRegistration))
+                .thenThrow(new DiaryNotFoundException(beforeRegistration));
 
-        verify(diaryGenerationService, never()).generateToday(any());
+        mockMvc.perform(post("/diary/2026-09-01/generate").with(user(PRINCIPAL)).with(csrf()))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/diary/abc/generate").with(user(PRINCIPAL)).with(csrf()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void 日付のない古い生成のURLは生成せずに405() throws Exception {
+        // POST /diary/generate は削除した。古い画面を開いたままのタブから送られた場合。
+        // GET /diary/{date} の形に当てはまるので、Spring MVC は 404 ではなく 405（POST は受け付けない）を返す
+        mockMvc.perform(post("/diary/generate").with(user(PRINCIPAL)).with(csrf()))
+                .andExpect(status().isMethodNotAllowed());
+
+        verify(diaryGenerationService, never()).generateForDate(any(), any());
+    }
+
+    @Test
+    void CSRFトークンなしの生成は403() throws Exception {
+        mockMvc.perform(post("/diary/2026-10-07/generate").with(user(PRINCIPAL)))
+                .andExpect(status().isForbidden());
+
+        verify(diaryGenerationService, never()).generateForDate(any(), any());
     }
 
     @Test
     void 未ログインの生成はログイン画面へ() throws Exception {
-        mockMvc.perform(post("/diary/generate").with(csrf())).andExpect(redirectedUrl("/login"));
+        mockMvc.perform(post("/diary/2026-10-07/generate").with(csrf())).andExpect(redirectedUrl("/login"));
 
-        verify(diaryGenerationService, never()).generateToday(any());
+        verify(diaryGenerationService, never()).generateForDate(any(), any());
     }
 }

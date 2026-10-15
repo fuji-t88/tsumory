@@ -157,7 +157,7 @@ class PostControllerTest {
     void つぶやきがあり日記がなければ未生成と日記を生成ボタンを出す() throws Exception {
         var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
                 .andExpect(content().string(containsString("未生成")))
-                .andExpect(content().string(containsString("action=\"/diary/generate\"")))
+                .andExpect(content().string(containsString("action=\"/diary/2026-10-07/generate\"")))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -175,7 +175,7 @@ class PostControllerTest {
                 .andExpect(content().string(containsString("生成済")))
                 .andExpect(content().string(containsString("href=\"/diary/2026-10-07\"")))
                 .andExpect(content().string(containsString("今日の日記を見る")))
-                .andExpect(content().string(not(containsString("action=\"/diary/generate\""))));
+                .andExpect(content().string(not(containsString("action=\"/diary/2026-10-07/generate\""))));
     }
 
     @Test

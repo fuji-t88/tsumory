@@ -79,11 +79,10 @@ public class DiaryService {
         return keyword.replace("!", "!!").replace("%", "!%").replace("_", "!_");
     }
 
-    /** 今日（日本時間）の日記を、なければ INSERT、あれば上書きする。 */
+    /** その日の日記を、なければ INSERT、あれば上書きする。生成時刻は今（過去の日の日記を書いても、書いた時刻が入る）。 */
     @Transactional
-    public Diary saveDiary(Long userId, String content) {
+    public Diary saveDiary(Long userId, LocalDate date, String content) {
         var now = clock.instant();
-        var date = LocalDate.ofInstant(now, PostService.ZONE);
         var existing = diaryRepository.findByUserIdAndDiaryDate(userId, date);
         if (existing.isPresent()) {
             var diary = existing.get();

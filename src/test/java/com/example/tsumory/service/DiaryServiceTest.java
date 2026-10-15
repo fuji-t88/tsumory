@@ -143,13 +143,29 @@ class DiaryServiceTest {
     void saveDiary_firstTime_insertsTodaysDiary() {
         when(diaryRepository.findByUserIdAndDiaryDate(USER_ID, DATE)).thenReturn(Optional.empty());
 
-        var saved = service.saveDiary(USER_ID, "寝坊した一日。");
+        var saved = service.saveDiary(USER_ID, DATE, "寝坊した一日。");
 
         var captor = ArgumentCaptor.forClass(Diary.class);
         verify(diaryRepository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().getDiaryDate()).isEqualTo(DATE);
         assertThat(captor.getValue().getContent()).isEqualTo("寝坊した一日。");
         assertThat(captor.getValue().getGeneratedAt()).isEqualTo(NOW);
         assertThat(saved).isSameAs(captor.getValue());
+    }
+
+    @Test
+    void saveDiary_pastDate_insertsThatDaysDiaryWithNowAsGeneratedAt() {
+        // 遡り生成：日記の日付はその日、生成時刻は書いた今
+        var past = LocalDate.of(2026, 10, 2);
+        when(diaryRepository.findByUserIdAndDiaryDate(USER_ID, past)).thenReturn(Optional.empty());
+
+        service.saveDiary(USER_ID, past, "先週の日記");
+
+        var captor = ArgumentCaptor.forClass(Diary.class);
+        verify(diaryRepository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().getDiaryDate()).isEqualTo(past);
+        assertThat(captor.getValue().getGeneratedAt()).isEqualTo(NOW);
+        verify(diaryRepository, never()).findByUserIdAndDiaryDate(USER_ID, DATE);
     }
 
     @Test
@@ -157,7 +173,7 @@ class DiaryServiceTest {
         var existing = new Diary(user, DATE, "前の日記", Instant.parse("2026-10-08T03:00:00Z"));
         when(diaryRepository.findByUserIdAndDiaryDate(USER_ID, DATE)).thenReturn(Optional.of(existing));
 
-        var saved = service.saveDiary(USER_ID, "新しい日記");
+        var saved = service.saveDiary(USER_ID, DATE, "新しい日記");
 
         assertThat(saved).isSameAs(existing);
         assertThat(existing.getContent()).isEqualTo("新しい日記");

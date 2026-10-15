@@ -24,8 +24,8 @@
 |---|---|---|
 | 日記を開ける日付 | 今日と昨日だけ（それ以外は 404） | 登録日から今日まで（「6. 処理の詳細 > 日付の範囲」） |
 | 日記を書く・作り直す日付 | 今日だけ。`POST /diary/generate`（日付を持たない） | 開ける日付ならどの日でも。`POST /diary/{date}/generate`。`POST /diary/generate` は削除する |
-| `DiaryGenerationService` | `generateToday(userId)` | `generate(userId, date)`。今日の分もこれで書く |
-| 日記表示の「日記を書く」「作り直す」 | どの日の画面から押しても今日の日記を書く | その画面の日付の日記を書く |
+| `DiaryGenerationService` | `generateToday(userId)` | `generateForDate(userId, date)`。今日の分もこれで書く |
+| 日記表示の「日記を生成」「生成し直す」 | どの日の画面から押しても今日の日記を書く | その画面の日付の日記を書く |
 | 日記表示のつぶやき | 出さない | その日のつぶやきを、時刻とカテゴリ付きで出す。本文は読むだけで、カテゴリだけはセレクトボックスで直せる |
 | 編集モード | 本文だけを直す | 本文とカテゴリを直す |
 | 日記表示の前後の移動 | なし | 前の日・次の日へのリンク |
@@ -216,13 +216,13 @@ erDiagram
 
    | 状態 | 表示 |
    |---|---|
-   | 日記なし・つぶやきあり | 「この日の日記はまだありません」「この日のつぶやき N 件から日記を書きます」と「日記を書く」ボタン（塗りのボタン） |
+   | 日記なし・つぶやきあり | 「この日の日記はまだありません」「この日のつぶやき N 件から日記を書きます」と「日記を生成」ボタン（塗りのボタン） |
    | 日記なし・つぶやき 0 件 | 「この日の日記はまだありません」「この日のつぶやきはありません」。ボタンは出さない |
-   | 日記あり | 日記の本文、「M月d日 HH:mm に作成」（`generated_at`。日記の日付と作成日が同じなら「HH:mm に作成」だけ）、「作り直す」ボタン（枠線のボタン） |
+   | 日記あり | 日記の本文、「M月d日 HH:mm に作成」（`generated_at`。日記の日付と作成日が同じなら「HH:mm に作成」だけ）、「生成し直す」ボタン（枠線のボタン） |
    | 生成中・生成失敗 | フェーズ 1 と同じ（phase1-spec.md の「日記生成中の表示と二重押下の防止」） |
 
-   - 「日記を書く」「作り直す」は、**この画面の日付の日記**を書く（`POST /diary/{date}/generate`）。成功したら同じ `/diary/{date}` に戻る
-   - 日記ありでつぶやきが 0 件の日（つぶやきを全部消した日）も「作り直す」は出す。押すとメッセージ「この日のつぶやきがないため日記を生成できません」が出て、日記はそのまま残る
+   - 「日記を生成」「生成し直す」は、**この画面の日付の日記**を書く（`POST /diary/{date}/generate`）。成功したら同じ `/diary/{date}` に戻る
+   - 日記ありでつぶやきが 0 件の日（つぶやきを全部消した日）も「生成し直す」は出す。押すとホームに戻ってメッセージ「つぶやきがないため日記を生成できません」が出て、日記はそのまま残る
 5. **この日のつぶやき**（見出し「この日のつぶやき」）
    - 投稿時刻の古い順。各行に時刻（`HH:mm`）、本文、カテゴリ。「編集済み」は出さない
    - カテゴリは、セレクトボックスと「変更」ボタンの小さなフォーム（`POST /posts/{id}/category`）で出す。今のカテゴリを選んだ状態にしておき、選び直して「変更」を押すと直せる。JavaScript なしでも動くよう、選んだだけでは送信しない
@@ -298,20 +298,21 @@ erDiagram
 
 ### 日記生成・再生成 `POST /diary/{date}/generate`
 
-フェーズ 1 の `POST /diary/generate`（phase1-spec.md の「5. 処理の詳細」）を、日付を受け取る形に置き換える。処理は `DiaryGenerationService#generate(userId, date)` が行う。
+フェーズ 1 の `POST /diary/generate`（phase1-spec.md の「5. 処理の詳細」）を、日付を受け取る形に置き換える。処理は `DiaryGenerationService#generateForDate(userId, date)` が行う。
 
-1. `{date}` を `LocalDate` に変換する。形式が不正、または開ける日付でなければ 404（生成はしない）
+1. `{date}` を `LocalDate` に変換する。形式が不正なら 404。今日より後の日付なら `InvalidDiaryDateException`、登録日より前の日付なら `DiaryNotFoundException`（404）を投げる（どちらも生成はしない）
 2. その日のつぶやきを投稿時刻順に取得する。0 件なら `NoPostsException` を投げる
 3. つぶやき（`Post`）のリストをそのまま `DiaryWriter` に渡して日記を書かせる。**DB のトランザクションの外で呼ぶ**（フェーズ 1 と同じ）
 4. 生成に成功したら、1 つのトランザクションで**その日の日記**として保存する（`DiaryService#saveDiary(userId, date, content)`。なければ INSERT、あれば上書き）
-5. controller（`DiaryController#generate`）は結果を 3 つに分けて扱う。いずれも `/diary/{date}` へリダイレクトする（フェーズ 1 と違い、`NoPostsException` でもホームには戻らない）
-   - 成功：メッセージなし
-   - `NoPostsException`：「この日のつぶやきがないため日記を生成できません」
-   - `DiaryGenerationException`：「日記の生成に失敗しました。時間をおいて再度お試しください」
+5. controller（`DiaryController#generateDiaryForDate`）は結果を 4 つに分けて扱う
+   - 成功：メッセージなしで `/diary/{date}` へ
+   - `NoPostsException`：「つぶやきがないため日記を生成できません」を付けて `/`（ホーム）へ
+   - `InvalidDiaryDateException`：「未来の日付の日記は表示できません」を付けて `/`（ホーム）へ（画面からは送れず、URL を書き換えたときだけ起きる）
+   - `DiaryGenerationException`：「日記の生成に失敗しました。時間をおいて再度お試しください」を付けて `/diary/{date}` へ（前の日記はそのまま残る。Claude API の失敗で 500 にしないため）
 6. 失敗したらリトライせず、日記は変えない（前の日記を残す）
 
 - 過去の日の日記も、プロンプトと呼び出しの設定はフェーズ 1 と同じ（phase1-spec.md の「6. AI 連携」）。ユーザーメッセージの日付はその日の日付になる
-- `POST /diary/generate` は削除する。古い画面を開いたままのタブから送られた場合は 404 になる
+- `POST /diary/generate` は削除する。古い画面を開いたままのタブから送られた場合は、生成せずにエラーになる（`GET /diary/{date}` の形に当てはまるので、Spring MVC は 404 ではなく 405 を返す）
 
 ### 日記一覧 `GET /diaries?month=yyyy-MM&view=list|calendar`
 
@@ -410,7 +411,8 @@ AI の判定が外れたときに、ユーザーがセレクトボックスで�
 
 | 状況 | メッセージ |
 |---|---|
-| 日記を生成しようとした日のつぶやきが 0 件（`NoPostsException`） | 「この日のつぶやきがないため日記を生成できません」（`message`、`alert-danger`。日記表示に出す）。フェーズ 1 の「つぶやきがないため日記を生成できません」（ホームに出す）から変える |
+| 日記を生成しようとした日のつぶやきが 0 件（`NoPostsException`） | 「つぶやきがないため日記を生成できません」（`message`、`alert-warning`。ホームに出す。フェーズ 1 と同じ） |
+| 今日より後の日付の日記を生成しようとした（`InvalidDiaryDateException`） | 「未来の日付の日記は表示できません」（`message`、`alert-warning`。ホームに出す） |
 | 検索キーワードが 51 文字以上 | 「50 文字以内で入力してください」（入力欄の下に赤字） |
 | 今日のつぶやきが上限（16 件）に達しているのに投稿した（`DailyPostLimitExceededException`） | 「今日の投稿は 16 件に達しました」（`message`、`alert-warning`。今日のつぶやき画面に出す） |
 
@@ -524,7 +526,7 @@ anthropic:
 | 対象 | 方法 | 主な確認内容 |
 |---|---|---|
 | `DiaryService#isAvailableDate` | 単体テスト（固定の `Clock`） | 登録日・今日は開ける、登録日の前日・明日は開けない、0:00 ちょうどの境目 |
-| `DiaryGenerationService#generate` | 単体テスト（`DiaryWriter`・`DiaryService` をモック） | 過去の日付でもその日のつぶやきを渡してその日の日記として保存する、範囲外の日付は生成しない、0 件なら `NoPostsException` |
+| `DiaryGenerationService#generateForDate` | 単体テスト（`DiaryWriter`・`DiaryService` をモック） | 過去の日付でもその日のつぶやきを渡してその日の日記として保存する、範囲外の日付は生成しない、0 件なら `NoPostsException` |
 | `ClaudeService#buildUserMessage` | 単体テスト | 投稿順のまま `- [カテゴリ] 本文` の形で並ぶ、判定できなかったつぶやきは「その他」、本文の `<`・`>`・`&` のエスケープ |
 | `PostRepository` の default メソッド | 単体テスト（クエリのメソッドをモックにし、default メソッドだけを動かす） | 日付からの範囲が「その日 0:00 以上、翌日 0:00 未満」になる、タイムゾーンで範囲が変わる、月の範囲が翌月 1 日 0:00 の手前まで |
 | 日記一覧の集計 | 単体テスト | 日記とつぶやきのある日だけが新しい順に並ぶ、つぶやきの件数を日本時間の日付で数える（23:59 と 0:00 の境目）、書き出しの 60 文字と改行の置き換え、カレンダーの 1 日の曜日の空け方 |
@@ -541,7 +543,7 @@ anthropic:
 
 1. 共通ヘッダーとメニュー（`fragments/header` に引数を足し、今日のつぶやき画面も共通ヘッダーにそろえる）
 2. 日付の範囲（`DiaryService#isAvailableDate`）と日記表示の変更：過去の日を開ける、前後の移動、その日のつぶやきの一覧
-3. 遡り生成：`POST /diary/{date}/generate`、`DiaryGenerationService#generate(userId, date)`、`POST /diary/generate` の削除
+3. 遡り生成：`POST /diary/{date}/generate`、`DiaryGenerationService#generateForDate(userId, date)`、`POST /diary/generate` の削除
 4. 日記一覧：リスト表示 → カレンダー表示 → 月の移動
 5. カテゴリの土台：`V2__add_category_to_posts.sql`、`PostCategory`、`Post` の変更、バッジの表示（この時点ではすべて「その他」）
 6. カテゴリの手動修正：編集モードのセレクトボックス、日記表示の `POST /posts/{id}/category`

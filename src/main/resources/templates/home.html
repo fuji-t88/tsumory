@@ -115,7 +115,8 @@
                 <div class="d-flex align-items-center justify-content-between mb-2">
                     <span class="badge text-bg-secondary">未生成</span>
                 </div>
-                <form th:action="@{/diary/generate}" method="post"
+                <!--/* 今日の日記を書く（遡り生成と同じ POST /diary/{date}/generate に今日の日付を付けて送る） */-->
+                <form th:action="@{/diary/{date}/generate(date=${today})}" method="post"
                       onsubmit="document.getElementById('genBtn').disabled = true; document.getElementById('genLoading').hidden = false;">
                     <button type="submit" id="genBtn" class="btn btn-primary"
                             th:disabled="${#lists.isEmpty(posts)}">日記を生成</button>
