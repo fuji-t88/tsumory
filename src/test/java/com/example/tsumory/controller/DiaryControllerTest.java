@@ -1,5 +1,6 @@
 package com.example.tsumory.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
@@ -20,6 +21,7 @@ import com.example.tsumory.config.CustomUserDetails;
 import com.example.tsumory.config.CustomUserDetailsService;
 import com.example.tsumory.config.SecurityConfig;
 import com.example.tsumory.domain.Diary;
+import com.example.tsumory.domain.PostCategory;
 import com.example.tsumory.domain.User;
 import com.example.tsumory.repository.UserRepository;
 import com.example.tsumory.service.DiaryGenerationException;
@@ -27,10 +29,13 @@ import com.example.tsumory.service.DiaryGenerationService;
 import com.example.tsumory.service.DiaryNotFoundException;
 import com.example.tsumory.service.DiaryService;
 import com.example.tsumory.service.NoPostsException;
+import com.example.tsumory.service.PostItem;
 import com.example.tsumory.service.PostService;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -71,6 +76,9 @@ class DiaryControllerTest {
     private DiaryGenerationService diaryGenerationService;
 
     @MockitoBean
+    private PostService postService;
+
+    @MockitoBean
     private UserRepository userRepository;
 
     private final User user = new User("demo", "hash", Instant.EPOCH);
@@ -83,6 +91,72 @@ class DiaryControllerTest {
                 .thenThrow(new DiaryNotFoundException(TODAY.minusDays(2)));
         when(diaryService.findByDate(USER_ID, TODAY.plusDays(1)))
                 .thenThrow(new DiaryNotFoundException(TODAY.plusDays(1)));
+        when(postService.isEditableDate(TODAY)).thenReturn(true);
+        when(postService.isEditableDate(YESTERDAY)).thenReturn(true);
+    }
+
+    // --- この日のつぶやき ---
+
+    @Test
+    void この日のつぶやきを時刻と本文とカテゴリ付きで古い順に出す() throws Exception {
+        when(postService.findPosts(USER_ID, TODAY))
+                .thenReturn(List.of(
+                        new PostItem(11L, "寝坊した", LocalTime.of(8, 12), true, PostCategory.OTHER),
+                        new PostItem(10L, "会議が長引いた", LocalTime.of(12, 40), false, PostCategory.WORK)));
+
+        var html = mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                .contains("この日のつぶやき")
+                .containsSubsequence("08:12", "寝坊した", "その他", "12:40", "会議が長引いた", "仕事")
+                .contains("badge bg-primary")
+                // 本文は読むだけ。編集・削除の操作と「編集済み」は出さない
+                .doesNotContain("/posts/11/edit")
+                .doesNotContain("/posts/11/delete")
+                .doesNotContain("編集済み");
+    }
+
+    @Test
+    void つぶやきごとにこの日へ戻るカテゴリ変更フォームを出す() throws Exception {
+        when(postService.findPosts(USER_ID, YESTERDAY))
+                .thenReturn(List.of(new PostItem(10L, "会議が長引いた", LocalTime.of(12, 40), false, PostCategory.WORK)));
+
+        var html = mockMvc.perform(get("/diary/2026-10-06").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                .contains("action=\"/posts/10/category\"")
+                .contains("<input type=\"hidden\" name=\"date\" value=\"2026-10-06\">")
+                .contains("<label for=\"category-10\" class=\"visually-hidden\">カテゴリ</label>")
+                .containsPattern("<option value=\"WORK\"\\s+selected=\"selected\">仕事</option>")
+                // JavaScript なしでも動くよう、選んだだけでは送信せず「変更」で送る
+                .contains(">変更</button>")
+                .doesNotContain("onchange")
+                .containsPattern("action=\"/posts/10/category\"[\\s\\S]*?name=\"_csrf\"");
+    }
+
+    @Test
+    void この日のつぶやきがなければその旨を出す() throws Exception {
+        mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
+                .andExpect(content().string(containsString("この日のつぶやきはありません")));
+    }
+
+    @Test
+    void つぶやきを直す導線は今日と昨日だけに出す() throws Exception {
+        var old = TODAY.minusDays(5);
+        when(diaryService.findByDate(USER_ID, old)).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/diary/2026-10-06").with(user(PRINCIPAL)))
+                .andExpect(content().string(containsString("つぶやきを直す")));
+        // 一昨日より前の日は、その日のつぶやきを直せないので出さない
+        mockMvc.perform(get("/diary/2026-10-02").with(user(PRINCIPAL)))
+                .andExpect(status().isOk())
+                .andExpect(content().string(not(containsString("つぶやきを直す"))));
     }
 
     // --- 日記表示（view） ---

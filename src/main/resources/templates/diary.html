@@ -45,8 +45,39 @@
         </th:block>
     </section>
 
-    <!--/* つぶやきへの導線（生成中も押せるままにする） */-->
-    <section class="border-top pt-3">
+    <!--/* この日のつぶやき（投稿時刻の古い順）。本文は読むだけで、編集・削除の操作は置かない */-->
+    <section class="mb-4">
+        <h2 class="h6">この日のつぶやき</h2>
+        <p th:if="${#lists.isEmpty(posts)}" class="text-secondary mb-0">この日のつぶやきはありません</p>
+        <ul th:unless="${#lists.isEmpty(posts)}" class="list-group list-group-flush">
+            <li th:each="post : ${posts}" class="list-group-item px-0 d-flex align-items-start gap-2">
+                <span class="text-secondary small flex-shrink-0 pt-1" style="min-width: 3rem;"
+                      th:text="${post.time}">12:40</span>
+                <div class="flex-grow-1">
+                    <div th:text="${post.content}">昼のカレーが辛すぎた</div>
+                    <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
+                        <span th:replace="~{fragments/category-badge :: badge(${post.category})}"></span>
+                        <!--/* カテゴリだけを直す。JavaScript なしでも動くよう、選んだだけでは送信せず「変更」で送る。
+                               date を付けて、直したあとこの日の日記表示に戻る */-->
+                        <form th:action="@{/posts/{id}/category(id=${post.id})}" method="post"
+                              class="d-flex align-items-center gap-1 m-0">
+                            <input type="hidden" name="date" th:value="${date}">
+                            <label th:for="|category-${post.id}|" class="visually-hidden">カテゴリ</label>
+                            <select th:id="|category-${post.id}|" name="category"
+                                    class="form-select form-select-sm d-inline-block w-auto py-0">
+                                <option th:each="c : ${categories}" th:value="${c.name()}"
+                                        th:text="${c.displayName}" th:selected="${c == post.category}">プライベート</option>
+                            </select>
+                            <button type="submit" class="btn btn-outline-secondary btn-sm">変更</button>
+                        </form>
+                    </div>
+                </div>
+            </li>
+        </ul>
+    </section>
+
+    <!--/* つぶやきへの導線（生成中も押せるままにする）。つぶやきを直せる日付（今日と昨日）のときだけ出す */-->
+    <section th:if="${postsEditable}" class="border-top pt-3">
         <a th:href="@{/}" class="btn btn-link px-0">つぶやきを直す</a>
         <p class="text-secondary small mb-0">しっくりこないときは、つぶやきを直してから作り直せます</p>
     </section>

@@ -85,12 +85,7 @@
                             </div>
                             <!--/* 区切りの間に空白が入らないよう、1 行に書く */-->
                             <p class="mb-1 mt-1"><th:block th:each="s : ${hit.content.segments}"><mark th:if="${s.match}" th:text="${s.text}">カレー</mark><th:block th:unless="${s.match}" th:text="${s.text}">昼の</th:block></th:block></p>
-                            <span th:switch="${hit.category.name()}">
-                                <span th:case="'WORK'" class="badge bg-primary"><span th:text="${hit.category.displayName}"></span></span>
-                                <span th:case="'PRIVATE'" class="badge bg-success"><span th:text="${hit.category.displayName}"></span></span>
-                                <span th:case="'LEARNING'" class="badge bg-info"><span th:text="${hit.category.displayName}"></span></span>
-                                <span th:case="*" class="badge bg-secondary"><span th:text="${hit.category.displayName}"></span></span>
-                            </span>
+                            <span th:replace="~{fragments/category-badge :: badge(${hit.category})}"></span>
                         </th:block>
                         <!--/* 日記 */-->
                         <th:block th:if="${hit.diary}">

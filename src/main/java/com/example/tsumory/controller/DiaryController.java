@@ -1,10 +1,12 @@
 package com.example.tsumory.controller;
 
 import com.example.tsumory.config.CustomUserDetails;
+import com.example.tsumory.domain.PostCategory;
 import com.example.tsumory.service.DiaryGenerationException;
 import com.example.tsumory.service.DiaryGenerationService;
 import com.example.tsumory.service.DiaryService;
 import com.example.tsumory.service.NoPostsException;
+import com.example.tsumory.service.PostService;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -31,6 +33,7 @@ public class DiaryController {
 
     private final DiaryService diaryService;
     private final DiaryGenerationService diaryGenerationService;
+    private final PostService postService;
     private final Clock clock;
 
     @GetMapping("/{date}")
@@ -46,6 +49,15 @@ public class DiaryController {
         diary.ifPresent(d -> model.addAttribute(
                 "generatedAtTime",
                 d.getGeneratedAt().atZone(clock.getZone()).toLocalTime().format(TIME_FORMATTER)));
+        // この日のつぶやき（投稿時刻の古い順）。日記表示では読むだけ
+        model.addAttribute(
+                "posts",
+                postService.findPosts(principal.userId(), date).stream()
+                        .map(PostView::from)
+                        .toList());
+        // 「つぶやきを直す」の導線は、つぶやきを直せる日付（今日と昨日）のときだけ出す
+        model.addAttribute("postsEditable", postService.isEditableDate(date));
+        model.addAttribute("categories", PostCategory.values());
         return "diary";
     }
 

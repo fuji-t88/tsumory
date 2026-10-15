@@ -487,6 +487,46 @@ class PostControllerTest {
     // --- カテゴリの修正 ---
 
     @Test
+    void 日記表示から直したらその日の日記表示に戻る() throws Exception {
+        mockMvc.perform(post("/posts/10/category")
+                        .param("category", "WORK")
+                        .param("date", "2026-10-03")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/diary/2026-10-03"));
+
+        verify(postService).updateCategory(USER_ID, 10L, PostCategory.WORK);
+    }
+
+    @Test
+    void 戻り先の日付が日付の形式でなければ404で何も変えない() throws Exception {
+        // 任意の URL へ飛ばさない（オープンリダイレクトの対策）
+        mockMvc.perform(post("/posts/10/category")
+                        .param("category", "WORK")
+                        .param("date", "//evil.example.com")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(status().isNotFound());
+
+        verify(postService, never()).updateCategory(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void 他人のつぶやきなら戻り先の日付があってもメッセージを付けてトップへ() throws Exception {
+        doThrow(new ResourceNotFoundException("Post", 99L))
+                .when(postService)
+                .updateCategory(USER_ID, 99L, PostCategory.WORK);
+
+        mockMvc.perform(post("/posts/99/category")
+                        .param("category", "WORK")
+                        .param("date", "2026-10-03")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/"))
+                .andExpect(flash().attribute("message", PostController.POST_NOT_FOUND_MESSAGE));
+    }
+
+    @Test
     void カテゴリを直すとトップへリダイレクト() throws Exception {
         mockMvc.perform(post("/posts/10/category")
                         .param("category", "WORK")

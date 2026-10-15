@@ -52,20 +52,7 @@
                             <div th:text="${post.content}">コーヒーがおいしい</div>
                             <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
                                 <!-- カテゴリバッジ -->
-                                <span th:switch="${post.category.name()}">
-                                    <span th:case="'WORK'" class="badge bg-primary">
-                                        <span th:text="${post.category.displayName}"></span>
-                                    </span>
-                                    <span th:case="'PRIVATE'" class="badge bg-success">
-                                        <span th:text="${post.category.displayName}"></span>
-                                    </span>
-                                    <span th:case="'LEARNING'" class="badge bg-info">
-                                        <span th:text="${post.category.displayName}"></span>
-                                    </span>
-                                    <span th:case="*" class="badge bg-secondary">
-                                        <span th:text="${post.category.displayName}"></span>
-                                    </span>
-                                </span>
+                                <span th:replace="~{fragments/category-badge :: badge(${post.category})}"></span>
                                 <!-- カテゴリ変更フォーム -->
                                 <form th:action="@{/posts/{id}/category(id=${post.id})}" method="post" class="d-inline">
                                     <label th:for="|category-${post.id}|" class="visually-hidden">カテゴリ</label>

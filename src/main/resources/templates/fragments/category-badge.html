@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<body>
+<!--/* カテゴリバッジ。色はカテゴリごとに固定し、必ず表示名を書く（docs/phase2-spec.md の「5. 画面 > 共通」） */-->
+<span th:fragment="badge(category)" th:switch="${category.name()}">
+    <span th:case="'WORK'" class="badge bg-primary">
+        <span th:text="${category.displayName}"></span>
+    </span>
+    <span th:case="'PRIVATE'" class="badge bg-success">
+        <span th:text="${category.displayName}"></span>
+    </span>
+    <span th:case="'LEARNING'" class="badge bg-info">
+        <span th:text="${category.displayName}"></span>
+    </span>
+    <span th:case="*" class="badge bg-secondary">
+        <span th:text="${category.displayName}"></span>
+    </span>
+</span>
+</body>
+</html>
