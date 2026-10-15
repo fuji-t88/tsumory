@@ -372,19 +372,18 @@ AI の判定が外れたときに、ユーザーがセレクトボックスで�
 
 1. `PostForm` に `category`（`PostCategory`。`@NotNull`）を足す。投稿フォーム（`POST /posts`）ではカテゴリを受け取らない（投稿時は AI が判定するため）。投稿と編集でフォームを分けるなら、編集用を `PostEditForm` とする
 2. 送られたカテゴリが今のカテゴリと違えば、`Post#assignCategory` で直し、`Post#markCategorySetByUser` で印を立てる（`category_set_by_user` が `true` になる）
-3. 本文の更新はフェーズ 1 のまま（`Post#edit`）。本文が変わったときは、「つぶやきのカテゴリ分類 > 本文の編集」の条件で分類する（手順 2 でカテゴリを直したなら分類しない）
+3. 本文の更新はフェーズ 1 のまま（`Post#edit`）。ただし本文が変わらないときは `Post#edit` を呼ばない（カテゴリだけを直しても `updated_at` を変えず、「編集済み」にしないため）。本文が変わったときは、「つぶやきのカテゴリ分類 > 本文の編集」の条件で分類する（手順 2 でカテゴリを直したなら分類しない）
 4. 編集できる範囲（今日と昨日）と、見つからないときの扱いはフェーズ 1 のまま
 
 **日記表示のつぶやきの一覧 `POST /posts/{id}/category`**
 
-1. `PostCategoryForm`（record。`category` は `PostCategory`、`@NotNull`）で受け取り、`@Valid` で検証する
-2. `findByIdAndUserId(id, ログイン中のユーザーの ID)` で取得する。なければ `ResourceNotFoundException`（controller が受けて、フェーズ 1 と同じく「つぶやきが見つかりませんでした」を付けて `/` へリダイレクト）
-3. つぶやきの日付（`posted_at` の日本時間の日付）が開ける日付でなければ、手順 2 と同じ扱いにする（実際には起きないが、念のため確かめる）
-4. `Post#assignCategory` で直し、`Post#markCategorySetByUser` で印を立てる。`updated_at` は変えない（「編集済み」にしない）。AI の分類はしない
-5. `/diary/{つぶやきの日付}` へリダイレクトする。メッセージは出さない（画面のカテゴリが変わったことで分かるため）
-6. 送られた値が 4 つのカテゴリのどれでもない（画面を改ざんされた場合など）、または空なら、何も変えずに同じく `/diary/{つぶやきの日付}` へリダイレクトする
+1. `PostController#updateCategory` が `@RequestParam PostCategory category` で受け取る。セレクトボックスから送られる `WORK` などの文字列は、Spring MVC が列挙型に変換して渡す
+2. `PostService#updateCategory` が `findByIdAndUserId(id, ログイン中のユーザーの ID)` で取得する。なければ `ResourceNotFoundException`（controller が受けて、フェーズ 1 と同じく「つぶやきが見つかりませんでした」を付けて `/` へリダイレクト）
+3. `Post#assignCategory` で直し、`Post#markCategorySetByUser` で印を立てる。`updated_at` は変えない（「編集済み」にしない）。AI の分類はしない
+4. `/` へリダイレクトする。メッセージは出さない（画面のカテゴリが変わったことで分かるため）
+5. 送られた値が 4 つのカテゴリのどれでもない（画面を改ざんされた場合など）ときは、列挙型に変換できず `MethodArgumentTypeMismatchException` になり、`NotFoundExceptionHandler` が 404 を返す。値がないときは 400。どちらも何も変えない
 
-- 本文の編集・削除と違い、カテゴリは**開ける日付（登録日から今日まで）のどのつぶやきでも**直せる（過去のつぶやきを検索で探しやすくするため。本文は日記の材料なので、フェーズ 1 のまま今日と昨日だけ）
+- 本文の編集・削除と違い、カテゴリは**日付を問わず、自分のどのつぶやきでも**直せる（過去のつぶやきを検索で探しやすくするため。本文は日記の材料なので、フェーズ 1 のまま今日と昨日だけ）
 - 手で直したカテゴリを「AI の判定に戻す」操作は持たない（「14. 未決事項」）
 - ログには、直したこととつぶやきの ID だけを INFO で出し、どのカテゴリに直したかは出さない（CLAUDE.md の禁止事項「ログ」）
 
@@ -452,7 +451,7 @@ AI の判定が外れたときに、ユーザーがセレクトボックスで�
 
 - `/diaries`・`/search`・`/diary/{date}/generate`・`/posts/{id}/category` はすべて認証必須（`permitAll()` に足さない）
 - 日記一覧・検索・日記表示のつぶやきは、どれも**ログイン中のユーザーの ID を条件に含めて**取得する（CLAUDE.md の禁止事項「他人のデータ（IDOR）」）。検索の JPQL にも必ず `user_id` の条件を入れる
-- カテゴリの修正（`POST /posts/{id}/category`）も `findByIdAndUserId` で取得し、他人のつぶやきは存在しない場合と同じに扱う。カテゴリの値は `PostCategoryForm` で受け、エンティティに直接バインドしない
+- カテゴリの修正（`POST /posts/{id}/category`）も `findByIdAndUserId` で取得し、他人のつぶやきは存在しない場合と同じに扱う。カテゴリの値は `@RequestParam PostCategory` で受け（列挙型に変換できない値は 404）、エンティティに直接バインドしない
 - 検索は `GET` なので CSRF トークンは要らない。日記の生成（`POST /diary/{date}/generate`）とカテゴリの修正（`POST /posts/{id}/category`）は、フェーズ 1 と同じく `th:action` のフォームで CSRF トークンを送る
 - 検索のキーワードの強調は `th:text` だけで行う（「6. 処理の詳細 > 検索」）
 - カテゴリの分類は AI の出力で保存する値を決めるので、候補の値と照らし合わせる（「7. AI 連携 > 呼び出し」）
@@ -489,7 +488,7 @@ anthropic:
 | `PostCategoryClassifier` | 単体テスト | ユーザーメッセージの組み立て（エスケープ）、応答の読み取り（`WORK`・前後の空白や改行・小文字は読める。`WORK です`・表示名・空・候補にない値は空の `Optional`）、API の呼び出しが失敗したら空の `Optional` |
 | `Post` | 単体テスト | 投稿時は `OTHER` で印は `false`、`assignCategory` でカテゴリが変わり `updatedAt` は変わらない、`markCategorySetByUser` で印が `true` になる、`edit` でカテゴリは変わらない |
 | 手で直したカテゴリの保護 | 単体テスト（`PostService`） | 手で直すと印が立つ、印が立ったつぶやきは本文を編集しても分類を呼ばない（`Post` ではなく service で守るため、service のテストで確かめる） |
-| controller | `@WebMvcTest` + Spring Security Test | 日記表示：登録日より前・未来・不正な日付は 404、過去の日に生成できて同じ日付に戻る、0 件・失敗のメッセージ。日記一覧：範囲外の月は 404、`view` の切り替え。検索：未ログインはログイン画面へ、51 文字のキーワードはエラー、他人のデータが結果に出ない（service に渡す ID の確認）。カテゴリの修正：直して `/diary/{その日}` に戻る、他人のつぶやきはメッセージを付けて `/` へ、候補にない値は何も変えずに戻る、CSRF トークンなしは 403。編集モード：本文とカテゴリを一緒に保存できる。投稿の上限：16 件に達したら投稿フォームが無効になりその旨を出す、上限を超えた投稿はメッセージを付けて `/` へ。どの画面もヘッダーのメニューの選択中が正しい |
+| controller | `@WebMvcTest` + Spring Security Test | 日記表示：登録日より前・未来・不正な日付は 404、過去の日に生成できて同じ日付に戻る、0 件・失敗のメッセージ。日記一覧：範囲外の月は 404、`view` の切り替え。検索：未ログインはログイン画面へ、51 文字のキーワードはエラー、他人のデータが結果に出ない（service に渡す ID の確認）。カテゴリの修正：直して `/` に戻る、他人のつぶやきはメッセージを付けて `/` へ、候補にない値は 404・値なしは 400 で何も変えない、CSRF トークンなしは 403。編集モード：本文とカテゴリを一緒に保存できる。投稿の上限：16 件に達したら投稿フォームが無効になりその旨を出す、上限を超えた投稿はメッセージを付けて `/` へ。どの画面もヘッダーのメニューの選択中が正しい |
 
 - DB を使う結合テスト（検索の JPQL・既定値・条件付き UPDATE が本当に動くか）は、フェーズ 1 と同じく Testcontainers の導入まで見送る（phase1-spec.md の「14. 未決事項」）。それまでは手動で確かめる（「12. 完成の条件」）
 
@@ -570,7 +569,7 @@ anthropic:
 - **パッケージの分け方の命名表**に足す
   - `service`：`PostCategoryClassifier`（Claude API でカテゴリを選ぶ。インターフェースに分けない。呼ぶのは `PostService`）
   - `controller`：`DiaryListController`、`SearchController`
-  - `form`：`SearchForm`、`PostCategoryForm`（`PostForm` と分けるなら `PostEditForm` も）
+  - `form`：`SearchForm`、`PostEditForm`（カテゴリの修正 `POST /posts/{id}/category` はフォームのクラスを作らず、`@RequestParam PostCategory` で受ける）
 - **禁止事項「プロンプトインジェクション」**の「AI の出力は表示用の文章としてだけ扱い、その内容で処理を分岐させない」に、例外を足す：カテゴリ分類の出力は、決められた候補の値（`PostCategory`）と照らし合わせた場合に限り、保存する値として使ってよい。読めない出力は `OTHER` として扱う
 - **AI（Claude API）**の節：Claude API を呼ぶクラスが `ClaudeService`（日記）と `PostCategoryClassifier`（分類）の 2 つになること、呼び出しの設定は `anthropic.*` と `anthropic.classification.*` に分けること
 - **ログ**：検索キーワードと分類の結果（AI の判定・ユーザーが直した値とも）を、出してはいけないものに足す
