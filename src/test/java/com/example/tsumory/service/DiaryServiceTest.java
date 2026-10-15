@@ -62,11 +62,32 @@ class DiaryServiceTest {
     }
 
     @Test
+    void registeredDate_unknownUser_throwsNotFound() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.registeredDate(99L)).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
     void isAvailableDate_fromRegisteredDateToToday() {
         assertThat(service.isAvailableDate(USER_ID, LocalDate.of(2026, 10, 1))).isTrue();
         assertThat(service.isAvailableDate(USER_ID, DATE)).isTrue();
         assertThat(service.isAvailableDate(USER_ID, LocalDate.of(2026, 9, 30))).isFalse();
         assertThat(service.isAvailableDate(USER_ID, DATE.plusDays(1))).isFalse();
+    }
+
+    @Test
+    void isAvailableDate_todaySwitchesAtJstMidnight() {
+        // 日本時間の 10/9 0:00 ちょうど（UTC ではまだ 10/8 の 15:00）。この瞬間から 10/9 を開ける
+        var atMidnight = new DiaryService(
+                diaryRepository, userRepository, Clock.fixed(Instant.parse("2026-10-08T15:00:00Z"), PostService.ZONE));
+        var justBefore = new DiaryService(
+                diaryRepository, userRepository, Clock.fixed(Instant.parse("2026-10-08T14:59:59Z"), PostService.ZONE));
+
+        assertThat(atMidnight.isAvailableDate(USER_ID, LocalDate.of(2026, 10, 9)))
+                .isTrue();
+        assertThat(justBefore.isAvailableDate(USER_ID, LocalDate.of(2026, 10, 9)))
+                .isFalse();
     }
 
     @Test
@@ -137,6 +158,32 @@ class DiaryServiceTest {
 
         assertThat(result).contains(new DiaryItem(yesterday, "昨日の日記", LocalTime.of(22, 30)));
         verify(userRepository, never()).findById(any());
+    }
+
+    @Test
+    void findDiaryForSummary_noDiary_returnsEmpty() {
+        when(diaryRepository.findByUserIdAndDiaryDate(USER_ID, DATE)).thenReturn(Optional.empty());
+
+        assertThat(service.findDiaryForSummary(USER_ID, DATE)).isEmpty();
+    }
+
+    @Test
+    void findByDate_availableDateWithoutDiary_returnsEmpty() {
+        // 開ける日付で日記がまだないのは正常（画面で「この日の日記はまだありません」を出す）。404 にしない
+        when(diaryRepository.findByUserIdAndDiaryDate(USER_ID, DATE)).thenReturn(Optional.empty());
+
+        assertThat(service.findByDate(USER_ID, DATE)).isEmpty();
+    }
+
+    @Test
+    void saveDiary_createsTheDiaryForTheLoggedInUser() {
+        // 新しく作る日記は、ログイン中のユーザーのもの（ほかのユーザーの日記として保存しない）
+        when(diaryRepository.findByUserIdAndDiaryDate(USER_ID, DATE)).thenReturn(Optional.empty());
+
+        var saved = service.saveDiary(USER_ID, DATE, "寝坊した一日。");
+
+        assertThat(saved.getUser()).isSameAs(user);
+        verify(userRepository).getReferenceById(USER_ID);
     }
 
     @Test
