@@ -24,6 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.example.tsumory.config.CustomUserDetails;
 import com.example.tsumory.config.CustomUserDetailsService;
 import com.example.tsumory.config.SecurityConfig;
+import com.example.tsumory.domain.PostCategory;
 import com.example.tsumory.repository.UserRepository;
 import com.example.tsumory.service.DailyPostLimitExceededException;
 import com.example.tsumory.service.DiaryItem;
@@ -52,8 +53,10 @@ class PostControllerTest {
     private static final LocalDate TODAY = LocalDate.of(2026, 10, 7);
     private static final CustomUserDetails PRINCIPAL = new CustomUserDetails(USER_ID, "demo", "$2a$10$hash");
 
-    private static final PostItem TODAY_POST = new PostItem(10L, "昼のカレーが辛すぎた", LocalTime.of(12, 40), false);
-    private static final PostItem EDITED_POST = new PostItem(11L, "寝坊した", LocalTime.of(8, 12), true);
+    private static final PostItem TODAY_POST =
+            new PostItem(10L, "昼のカレーが辛すぎた", LocalTime.of(12, 40), false, PostCategory.PRIVATE);
+    private static final PostItem EDITED_POST =
+            new PostItem(11L, "寝坊した", LocalTime.of(8, 12), true, PostCategory.OTHER);
 
     @Autowired
     private MockMvc mockMvc;
@@ -92,6 +95,13 @@ class PostControllerTest {
                 .andExpect(content().string(containsString("昼のカレーが辛すぎた")))
                 .andExpect(content().string(containsString("/posts/10/edit")))
                 .andExpect(content().string(containsString("action=\"/posts/10/delete\"")));
+    }
+
+    @Test
+    void 各つぶやきにカテゴリのバッジを出す() throws Exception {
+        mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andExpect(content().string(containsString("badge rounded-pill text-bg-success\">プライベート</span>")))
+                .andExpect(content().string(containsString("badge rounded-pill text-bg-secondary\">その他</span>")));
     }
 
     @Test
@@ -258,7 +268,7 @@ class PostControllerTest {
     @Test
     void 今日のつぶやきが上限に達したら投稿フォームを無効にしてその旨を出す() throws Exception {
         var posts = IntStream.rangeClosed(1, PostService.DAILY_POST_LIMIT)
-                .mapToObj(i -> new PostItem((long) i, "つぶやき" + i, LocalTime.of(9, 0), false))
+                .mapToObj(i -> new PostItem((long) i, "つぶやき" + i, LocalTime.of(9, 0), false, PostCategory.OTHER))
                 .toList();
         when(postService.findPosts(USER_ID, TODAY)).thenReturn(posts);
 
@@ -315,6 +325,24 @@ class PostControllerTest {
     }
 
     @Test
+    void 編集モードでは今のカテゴリを選んだセレクトボックスを出す() throws Exception {
+        when(postService.getEditablePost(USER_ID, 10L)).thenReturn(TODAY_POST);
+
+        var html = mockMvc.perform(get("/posts/10/edit").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                .contains("<label for=\"category\" class=\"visually-hidden\">カテゴリ</label>")
+                .contains("name=\"category\"")
+                .contains("<option value=\"WORK\">仕事</option>")
+                .contains("<option value=\"PRIVATE\" selected=\"selected\">プライベート</option>")
+                .contains("<option value=\"LEARNING\">学習</option>")
+                .contains("<option value=\"OTHER\">その他</option>");
+    }
+
+    @Test
     void 他人や一昨日のつぶやきの編集モードはメッセージを付けてトップへリダイレクト() throws Exception {
         when(postService.getEditablePost(USER_ID, 99L)).thenThrow(new ResourceNotFoundException("Post", 99L));
 
@@ -326,14 +354,47 @@ class PostControllerTest {
     // --- 編集 ---
 
     @Test
-    void 編集するとトップへリダイレクト() throws Exception {
+    void 本文とカテゴリを一緒に保存してトップへリダイレクト() throws Exception {
         mockMvc.perform(post("/posts/10/edit")
                         .param("content", " 昼のカレーがおいしかった ")
+                        .param("category", "WORK")
                         .with(user(PRINCIPAL))
                         .with(csrf()))
                 .andExpect(redirectedUrl("/"));
 
-        verify(postService).edit(USER_ID, 10L, " 昼のカレーがおいしかった ");
+        verify(postService).edit(USER_ID, 10L, " 昼のカレーがおいしかった ", PostCategory.WORK);
+    }
+
+    @Test
+    void 候補にないカテゴリはエラーを表示して保存しない() throws Exception {
+        when(postService.getEditablePost(USER_ID, 10L)).thenReturn(TODAY_POST);
+
+        mockMvc.perform(post("/posts/10/edit")
+                        .param("content", "昼のカレーがおいしかった")
+                        .param("category", "HOBBY")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("action=\"/posts/10/edit\"")))
+                .andExpect(content().string(containsString("カテゴリを選んでください")))
+                // 型変換の内部的なメッセージは出さない
+                .andExpect(content().string(not(containsString("Failed to convert"))));
+
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any());
+    }
+
+    @Test
+    void カテゴリがなければエラーを表示して保存しない() throws Exception {
+        when(postService.getEditablePost(USER_ID, 10L)).thenReturn(TODAY_POST);
+
+        mockMvc.perform(post("/posts/10/edit")
+                        .param("content", "昼のカレーがおいしかった")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("カテゴリを選んでください")));
+
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any());
     }
 
     @Test
@@ -350,15 +411,18 @@ class PostControllerTest {
                 .andExpect(content().string(containsString("100 文字以内で入力してください")))
                 .andExpect(content().string(containsString(content)));
 
-        verify(postService, never()).edit(anyLong(), anyLong(), anyString());
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any());
     }
 
     @Test
     void 他人のつぶやきの編集はメッセージを付けてトップへリダイレクト() throws Exception {
-        doThrow(new ResourceNotFoundException("Post", 99L)).when(postService).edit(USER_ID, 99L, "書き換え");
+        doThrow(new ResourceNotFoundException("Post", 99L))
+                .when(postService)
+                .edit(USER_ID, 99L, "書き換え", PostCategory.OTHER);
 
         mockMvc.perform(post("/posts/99/edit")
                         .param("content", "書き換え")
+                        .param("category", "OTHER")
                         .with(user(PRINCIPAL))
                         .with(csrf()))
                 .andExpect(redirectedUrl("/"))
@@ -382,7 +446,63 @@ class PostControllerTest {
         mockMvc.perform(post("/posts/10/edit").param("content", "書き換え").with(user(PRINCIPAL)))
                 .andExpect(status().isForbidden());
 
-        verify(postService, never()).edit(anyLong(), anyLong(), any());
+        verify(postService, never()).edit(anyLong(), anyLong(), any(), any());
+    }
+
+    // --- カテゴリの修正 ---
+
+    @Test
+    void カテゴリを直すとトップへリダイレクト() throws Exception {
+        mockMvc.perform(post("/posts/10/category")
+                        .param("category", "WORK")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/"))
+                .andExpect(flash().attributeCount(0));
+
+        // 送られた文字列は PostCategory に変換されて渡る
+        verify(postService).updateCategory(USER_ID, 10L, PostCategory.WORK);
+    }
+
+    @Test
+    void 他人のつぶやきのカテゴリはメッセージを付けてトップへリダイレクト() throws Exception {
+        doThrow(new ResourceNotFoundException("Post", 99L))
+                .when(postService)
+                .updateCategory(USER_ID, 99L, PostCategory.WORK);
+
+        mockMvc.perform(post("/posts/99/category")
+                        .param("category", "WORK")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/"))
+                .andExpect(flash().attribute("message", PostController.POST_NOT_FOUND_MESSAGE));
+    }
+
+    @Test
+    void 候補にないカテゴリは404で何も変えない() throws Exception {
+        mockMvc.perform(post("/posts/10/category")
+                        .param("category", "HOBBY")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(status().isNotFound());
+
+        verify(postService, never()).updateCategory(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void カテゴリがなければ400で何も変えない() throws Exception {
+        mockMvc.perform(post("/posts/10/category").with(user(PRINCIPAL)).with(csrf()))
+                .andExpect(status().isBadRequest());
+
+        verify(postService, never()).updateCategory(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void CSRFトークンなしのカテゴリの修正は403() throws Exception {
+        mockMvc.perform(post("/posts/10/category").param("category", "WORK").with(user(PRINCIPAL)))
+                .andExpect(status().isForbidden());
+
+        verify(postService, never()).updateCategory(anyLong(), anyLong(), any());
     }
 
     // --- 削除 ---

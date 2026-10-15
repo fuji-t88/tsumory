@@ -200,7 +200,7 @@ class PostServiceTest {
         when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
         when(categoryClassifier.classify("資格の勉強をした")).thenReturn(Optional.of(PostCategory.LEARNING));
 
-        service.edit(USER_ID, POST_ID, "資格の勉強をした");
+        service.edit(USER_ID, POST_ID, "資格の勉強をした", post.getCategory());
 
         assertThat(post.getCategory()).isEqualTo(PostCategory.LEARNING);
     }
@@ -213,7 +213,7 @@ class PostServiceTest {
         when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
         when(categoryClassifier.classify("カレー")).thenReturn(Optional.empty());
 
-        service.edit(USER_ID, POST_ID, "カレー");
+        service.edit(USER_ID, POST_ID, "カレー", post.getCategory());
 
         assertThat(post.getCategory()).isEqualTo(PostCategory.PRIVATE);
         assertThat(post.getContent()).isEqualTo("カレー");
@@ -225,7 +225,7 @@ class PostServiceTest {
         var post = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
         when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
 
-        service.edit(USER_ID, POST_ID, " ランチ ");
+        service.edit(USER_ID, POST_ID, " ランチ ", post.getCategory());
 
         verify(categoryClassifier, never()).classify(any());
     }
@@ -239,7 +239,7 @@ class PostServiceTest {
         post.markCategorySetByUser();
         when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
 
-        service.edit(USER_ID, POST_ID, "取引先とランチ");
+        service.edit(USER_ID, POST_ID, "取引先とランチ", post.getCategory());
 
         verify(categoryClassifier, never()).classify(any());
         assertThat(post.getCategory()).isEqualTo(PostCategory.WORK);
@@ -259,16 +259,60 @@ class PostServiceTest {
                 .thenReturn(Optional.of(reloaded));
         when(categoryClassifier.classify("取引先とランチ")).thenReturn(Optional.of(PostCategory.PRIVATE));
 
-        service.edit(USER_ID, POST_ID, "取引先とランチ");
+        service.edit(USER_ID, POST_ID, "取引先とランチ", before.getCategory());
 
         assertThat(reloaded.getCategory()).isEqualTo(PostCategory.WORK);
+    }
+
+    @Test
+    void edit_categoryChangedByUser_isMarkedAndNotClassified() {
+        // 本文とカテゴリを同じリクエストで直したら、AI の判定より手で選んだカテゴリを優先する
+        var service = serviceAt("2026-10-08T12:00:00");
+        var post = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
+
+        service.edit(USER_ID, POST_ID, "取引先とランチ", PostCategory.WORK);
+
+        verify(categoryClassifier, never()).classify(any());
+        assertThat(post.getCategory()).isEqualTo(PostCategory.WORK);
+        assertThat(post.isCategorySetByUser()).isTrue();
+        assertThat(post.getContent()).isEqualTo("取引先とランチ");
+    }
+
+    @Test
+    void edit_categoryOnly_doesNotMarkEdited() {
+        var service = serviceAt("2026-10-08T12:00:00");
+        var post = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
+
+        service.edit(USER_ID, POST_ID, " ランチ ", PostCategory.PRIVATE);
+
+        verify(categoryClassifier, never()).classify(any());
+        assertThat(post.getCategory()).isEqualTo(PostCategory.PRIVATE);
+        assertThat(post.isCategorySetByUser()).isTrue();
+        assertThat(post.getUpdatedAt()).isEqualTo(jst("2026-10-08T11:00:00"));
+        assertThat(post.isEdited()).isFalse();
+    }
+
+    @Test
+    void edit_sameCategory_isNotTreatedAsChangedByUser() {
+        // 編集フォームは今のカテゴリを選んだ状態で送られてくるので、同じ値なら手で直したことにしない
+        var service = serviceAt("2026-10-08T12:00:00");
+        var post = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
+        when(categoryClassifier.classify("資格の勉強をした")).thenReturn(Optional.of(PostCategory.LEARNING));
+
+        service.edit(USER_ID, POST_ID, "資格の勉強をした", PostCategory.OTHER);
+
+        assertThat(post.getCategory()).isEqualTo(PostCategory.LEARNING);
+        assertThat(post.isCategorySetByUser()).isFalse();
     }
 
     @Test
     void createAndEdit_runOutsideTransactionsBecauseTheyCallTheClaudeApi() throws NoSuchMethodException {
         for (var method : List.of(
                 PostService.class.getMethod("create", Long.class, String.class),
-                PostService.class.getMethod("edit", Long.class, Long.class, String.class))) {
+                PostService.class.getMethod("edit", Long.class, Long.class, String.class, PostCategory.class))) {
             assertThat(method.getAnnotation(Transactional.class).propagation()).isEqualTo(Propagation.NOT_SUPPORTED);
         }
     }
@@ -279,7 +323,7 @@ class PostServiceTest {
         var post = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
         when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
 
-        service.edit(USER_ID, POST_ID, " カレー ");
+        service.edit(USER_ID, POST_ID, " カレー ", post.getCategory());
 
         assertThat(post.getContent()).isEqualTo("カレー");
         assertThat(post.getPostedAt()).isEqualTo(jst("2026-10-08T11:00:00"));
@@ -293,7 +337,7 @@ class PostServiceTest {
         var post = new Post(user, "おやすみ", jst("2026-10-07T23:59:59"));
         when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
 
-        service.edit(USER_ID, POST_ID, "おやすみなさい");
+        service.edit(USER_ID, POST_ID, "おやすみなさい", post.getCategory());
 
         assertThat(post.getContent()).isEqualTo("おやすみなさい");
     }
@@ -304,8 +348,45 @@ class PostServiceTest {
         var post = new Post(user, "おやすみ", jst("2026-10-06T23:59:59"));
         when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
 
-        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, "直したい")).isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, "直したい", PostCategory.OTHER))
+                .isInstanceOf(ResourceNotFoundException.class);
         assertThat(post.getContent()).isEqualTo("おやすみ");
+    }
+
+    @Test
+    void updateCategory_assignsAndMarksWithoutMarkingEdited() {
+        var service = serviceAt("2026-10-08T12:00:00");
+        var post = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
+
+        service.updateCategory(USER_ID, POST_ID, PostCategory.WORK);
+
+        verify(categoryClassifier, never()).classify(any());
+        assertThat(post.getCategory()).isEqualTo(PostCategory.WORK);
+        assertThat(post.isCategorySetByUser()).isTrue();
+        assertThat(post.getContent()).isEqualTo("ランチ");
+        assertThat(post.isEdited()).isFalse();
+    }
+
+    @Test
+    void updateCategory_postBeforeYesterday_canBeChanged() {
+        // 本文の編集と違い、カテゴリは昨日より前のつぶやきでも直せる
+        var service = serviceAt("2026-10-08T12:00:00");
+        var post = new Post(user, "ランチ", jst("2026-10-01T12:00:00"));
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
+
+        service.updateCategory(USER_ID, POST_ID, PostCategory.PRIVATE);
+
+        assertThat(post.getCategory()).isEqualTo(PostCategory.PRIVATE);
+    }
+
+    @Test
+    void updateCategory_othersPost_throwsNotFound() {
+        var service = serviceAt("2026-10-08T12:00:00");
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.updateCategory(USER_ID, POST_ID, PostCategory.WORK))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test

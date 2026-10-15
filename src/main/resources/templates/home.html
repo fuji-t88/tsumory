@@ -56,7 +56,11 @@
                          class="d-flex align-items-start gap-2">
                         <span class="text-body-secondary small flex-shrink-0 pt-1" style="min-width: 3rem;"
                               th:text="${post.time}"></span>
-                        <span class="flex-grow-1" th:text="${post.content}">コーヒーがおいしい</span>
+                        <div class="flex-grow-1">
+                            <div th:text="${post.content}">コーヒーがおいしい</div>
+                            <span class="badge rounded-pill" th:classappend="${post.categoryBadgeClass()}"
+                                  th:text="${post.category.displayName}">プライベート</span>
+                        </div>
                         <div class="flex-shrink-0 d-flex align-items-center gap-2 pt-1">
                             <a th:href="@{/posts/{id}/edit(id=${post.id})}" class="btn btn-link btn-sm p-0">編集</a>
                             <form th:action="@{/posts/{id}/delete(id=${post.id})}" method="post" class="m-0">
@@ -71,6 +75,19 @@
                                       th:classappend="${#fields.hasErrors('content')} ? 'is-invalid'"></textarea>
                             <p th:if="${#fields.hasErrors('content')}" th:errors="*{content}"
                                class="invalid-feedback" role="alert"></p>
+                        </div>
+                        <div class="mb-2">
+                            <label for="category" class="visually-hidden">カテゴリ</label>
+                            <select th:field="*{category}" class="form-select form-select-sm w-auto"
+                                    th:classappend="${#fields.hasErrors('category')} ? 'is-invalid'">
+                                <option th:each="c : ${categories}" th:value="${c.name()}" th:text="${c.displayName}">
+                                    プライベート
+                                </option>
+                            </select>
+                            <!--/* 値が候補にないとき（画面を改ざんされた場合など）は型変換と @NotNull の 2 つのエラーが出るので、文言は 1 つにまとめる */-->
+                            <p th:if="${#fields.hasErrors('category')}" class="invalid-feedback" role="alert">
+                                カテゴリを選んでください
+                            </p>
                         </div>
                         <div class="d-flex justify-content-end gap-2">
                             <a th:href="@{/}" class="btn btn-outline-secondary btn-sm">キャンセル</a>

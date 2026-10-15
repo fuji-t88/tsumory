@@ -90,31 +90,62 @@ public class PostService {
     }
 
     /**
-     * 本文を直す。本文が変わったときだけ AI でカテゴリを判定し直し、判定できたときだけ入れる（できなければ前のカテゴリのまま）。 ユーザーが手で直したカテゴリは判定し直さない。
+     * 本文とカテゴリを直す。送られたカテゴリが今のカテゴリと違えば、ユーザーが手で直したものとして入れ、印を立てる。
+     *
+     * <p>本文が変わったときは AI でカテゴリを判定し直し、判定できたときだけ入れる（できなければ前のカテゴリのまま）。ただし、ユーザーが手で直したカテゴリ
+     * （以前に直したものも、このリクエストで直したものも）は判定し直さない。
      *
      * <p>{@link #create} と同じく、Claude API はトランザクションの外で呼び、保存だけをトランザクションにする。
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public void edit(Long userId, Long postId, String content) {
+    public void edit(Long userId, Long postId, String content, PostCategory category) {
         var stripped = content.strip();
         var current = findEditablePost(userId, postId);
-        var shouldClassify = !stripped.equals(current.getContent()) && !current.isCategorySetByUser();
-        var category = shouldClassify ? categoryClassifier.classify(stripped) : Optional.<PostCategory>empty();
+        var contentChanged = !stripped.equals(current.getContent());
+        // 今のカテゴリと違う値が送られたら、ユーザーが手で直したとみなす
+        var categoryChangedByUser = category != current.getCategory();
+        var shouldClassify = contentChanged && !categoryChangedByUser && !current.isCategorySetByUser();
+        var classified = shouldClassify ? categoryClassifier.classify(stripped) : Optional.<PostCategory>empty();
         var now = clock.instant();
         transactionTemplate.executeWithoutResult(status -> {
             // 判定を待つ間に削除・手での修正がされていないか、トランザクションの中で読み直して確かめる
             var post = findEditablePost(userId, postId);
-            post.edit(stripped, now);
-            if (!post.isCategorySetByUser()) {
-                category.ifPresent(post::assignCategory);
+            // 本文が変わらないなら updated_at も変えない（カテゴリだけを直しても「編集済み」にしない）
+            if (contentChanged) {
+                post.edit(stripped, now);
+            }
+            if (categoryChangedByUser) {
+                post.assignCategory(category);
+                post.markCategorySetByUser();
+            } else if (!post.isCategorySetByUser()) {
+                classified.ifPresent(post::assignCategory);
             }
         });
+        // どのカテゴリにしたかは出さない（CLAUDE.md の禁止事項「ログ」）
         log.info(
-                "Post edited: userId={}, postId={}, contentLength={}, classified={}",
+                "Post edited: userId={}, postId={}, contentLength={}, classified={}, categorySetByUser={}",
                 userId,
                 postId,
                 stripped.length(),
-                shouldClassify);
+                shouldClassify,
+                categoryChangedByUser);
+    }
+
+    /**
+     * カテゴリだけを手で直す（日記表示のつぶやきの一覧から）。印を立て、以後は AI に上書きさせない。本文と更新時刻は変えない（「編集済み」にしない）。
+     *
+     * <p>本文の編集と違い、日付は問わない（自分のつぶやきなら、昨日より前のものも直せる）。他人のつぶやきなら {@link ResourceNotFoundException}。
+     */
+    @Transactional
+    public void updateCategory(Long userId, Long postId, PostCategory category) {
+        var post = postRepository.findByIdAndUserId(postId, userId).orElseThrow(() -> {
+            log.warn("Post not found for user: userId={}, postId={}", userId, postId);
+            return new ResourceNotFoundException("Post", postId);
+        });
+        post.assignCategory(category);
+        post.markCategorySetByUser();
+        // どのカテゴリにしたかは出さない（CLAUDE.md の禁止事項「ログ」）
+        log.info("Post category set by user: userId={}, postId={}", userId, postId);
     }
 
     @Transactional
