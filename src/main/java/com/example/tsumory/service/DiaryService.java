@@ -40,7 +40,7 @@ public class DiaryService {
     @Transactional(readOnly = true)
     public Optional<Diary> findByDate(Long userId, LocalDate date) {
         if (!isAvailableDate(userId, date)) {
-            log.info("Diary date not available: userId={}, date={}", userId, date);
+            log.warn("Diary date not available: userId={}, date={}", userId, date);
             throw new DiaryNotFoundException(date);
         }
         return diaryRepository.findByUserIdAndDiaryDate(userId, date);

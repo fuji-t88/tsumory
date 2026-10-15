@@ -147,7 +147,8 @@ tsumory/
 - **テキストブロック**: Claude へのプロンプトや複数行の SQL は `"""` で書く
 - **`var`**: 右辺から型が明らかなローカル変数に使う。型が読み取れない場合は書く
 - **Sequenced Collections**: 先頭・末尾は `getFirst()` / `getLast()` / `reversed()` を使い、`get(0)` や `get(size() - 1)` は書かない
-- **仮想スレッド**: 有効にしてあるので、ブロッキング I/O（DB、Claude API）は普通に同期で書く。並行処理は `Executors.newVirtualThreadPerTaskExecutor()` を使う- **日時**: `java.time` を使う。日記の日付は `LocalDate`、日時は `Instant` か `OffsetDateTime`。「今日」は `ZoneId.of("Asia/Tokyo")` を明示して求める（時刻の取り方は下の「時刻の取得」）
+- **仮想スレッド**: 有効にしてあるので、ブロッキング I/O（DB、Claude API）は普通に同期で書く。並行処理は `Executors.newVirtualThreadPerTaskExecutor()` を使う
+- **日時**: `java.time` を使う。日記の日付は `LocalDate`、日時は `Instant` か `OffsetDateTime`。「今日」は `ZoneId.of("Asia/Tokyo")` を明示して求める（時刻の取り方は下の「時刻の取得」）
 - **Optional**: 見つからない可能性がある 1 件の戻り値は `Optional` にする。フィールドや引数には使わない
 
 ### 時刻の取得
@@ -159,7 +160,7 @@ tsumory/
 ### Spring・Lombok
 
 - DI はコンストラクタインジェクション（`@RequiredArgsConstructor` + `private final` フィールド）
-- `@Transactional` は service に付ける。クラスに `@Transactional(readOnly = true)` を付けて既定を読み取り専用にし、状態を変えるメソッドだけに `@Transactional` を付けて上書きする（例: `PostService`）。外部 API を呼ぶメソッドは `@Transactional(propagation = Propagation.NOT_SUPPORTED)` にし、API の応答を待つ間はトランザクションを張らない（例: `DiaryGenerationService#generateToday`）
+- `@Transactional` は service に付ける。クラスに `@Transactional(readOnly = true)` を付けて既定を読み取り専用にし、状態を変えるメソッドだけに `@Transactional` を付けて上書きする（例: `PostService`）。外部 API を呼ぶメソッドは `@Transactional(propagation = Propagation.NOT_SUPPORTED)` にし、API の応答を待つ間はトランザクションを張らない（例: `DiaryGenerationService#generateForDate`）
 - エンティティには `@Getter` と必要な `@Setter` だけを付ける。`@Data`・`@EqualsAndHashCode`・`@ToString` は付けない（遅延ロードや循環参照で問題が起きるため）
 - エンティティの引数なしコンストラクタは `@NoArgsConstructor(access = AccessLevel.PROTECTED)` にする（JPA 用。アプリのコードからは、必須の値を受け取るコンストラクタで作る）
 - エンティティの関連（`@ManyToOne` など）は `fetch = FetchType.LAZY` を明示する（`@ManyToOne` の既定は EAGER で、一覧を取得すると関連先ごとに SELECT が発行される N+1 問題の原因になるため）
@@ -175,8 +176,8 @@ tsumory/
   | レベル | 使う場面 | 例 |
   |---|---|---|
   | ERROR | システムが正常に動いておらず、すぐ対応が必要なとき。正常な業務処理には使わない（アラートが形骸化するため） | DB に接続できない、Claude API の呼び出しが例外で失敗した（外部 API が応答しない。エラー・タイムアウト・レート制限） |
-  | WARN | 処理は続けられたが、繰り返すなら調べるべきとき | 他人のつぶやきへのアクセスの試行、Claude API の応答は返ったが日記にできない（拒否・途中で止まった・本文が空） |
-  | INFO | 正常な業務イベント | つぶやきの投稿・編集・削除、日記の生成・保存 |
+  | WARN | 業務エラー。処理は続けられたが、繰り返すなら調べるべきとき | 投稿の上限超過、つぶやき 0 件での日記生成、未来・登録日より前の日付、今日と昨日以外のつぶやきの編集、他人のつぶやきへのアクセスの試行、Claude API の応答は返ったが日記にできない（拒否・途中で止まった・本文が空） |
+  | INFO | 正常な業務イベント（スタックトレースは出さない） | つぶやきの投稿・編集・削除、日記の生成・保存 |
   | DEBUG | 開発時の調査用。本番では出さない | 変数の中身 |
 
 - 想定外の例外は service で受け止めて ERROR を出さず、そのまま投げる（`RequestLoggingFilter` がリクエスト ID・ユーザー ID 付きの ERROR で記録し、500 を返す）
@@ -205,7 +206,7 @@ tsumory/
 
 - `@Autowired` によるフィールドインジェクション
 - `System.out.println` / `printStackTrace()` によるログ出力
-- 例外を握りつぶす `catch`（何もしない、ログだけ出して処理を続ける）。扱えない例外はそのまま投げる
+- 例外を握りつぶす `catch`（何もせず、ログにも残さない）。`catch` するなら最低でも `warn` / `error` でログに残し、扱えない例外は再 throw する（「コードレビューの観点 > エラーハンドリング」）
 - `null` のコレクションを返すこと（空のコレクションを返す）
 - 仮想スレッド上でブロッキング I/O を `synchronized` で囲むこと（Java 21 ではキャリアスレッドを占有する）。排他が必要なら `ReentrantLock` を使う
 - 自前のスレッドプール（`Executors.newFixedThreadPool` など）や `new Thread()`
@@ -252,6 +253,38 @@ tsumory/
 - Thymeleaf から Bootstrap を読むときはバージョンなしのパスを使う（`webjars-locator-lite` が解決する）
   - `@{/webjars/bootstrap/css/bootstrap.min.css}`
   - `@{/webjars/bootstrap/js/bootstrap.bundle.min.js}`
+
+## コードレビューの観点
+
+実装時のセルフレビュー・プルリクエストレビューでは、コーディング規約・禁止事項に加えて以下の観点を必ず確認する。
+
+### 可読性・保守性
+
+- ドメイン用語（つぶやき = `Post`、日記 = `Diary`、カテゴリ = `PostCategory`）がクラス・メソッド・テンプレート・ログメッセージで一貫して使われているか。
+- メソッドの責務が単一か。`service/` のクラスでリポジトリ呼び出しと Claude API 呼び出しが直接混ざらず、`PostCategoryClassifier` / `DiaryWriter` のような集約クラスを介しているか。
+- Java 21 機能（record / switch 式 / テキストブロック / var）と Lombok の使い分けがコーディング規約と整合しているか。
+- マジックナンバーや裸の文字列がないか。閾値は `DAILY_POST_LIMIT` のような定数、列挙は `PostCategory` のような enum で表現されているか。
+- コメントが「なぜ」を説明しているか。コードを読めば自明な内容を繰り返していないか。
+- テスト名で振る舞いが読み取れるか。フィクスチャは `TestFixtures` に集約され、各テストは Arrange / Act / Assert が見分けられる構造になっているか。
+
+### エラーハンドリング
+
+- 書き込みを伴うサービスメソッドが `@Transactional` で個別に囲まれているか。途中で例外が起きたときに部分書き込みが残らないか。
+- 業務上の失敗は専用例外（例: `ResourceNotFoundException`、`DailyPostLimitExceededException`、`InvalidDiaryDateException`）で表現され、画面では一般化されたメッセージを出すようになっているか。
+- 外部依存（Claude API）の失敗時の挙動が仕様どおりか。`PostCategoryClassifier` のように分類失敗を `Optional.empty()` に潰すのか、`DiaryGenerationException` で利用側に伝播させるのかが意図的に選ばれているか。
+- 例外を `catch` して握りつぶしていないか。最低でも `warn` / `error` でログに残し、必要に応じて再 throw しているか。
+- ログレベルの使い分けが妥当か（業務エラー = `warn`、業務イベント = `info`、デバッグ詳細 = `debug`）。スタックトレースを `info` 以下で出していないか。
+- ユーザー入力に対するバリデーション（`@Valid` / Bean Validation）が漏れていないか。長さ・必須・形式をサーバー側で検証しているか。
+
+### セキュリティ
+
+- 認証ユーザー以外のデータが取得・更新・削除できないか。`Post` / `Diary` の検索系は `findByIdAndUserId` のように `userId` で必ず絞り込んでいるか（IDOR 防止）。
+- パスワードが `PasswordEncoder`（BCrypt）でハッシュ化されているか。平文の保存・ログ出力になっていないか。
+- Thymeleaf フォームで CSRF トークンが含まれているか。`SecurityConfig` で CSRF を無効化していないか。
+- SQL / JPQL がパラメータ化されているか。`@Param` を使い、文字列連結でクエリを組み立てていないか。
+- ログにつぶやき・日記の本文、Claude API キー、パスワード、セッショントークンが出力されていないか。
+- Claude API の生のエラー内容や例外スタックがユーザー画面にそのまま漏れていないか。
+- `ANTHROPIC_API_KEY` などのシークレットが環境変数からのみ読まれているか。コード・YAML・コミット履歴に直書きされていないか。
 
 ## Git
 

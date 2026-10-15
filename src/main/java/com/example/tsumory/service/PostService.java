@@ -162,7 +162,7 @@ public class PostService {
 
     private void checkPostLimit(Long userId, LocalDate today) {
         if (countPosts(userId, today) >= DAILY_POST_LIMIT) {
-            log.info("Post limit reached: userId={}, date={}, limit={}", userId, today, DAILY_POST_LIMIT);
+            log.warn("Post limit reached: userId={}, date={}, limit={}", userId, today, DAILY_POST_LIMIT);
             throw new DailyPostLimitExceededException(userId, DAILY_POST_LIMIT);
         }
     }
@@ -176,7 +176,7 @@ public class PostService {
         var postedDate = LocalDate.ofInstant(post.getPostedAt(), ZONE);
         if (!isEditableDate(postedDate)) {
             // 0 時を過ぎて、開いたままの画面から一昨日の分を直そうとした場合など
-            log.info("Post not editable: userId={}, postId={}, postedDate={}", userId, postId, postedDate);
+            log.warn("Post not editable: userId={}, postId={}, postedDate={}", userId, postId, postedDate);
             throw new ResourceNotFoundException("Post", postId);
         }
         return post;

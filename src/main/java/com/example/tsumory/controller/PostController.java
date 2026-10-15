@@ -58,7 +58,7 @@ public class PostController {
         try {
             postService.create(userId, postForm.content());
         } catch (DailyPostLimitExceededException e) {
-            // ログは PostService が INFO で出しているので、ここでは出さない
+            // ログは PostService が WARN で出しているので、ここでは出さない
             flash.addFlashAttribute("message", DAILY_LIMIT_MESSAGE);
         }
         return "redirect:/";

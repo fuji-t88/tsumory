@@ -4,10 +4,12 @@ import com.example.tsumory.domain.Diary;
 import java.time.Clock;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -37,14 +39,18 @@ public class DiaryGenerationService {
     // 独立したトランザクションを張る。
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Diary generateForDate(Long userId, LocalDate date) {
+        // 業務上の失敗は WARN で残す（CLAUDE.md の「ログ」）。AI は呼ばない
         if (date.isAfter(LocalDate.now(clock))) {
+            log.warn("Diary date is in the future: userId={}, date={}", userId, date);
             throw new InvalidDiaryDateException(date);
         }
         if (!diaryService.isAvailableDate(userId, date)) {
+            log.warn("Diary date not available: userId={}, date={}", userId, date);
             throw new DiaryNotFoundException(date);
         }
         var posts = postService.findPostsByDate(userId, date);
         if (posts.isEmpty()) {
+            log.warn("No posts to generate diary: userId={}, date={}", userId, date);
             throw new NoPostsException();
         }
         var generated = diaryWriter.write(date, posts);
