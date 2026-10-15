@@ -7,6 +7,8 @@
         <a th:href="@{/}" class="navbar-brand fw-bold">Tsumory</a>
         <div class="d-flex align-items-center gap-2">
             <span class="text-secondary small" sec:authentication="name">demo</span>
+            <!-- ナビバーに追加 -->
+            <a th:href="@{/diary}" class="btn btn-outline-secondary btn-sm">履歴</a>
             <!-- ログアウトは CSRF トークン付きの POST なので、リンクではなくフォームのボタンにする -->
             <form th:action="@{/logout}" method="post" class="m-0">
                 <button type="submit" class="btn btn-outline-secondary btn-sm">ログアウト</button>

@@ -37,10 +37,15 @@
 
     <section class="card shadow-sm mb-4">
         <div class="card-body">
-            <h2 class="h5 card-title mb-3">
-                今日のつぶやき
-                <span class="badge text-bg-secondary align-middle" th:text="|${#lists.size(posts)} 件|">0 件</span>
-            </h2>
+            <!--/* セクションヘッダー。今日の投稿を見終わったあと、自然に過去へ遡れるコンテキスト導線を置く
+                   （ナビバーの「履歴」「日記一覧」はどの画面からでも辿れるグローバル導線） */-->
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h2 class="h5 card-title mb-0">
+                    今日のつぶやき
+                    <span class="badge text-bg-secondary align-middle" th:text="|${#lists.size(posts)} 件|">0 件</span>
+                </h2>
+                <a th:href="@{/diary}" class="small">過去の日記を見る →</a>
+            </div>
             <p th:if="${#lists.isEmpty(posts)}" class="text-body-secondary mb-0">まだつぶやきはありません。</p>
             <ul th:if="${not #lists.isEmpty(posts)}" class="list-group list-group-flush">
                 <li th:each="post : ${posts}" class="list-group-item px-0">

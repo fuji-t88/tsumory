@@ -148,6 +148,16 @@ class PostControllerTest {
     }
 
     @Test
+    void ナビバーの履歴ボタンと今日のつぶやきの見出しから過去の日記へ移れる() throws Exception {
+        mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                // グローバル導線（ナビバー）
+                .andExpect(content()
+                        .string(containsString("<a href=\"/diary\" class=\"btn btn-outline-secondary btn-sm\">履歴</a>")))
+                // コンテキスト導線（「今日のつぶやき」の見出し）
+                .andExpect(content().string(containsString("<a href=\"/diary\" class=\"small\">過去の日記を見る →</a>")));
+    }
+
+    @Test
     void ナビゲーションにログアウトボタンを表示する() throws Exception {
         mockMvc.perform(get("/").with(user(PRINCIPAL)))
                 .andExpect(content().string(containsString("action=\"/logout\"")))
