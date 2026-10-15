@@ -25,6 +25,7 @@ import com.example.tsumory.config.CustomUserDetails;
 import com.example.tsumory.config.CustomUserDetailsService;
 import com.example.tsumory.config.SecurityConfig;
 import com.example.tsumory.repository.UserRepository;
+import com.example.tsumory.service.DailyPostLimitExceededException;
 import com.example.tsumory.service.DiaryItem;
 import com.example.tsumory.service.DiaryService;
 import com.example.tsumory.service.PostItem;
@@ -34,6 +35,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -189,7 +191,7 @@ class PostControllerTest {
                 .andExpect(redirectedUrl("/"));
 
         // 前後の空白は PostService が保存の前に取り除くので、controller は入力値をそのまま渡す
-        verify(postService).post(USER_ID, "  寝坊した  ");
+        verify(postService).create(USER_ID, "  寝坊した  ");
     }
 
     @Test
@@ -200,7 +202,7 @@ class PostControllerTest {
                         .with(csrf()))
                 .andExpect(redirectedUrl("/"));
 
-        verify(postService).post(USER_ID, "朝\r\n昼");
+        verify(postService).create(USER_ID, "朝\r\n昼");
     }
 
     @Test
@@ -215,7 +217,7 @@ class PostControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("100 文字以内で入力してください")));
 
-        verify(postService, never()).post(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString());
     }
 
     @Test
@@ -228,7 +230,7 @@ class PostControllerTest {
                 .andExpect(view().name("home"))
                 .andExpect(content().string(containsString("内容を入力してください")));
 
-        verify(postService, never()).post(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString());
     }
 
     @Test
@@ -243,7 +245,40 @@ class PostControllerTest {
                 .andExpect(content().string(containsString("100 文字以内で入力してください")))
                 .andExpect(content().string(containsString(content)));
 
-        verify(postService, never()).post(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString());
+    }
+
+    @Test
+    void 上限に達していなければ投稿フォームを使える() throws Exception {
+        mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andExpect(content().string(not(containsString("disabled=\"disabled\">つぶやく"))))
+                .andExpect(content().string(not(containsString("件に達しました"))));
+    }
+
+    @Test
+    void 今日のつぶやきが上限に達したら投稿フォームを無効にしてその旨を出す() throws Exception {
+        var posts = IntStream.rangeClosed(1, PostService.DAILY_POST_LIMIT)
+                .mapToObj(i -> new PostItem((long) i, "つぶやき" + i, LocalTime.of(9, 0), false))
+                .toList();
+        when(postService.findPosts(USER_ID, TODAY)).thenReturn(posts);
+
+        mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andExpect(content().string(containsString("disabled=\"disabled\">つぶやく")))
+                .andExpect(content().string(containsString("今日のつぶやきは 16 件に達しました。明日またつぶやけます。")));
+    }
+
+    @Test
+    void 上限に達していたらメッセージを付けてトップへリダイレクト() throws Exception {
+        doThrow(new DailyPostLimitExceededException(USER_ID, PostService.DAILY_POST_LIMIT))
+                .when(postService)
+                .create(USER_ID, "17 件目");
+
+        mockMvc.perform(post("/posts")
+                        .param("content", "17 件目")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/"))
+                .andExpect(flash().attribute("message", "今日のつぶやきは 16 件までです"));
     }
 
     @Test
@@ -251,7 +286,7 @@ class PostControllerTest {
         mockMvc.perform(post("/posts").param("content", "寝坊した").with(user(PRINCIPAL)))
                 .andExpect(status().isForbidden());
 
-        verify(postService, never()).post(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString());
     }
 
     // --- 編集モード ---

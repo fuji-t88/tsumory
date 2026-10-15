@@ -2,6 +2,7 @@ package com.example.tsumory.controller;
 
 import com.example.tsumory.config.CustomUserDetails;
 import com.example.tsumory.form.PostForm;
+import com.example.tsumory.service.DailyPostLimitExceededException;
 import com.example.tsumory.service.DiaryService;
 import com.example.tsumory.service.PostItem;
 import com.example.tsumory.service.PostService;
@@ -26,6 +27,9 @@ public class PostController {
     /** 自分の今日か昨日のつぶやきでないもの（他人のもの、削除済み、一昨日より前）を指定されたときのメッセージ。 */
     static final String POST_NOT_FOUND_MESSAGE = "つぶやきが見つかりませんでした";
 
+    /** 今日のつぶやきが上限に達しているのに投稿されたとき（別のタブから送った場合など）のメッセージ。 */
+    static final String POST_LIMIT_MESSAGE = "今日のつぶやきは " + PostService.DAILY_POST_LIMIT + " 件までです";
+
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
     private final PostService postService;
@@ -43,12 +47,18 @@ public class PostController {
             @AuthenticationPrincipal CustomUserDetails principal,
             @Valid @ModelAttribute("postForm") PostForm form,
             BindingResult bindingResult,
-            Model model) {
+            Model model,
+            RedirectAttributes redirectAttributes) {
         if (bindingResult.hasErrors()) {
             populateHomeModel(principal.userId(), null, model);
             return "home";
         }
-        postService.post(principal.userId(), form.content());
+        try {
+            postService.create(principal.userId(), form.content());
+        } catch (DailyPostLimitExceededException e) {
+            // ログは PostService が INFO で出しているので、ここでは出さない
+            redirectAttributes.addFlashAttribute("message", POST_LIMIT_MESSAGE);
+        }
         return "redirect:/";
     }
 
@@ -106,18 +116,17 @@ public class PostController {
     }
 
     /**
-     * ホーム画面（通常モード・編集モード）の値を詰める。今日の日付・今日のつぶやき・今日の日記（なければ {@code null}）・
-     * 編集中のつぶやき（編集モードでなければ {@code null}）。
+     * ホーム画面（通常モード・編集モード）の値を詰める。今日の日付・今日のつぶやき・投稿の上限と上限に達したか・
+     * 今日の日記（なければ {@code null}）・編集中のつぶやき（編集モードでなければ {@code null}）。
      */
     private void populateHomeModel(Long userId, PostView editingPost, Model model) {
         // 「今日」はここで 1 回だけ求める（途中で 0 時をまたいでもずれない）
         var today = postService.today();
+        var posts = postService.findPosts(userId, today);
         model.addAttribute("today", today);
-        model.addAttribute(
-                "posts",
-                postService.findPosts(userId, today).stream()
-                        .map(PostController::toView)
-                        .toList());
+        model.addAttribute("posts", posts.stream().map(PostController::toView).toList());
+        model.addAttribute("postLimit", PostService.DAILY_POST_LIMIT);
+        model.addAttribute("postLimitReached", posts.size() >= PostService.DAILY_POST_LIMIT);
         model.addAttribute(
                 "diary", diaryService.findDiaryForSummary(userId, today).orElse(null));
         model.addAttribute("editingPost", editingPost);

@@ -29,12 +29,15 @@
             <form th:action="@{/posts}" th:object="${postForm}" method="post">
                 <div class="mb-2">
                     <textarea th:field="*{content}" maxlength="100" rows="2" class="form-control"
+                              th:disabled="${postLimitReached}"
                               th:classappend="${#fields.hasErrors('content')} ? 'is-invalid'"></textarea>
                     <p th:if="${#fields.hasErrors('content')}" th:errors="*{content}" class="invalid-feedback"
                        role="alert"></p>
                 </div>
-                <div class="d-flex justify-content-end">
-                    <button type="submit" class="btn btn-primary">つぶやく</button>
+                <div class="d-flex align-items-center justify-content-end gap-3">
+                    <span th:if="${postLimitReached}" class="text-body-secondary small"
+                          th:text="|今日のつぶやきは ${postLimit} 件に達しました。明日またつぶやけます。|"></span>
+                    <button type="submit" class="btn btn-primary" th:disabled="${postLimitReached}">つぶやく</button>
                 </div>
             </form>
         </div>

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.tsumory.domain.Post;
+import com.example.tsumory.domain.PostCategory;
 import com.example.tsumory.domain.User;
 import com.example.tsumory.repository.PostRepository;
 import com.example.tsumory.repository.UserRepository;
@@ -25,6 +26,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class PostServiceTest {
@@ -38,17 +43,26 @@ class PostServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private PostCategoryClassifier categoryClassifier;
+
+    // 保存の部分（TransactionTemplate の中）を実際に動かすため、トランザクションマネージャーだけをモックにする
+    @Mock
+    private PlatformTransactionManager transactionManager;
+
     private final User user = new User("demo", "hash", Instant.EPOCH);
 
     @BeforeEach
     void setUp() {
         lenient().when(userRepository.getReferenceById(USER_ID)).thenReturn(user);
         lenient().when(postRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(categoryClassifier.classify(any())).thenReturn(Optional.empty());
     }
 
     private PostService serviceAt(String jstDateTime) {
         var clock = Clock.fixed(jst(jstDateTime), PostService.ZONE);
-        return new PostService(postRepository, userRepository, clock);
+        return new PostService(
+                postRepository, userRepository, categoryClassifier, new TransactionTemplate(transactionManager), clock);
     }
 
     private static Instant jst(String dateTime) {
@@ -100,10 +114,10 @@ class PostServiceTest {
     }
 
     @Test
-    void post_savesStrippedContentWithSamePostedAndUpdatedTime() {
+    void create_savesStrippedContentWithSamePostedAndUpdatedTime() {
         var service = serviceAt("2026-10-08T12:00:00");
 
-        service.post(USER_ID, "  ランチ\n");
+        service.create(USER_ID, "  ランチ\n");
 
         var captor = ArgumentCaptor.forClass(Post.class);
         verify(postRepository).save(captor.capture());
@@ -112,6 +126,151 @@ class PostServiceTest {
         assertThat(saved.getPostedAt()).isEqualTo(jst("2026-10-08T12:00:00"));
         assertThat(saved.getUpdatedAt()).isEqualTo(saved.getPostedAt());
         assertThat(saved.isEdited()).isFalse();
+    }
+
+    @Test
+    void create_assignsTheClassifiedCategory() {
+        var service = serviceAt("2026-10-08T12:00:00");
+        when(categoryClassifier.classify("会議の資料をまとめた")).thenReturn(Optional.of(PostCategory.WORK));
+
+        service.create(USER_ID, " 会議の資料をまとめた ");
+
+        var captor = ArgumentCaptor.forClass(Post.class);
+        verify(postRepository).save(captor.capture());
+        assertThat(captor.getValue().getCategory()).isEqualTo(PostCategory.WORK);
+        assertThat(captor.getValue().isCategorySetByUser()).isFalse();
+    }
+
+    @Test
+    void create_keepsOtherWhenClassificationFails() {
+        // 判定できなくても、つぶやきは保存する（コアループを Claude API の不調で止めない）
+        var service = serviceAt("2026-10-08T12:00:00");
+        when(categoryClassifier.classify("ランチ")).thenReturn(Optional.empty());
+
+        service.create(USER_ID, "ランチ");
+
+        var captor = ArgumentCaptor.forClass(Post.class);
+        verify(postRepository).save(captor.capture());
+        assertThat(captor.getValue().getCategory()).isEqualTo(PostCategory.OTHER);
+    }
+
+    @Test
+    void create_allowsUpToTheDailyLimit() {
+        // UTC ではまだ 10/7 だが、日本時間では 10/8 の 0:30。日本時間の今日の件数で数える
+        var service = serviceAt("2026-10-08T00:30:00");
+        when(postRepository.countInRange(USER_ID, jst("2026-10-08T00:00:00"), jst("2026-10-09T00:00:00")))
+                .thenReturn((long) PostService.DAILY_POST_LIMIT - 1);
+
+        service.create(USER_ID, "16 件目");
+
+        verify(postRepository).save(any());
+    }
+
+    @Test
+    void create_rejectsWhenDailyLimitReached_withoutCallingClaude() {
+        var service = serviceAt("2026-10-08T12:00:00");
+        when(postRepository.countInRange(USER_ID, jst("2026-10-08T00:00:00"), jst("2026-10-09T00:00:00")))
+                .thenReturn((long) PostService.DAILY_POST_LIMIT);
+
+        assertThatThrownBy(() -> service.create(USER_ID, "17 件目"))
+                .isInstanceOf(DailyPostLimitExceededException.class)
+                .hasMessage("Daily post limit exceeded: userId=1, limit=16");
+
+        verify(categoryClassifier, never()).classify(any());
+        verify(postRepository, never()).save(any());
+    }
+
+    @Test
+    void create_rejectsWhenLimitIsReachedWhileClassifying() {
+        // 判定を待つ間に、別のタブから 16 件目が投稿された
+        var service = serviceAt("2026-10-08T12:00:00");
+        when(postRepository.countInRange(USER_ID, jst("2026-10-08T00:00:00"), jst("2026-10-09T00:00:00")))
+                .thenReturn((long) PostService.DAILY_POST_LIMIT - 1, (long) PostService.DAILY_POST_LIMIT);
+
+        assertThatThrownBy(() -> service.create(USER_ID, "17 件目")).isInstanceOf(DailyPostLimitExceededException.class);
+
+        verify(postRepository, never()).save(any());
+    }
+
+    @Test
+    void edit_reclassifiesWhenContentChanges() {
+        var service = serviceAt("2026-10-08T12:00:00");
+        var post = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
+        post.assignCategory(PostCategory.PRIVATE);
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
+        when(categoryClassifier.classify("資格の勉強をした")).thenReturn(Optional.of(PostCategory.LEARNING));
+
+        service.edit(USER_ID, POST_ID, "資格の勉強をした");
+
+        assertThat(post.getCategory()).isEqualTo(PostCategory.LEARNING);
+    }
+
+    @Test
+    void edit_keepsPreviousCategoryWhenClassificationFails() {
+        var service = serviceAt("2026-10-08T12:00:00");
+        var post = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
+        post.assignCategory(PostCategory.PRIVATE);
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
+        when(categoryClassifier.classify("カレー")).thenReturn(Optional.empty());
+
+        service.edit(USER_ID, POST_ID, "カレー");
+
+        assertThat(post.getCategory()).isEqualTo(PostCategory.PRIVATE);
+        assertThat(post.getContent()).isEqualTo("カレー");
+    }
+
+    @Test
+    void edit_doesNotClassifyWhenContentIsUnchanged() {
+        var service = serviceAt("2026-10-08T12:00:00");
+        var post = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
+
+        service.edit(USER_ID, POST_ID, " ランチ ");
+
+        verify(categoryClassifier, never()).classify(any());
+    }
+
+    @Test
+    void edit_doesNotClassifyCategorySetByUser() {
+        // 手で直したカテゴリは、本文を編集しても AI に上書きさせない（Post ではなく service で守る）
+        var service = serviceAt("2026-10-08T12:00:00");
+        var post = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
+        post.assignCategory(PostCategory.WORK);
+        post.markCategorySetByUser();
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(post));
+
+        service.edit(USER_ID, POST_ID, "取引先とランチ");
+
+        verify(categoryClassifier, never()).classify(any());
+        assertThat(post.getCategory()).isEqualTo(PostCategory.WORK);
+        assertThat(post.getContent()).isEqualTo("取引先とランチ");
+    }
+
+    @Test
+    void edit_doesNotOverwriteCategorySetByUserWhileClassifying() {
+        // 判定を待つ間に手で直された場合（トランザクションの中で読み直したつぶやきに印が立っている）
+        var service = serviceAt("2026-10-08T12:00:00");
+        var before = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
+        var reloaded = new Post(user, "ランチ", jst("2026-10-08T11:00:00"));
+        reloaded.assignCategory(PostCategory.WORK);
+        reloaded.markCategorySetByUser();
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID))
+                .thenReturn(Optional.of(before))
+                .thenReturn(Optional.of(reloaded));
+        when(categoryClassifier.classify("取引先とランチ")).thenReturn(Optional.of(PostCategory.PRIVATE));
+
+        service.edit(USER_ID, POST_ID, "取引先とランチ");
+
+        assertThat(reloaded.getCategory()).isEqualTo(PostCategory.WORK);
+    }
+
+    @Test
+    void createAndEdit_runOutsideTransactionsBecauseTheyCallTheClaudeApi() throws NoSuchMethodException {
+        for (var method : List.of(
+                PostService.class.getMethod("create", Long.class, String.class),
+                PostService.class.getMethod("edit", Long.class, Long.class, String.class))) {
+            assertThat(method.getAnnotation(Transactional.class).propagation()).isEqualTo(Propagation.NOT_SUPPORTED);
+        }
     }
 
     @Test

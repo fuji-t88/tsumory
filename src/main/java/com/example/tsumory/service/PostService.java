@@ -1,6 +1,7 @@
 package com.example.tsumory.service;
 
 import com.example.tsumory.domain.Post;
+import com.example.tsumory.domain.PostCategory;
 import com.example.tsumory.repository.PostRepository;
 import com.example.tsumory.repository.UserRepository;
 import java.time.Clock;
@@ -8,10 +9,13 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Slf4j
 @Service
@@ -21,8 +25,13 @@ public class PostService {
 
     public static final ZoneId ZONE = ZoneId.of("Asia/Tokyo");
 
+    /** 1 日（日本時間）に投稿できるつぶやきの件数。 */
+    public static final int DAILY_POST_LIMIT = 16;
+
     private final PostRepository postRepository;
     private final UserRepository userRepository;
+    private final PostCategoryClassifier categoryClassifier;
+    private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
     public LocalDate today() {
@@ -57,25 +66,68 @@ public class PostService {
         return PostItem.from(findEditablePost(userId, postId), ZONE);
     }
 
-    /** 今日のつぶやきとして投稿する。 */
-    @Transactional
-    public void post(Long userId, String content) {
-        var stripped = content.strip();
-        var post = postRepository.save(new Post(userRepository.getReferenceById(userId), stripped, clock.instant()));
-        log.info("Post created: userId={}, postId={}, contentLength={}", userId, post.getId(), stripped.length());
+    /**
+     * 今日のつぶやきとして投稿する。保存の前に AI でカテゴリを判定し、判定できたときだけ入れる（できなければ初期値の OTHER）。
+     * 今日のつぶやきが {@link #DAILY_POST_LIMIT} 件に達していれば {@link DailyPostLimitExceededException}。
+     *
+     * <p>Claude API の応答を待つ間に DB 接続を握らないよう、このメソッドはトランザクションの外で動かし、保存だけをトランザクションにする。
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public void create(Long userId, String rawContent) {
+        var content = rawContent.strip();
+        var now = clock.instant();
+        var today = LocalDate.ofInstant(now, ZONE);
+        // 上限に達しているなら、Claude API を呼ぶ前に断る（料金をかけないため）
+        checkPostLimit(userId, today);
+        var post = new Post(userRepository.getReferenceById(userId), content, now);
+        categoryClassifier.classify(content).ifPresent(post::assignCategory);
+        var saved = transactionTemplate.execute(status -> {
+            // 判定を待つ間に、別のタブなどから投稿されていないか確かめ直す
+            checkPostLimit(userId, today);
+            return postRepository.save(post);
+        });
+        log.info("つぶやき投稿: userId={}, postId={}, contentLength={}", userId, saved.getId(), content.length());
     }
 
-    @Transactional
+    /**
+     * 本文を直す。本文が変わったときだけ AI でカテゴリを判定し直し、判定できたときだけ入れる（できなければ前のカテゴリのまま）。 ユーザーが手で直したカテゴリは判定し直さない。
+     *
+     * <p>{@link #create} と同じく、Claude API はトランザクションの外で呼び、保存だけをトランザクションにする。
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void edit(Long userId, Long postId, String content) {
         var stripped = content.strip();
-        findEditablePost(userId, postId).edit(stripped, clock.instant());
-        log.info("Post edited: userId={}, postId={}, contentLength={}", userId, postId, stripped.length());
+        var current = findEditablePost(userId, postId);
+        var shouldClassify = !stripped.equals(current.getContent()) && !current.isCategorySetByUser();
+        var category = shouldClassify ? categoryClassifier.classify(stripped) : Optional.<PostCategory>empty();
+        var now = clock.instant();
+        transactionTemplate.executeWithoutResult(status -> {
+            // 判定を待つ間に削除・手での修正がされていないか、トランザクションの中で読み直して確かめる
+            var post = findEditablePost(userId, postId);
+            post.edit(stripped, now);
+            if (!post.isCategorySetByUser()) {
+                category.ifPresent(post::assignCategory);
+            }
+        });
+        log.info(
+                "Post edited: userId={}, postId={}, contentLength={}, classified={}",
+                userId,
+                postId,
+                stripped.length(),
+                shouldClassify);
     }
 
     @Transactional
     public void delete(Long userId, Long postId) {
         postRepository.delete(findEditablePost(userId, postId));
         log.info("Post deleted: userId={}, postId={}", userId, postId);
+    }
+
+    private void checkPostLimit(Long userId, LocalDate today) {
+        if (countPosts(userId, today) >= DAILY_POST_LIMIT) {
+            log.info("Post limit reached: userId={}, date={}, limit={}", userId, today, DAILY_POST_LIMIT);
+            throw new DailyPostLimitExceededException(userId, DAILY_POST_LIMIT);
+        }
     }
 
     private Post findEditablePost(Long userId, Long postId) {
