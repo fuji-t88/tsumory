@@ -39,8 +39,9 @@
 - アプリは http://localhost:8080
 - DB の接続情報は Docker Compose 連携が自動で設定するので、`application.yaml` には書かない
 - データはボリューム `postgres-data` に永続化している。ボリューム名を変えるとデータが消えるので変えない
-- 動作確認用のテストデータは `dev/seed.sql`。初期ユーザー `demo` に、過去 7 日分のつぶやきと日記（数日は日記なし）を入れる。`docker compose exec -T db psql -U tsumory -d tsumory -v ON_ERROR_STOP=1 < dev/seed.sql` で流す（何度流しても重複しない）
-  - 本番に入らないよう、`db/migration` には置かない。テストデータを Flyway のマイグレーションとして足さない
+- 動作確認用のテストデータは `db/dev-seed.sql`。初期ユーザー `demo` に、過去 7 日分のつぶやきと日記（2 日は日記なし）を入れる。`docker compose exec -T db psql -U tsumory -d tsumory -v ON_ERROR_STOP=1 < db/dev-seed.sql` で流すか、Adminer の「SQL コマンド」に貼り付けて実行する
+  - 流すたびに、`demo` の「7 日前〜昨日」のつぶやきと日記を消してから入れ直す（自分で投稿した分も消える）。詳しくはファイル冒頭のコメント
+  - 本番に入らないよう、`src/main/resources/db/migration` には置かない。テストデータを Flyway のマイグレーションとして足さない
 - Claude API のキーは、プロジェクト直下の `.env` に `ANTHROPIC_API_KEY=sk-ant-...` と書く（`.gitignore` 済み。コミットしない）
   - `application.yaml` の `spring.config.import: optional:file:.env[.properties]` で、Spring Boot の標準機能として読む。`.env` を読むためだけのライブラリ（dotenv 系など）は追加しない
   - プロパティファイルとして読むので、`export` や値を囲む引用符は書かない（引用符も値に含まれてしまう）
@@ -58,8 +59,8 @@
 ```
 tsumory/
 ├── compose.yaml                  # 開発用コンテナ（db, adminer）
-├── dev/
-│   └── seed.sql                  # 動作確認用のテストデータ（手で流す。Flyway のマイグレーションではない）
+├── db/
+│   └── dev-seed.sql              # 動作確認用のテストデータ（手で流す。Flyway のマイグレーションではない）
 ├── build.gradle.kts
 └── src/
     ├── main/
