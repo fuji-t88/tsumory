@@ -101,6 +101,29 @@ class PostServiceTest {
     }
 
     @Test
+    void findTodayPosts_callsRepositoryWithTodayRange() {
+        // given
+        var clock = Clock.fixed(Instant.parse("2026-05-23T01:00:00Z"), ZoneId.of("Asia/Tokyo"));
+        var postService = new PostService(
+                postRepository, userRepository, categoryClassifier, new TransactionTemplate(transactionManager), clock);
+        var userId = 1L;
+        var zone = clock.getZone();
+        var today = LocalDate.now(clock);
+        var user = new User("testuser", "encoded", Instant.now(clock));
+        List<Post> expected = List.of(new Post(user, "テスト", Instant.now(clock)));
+        // 日付から時刻の範囲への変換は Repository の default メソッドが行う。Mockito のモックでは default メソッドの本体が
+        // 実行されないので、内側のクエリではなく、サービスが実際に呼ぶ findByUserIdAndDate をモックする
+        when(postRepository.findByUserIdAndDate(userId, today, zone)).thenReturn(expected);
+
+        // when
+        List<Post> result = postService.findTodayPosts(userId);
+
+        // then
+        assertThat(result).hasSize(1);
+        verify(postRepository).findByUserIdAndDate(userId, today, zone);
+    }
+
+    @Test
     void findPostsByDate_passesAnyDateAndClockZone() {
         // 今日・昨日に限らず、任意の日付のつぶやきを取れる
         var service = serviceAt("2026-10-08T12:00:00");
