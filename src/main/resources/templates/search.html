@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>検索 - Tsumory</title>
+    <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<header th:replace="~{fragments/header :: header('search')}"></header>
+<main class="container app-container pb-5">
+    <h1 class="h4 mb-3">検索</h1>
+
+    <!--/* 検索フォーム（GET） */-->
+    <form th:action="@{/search}" method="get" th:object="${searchForm}" class="mb-4" role="search">
+        <div class="mb-2">
+            <label for="q" class="form-label">キーワード</label>
+            <div class="d-flex gap-2">
+                <input type="search" th:field="*{q}" maxlength="50" class="form-control"
+                       th:classappend="${#fields.hasErrors('q')} ? 'is-invalid'">
+                <button type="submit" class="btn btn-primary flex-shrink-0">検索</button>
+            </div>
+            <p th:if="${#fields.hasErrors('q')}" th:errors="*{q}" class="text-danger small mb-0 mt-1" role="alert"></p>
+        </div>
+        <!--/* カテゴリの絞り込み。丸いボタンのような見た目のラジオボタン。選択中を塗りにする */-->
+        <fieldset>
+            <legend class="form-label fs-6">カテゴリ</legend>
+            <div class="d-flex flex-wrap gap-2">
+                <input type="radio" class="btn-check" name="category" id="category-all" value=""
+                       th:checked="${selectedCategory == null}">
+                <label class="btn btn-outline-secondary btn-sm rounded-pill" for="category-all">すべて</label>
+                <th:block th:each="c : ${categories}">
+                    <input type="radio" class="btn-check" name="category" th:id="|category-${c.name()}|"
+                           th:value="${c.name()}" th:checked="${c == selectedCategory}">
+                    <label class="btn btn-outline-secondary btn-sm rounded-pill" th:for="|category-${c.name()}|"
+                           th:text="${c.displayName}">仕事</label>
+                </th:block>
+            </div>
+        </fieldset>
+    </form>
+
+    <!--/* キーワードもカテゴリも指定がないとき（初めて開いたときなど）は、日記を新しい順にページングして出す */-->
+    <section th:if="${recentDiaries != null}">
+        <h2 class="h6 text-secondary">最近の日記</h2>
+        <p th:if="${recentDiaries.isEmpty()}" class="text-secondary">まだ日記はありません</p>
+        <ul th:unless="${recentDiaries.isEmpty()}" class="list-unstyled mb-0">
+            <li th:each="hit : ${recentDiaries.content}" class="mb-2">
+                <a th:href="@{/diary/{date}(date=${hit.date})}" class="card text-decoration-none text-body">
+                    <div class="card-body py-2">
+                        <div class="small text-secondary"
+                             th:text="${hit.date.year == today.year} ? ${#temporals.format(hit.date, 'M月d日（E）')} : ${#temporals.format(hit.date, 'yyyy年M月d日（E）')}">
+                            10月7日（水）
+                        </div>
+                        <p class="mb-0 mt-1"><th:block th:each="s : ${hit.excerpt.segments}" th:text="${s.text}">日記の書き出し</th:block></p>
+                    </div>
+                </a>
+            </li>
+        </ul>
+        <nav th:if="${recentDiaries.totalPages > 1}" class="d-flex justify-content-between mt-3" aria-label="ページ送り">
+            <a th:if="${recentDiaries.hasPrevious()}" th:href="@{/search(page=${recentDiaries.number - 1})}">← 新しい日記</a>
+            <span th:unless="${recentDiaries.hasPrevious()}"></span>
+            <a th:if="${recentDiaries.hasNext()}" th:href="@{/search(page=${recentDiaries.number + 1})}">古い日記 →</a>
+        </nav>
+    </section>
+
+    <section th:if="${results != null}" aria-live="polite">
+        <!--/* 結果の要約 */-->
+        <!--/* 「「カレー」・プライベート 3 件」。区切りの間に空白が入らないよう、1 行に書く */-->
+        <p class="fw-bold"><th:block th:if="${!keyword.isEmpty()}" th:text="|「${keyword}」|">「カレー」</th:block><th:block th:if="${!keyword.isEmpty() and selectedCategory != null}">・</th:block><th:block th:if="${selectedCategory != null}" th:text="${selectedCategory.displayName}">プライベート</th:block><th:block th:text="| ${#lists.size(results)} 件|"> 3 件</th:block></p>
+
+        <p th:if="${#lists.isEmpty(results)}" class="text-secondary">見つかりませんでした</p>
+
+        <ul th:unless="${#lists.isEmpty(results)}" class="list-unstyled mb-0">
+            <li th:each="hit : ${results}" class="mb-2">
+                <a th:href="@{/diary/{date}(date=${hit.date})}" class="card text-decoration-none text-body">
+                    <div class="card-body py-2">
+                        <!--/* つぶやき */-->
+                        <th:block th:unless="${hit.diary}">
+                            <div class="d-flex justify-content-between align-items-baseline small text-secondary">
+                                <span class="badge text-bg-light border">つぶやき</span>
+                                <span th:text="${(hit.date.year == today.year ? #temporals.format(hit.date, 'M月d日') : #temporals.format(hit.date, 'yyyy年M月d日')) + ' ' + #temporals.format(hit.time, 'HH:mm')}">
+                                    10月7日 12:40
+                                </span>
+                            </div>
+                            <!--/* 区切りの間に空白が入らないよう、1 行に書く */-->
+                            <p class="mb-1 mt-1"><th:block th:each="s : ${hit.content.segments}"><mark th:if="${s.match}" th:text="${s.text}">カレー</mark><th:block th:unless="${s.match}" th:text="${s.text}">昼の</th:block></th:block></p>
+                            <span th:switch="${hit.category.name()}">
+                                <span th:case="'WORK'" class="badge bg-primary"><span th:text="${hit.category.displayName}"></span></span>
+                                <span th:case="'PRIVATE'" class="badge bg-success"><span th:text="${hit.category.displayName}"></span></span>
+                                <span th:case="'LEARNING'" class="badge bg-info"><span th:text="${hit.category.displayName}"></span></span>
+                                <span th:case="*" class="badge bg-secondary"><span th:text="${hit.category.displayName}"></span></span>
+                            </span>
+                        </th:block>
+                        <!--/* 日記 */-->
+                        <th:block th:if="${hit.diary}">
+                            <div class="d-flex justify-content-between align-items-baseline small text-secondary">
+                                <span class="badge text-bg-light border">日記</span>
+                                <span th:text="${hit.date.year == today.year} ? ${#temporals.format(hit.date, 'M月d日')} : ${#temporals.format(hit.date, 'yyyy年M月d日')}">
+                                    10月7日
+                                </span>
+                            </div>
+                            <p class="mb-0 mt-1"><th:block th:each="s : ${hit.excerpt.segments}"><mark th:if="${s.match}" th:text="${s.text}">カレー</mark><th:block th:unless="${s.match}" th:text="${s.text}">…昼の</th:block></th:block></p>
+                        </th:block>
+                    </div>
+                </a>
+            </li>
+        </ul>
+
+        <p th:if="${postsTruncated or diariesTruncated}" class="text-secondary small mt-2">
+            新しい順に 50 件まで表示しています。キーワードを足して絞り込んでください
+        </p>
+    </section>
+</main>
+</body>
+</html>

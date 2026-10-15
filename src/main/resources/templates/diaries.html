@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="|${#temporals.format(month, 'yyyy年M月')}の日記 - Tsumory|">日記一覧 - Tsumory</title>
+    <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<header th:replace="~{fragments/header :: header('diaries')}"></header>
+<main class="container app-container pb-5">
+
+    <!--/* 月の見出しと表示の切り替え（リンクで view を変える。JavaScript は使わない） */-->
+    <div class="d-flex align-items-center justify-content-between mb-2">
+        <h1 class="h4 mb-0" th:text="${#temporals.format(month, 'yyyy年M月')}">2026年10月</h1>
+        <div class="btn-group btn-group-sm" role="group" aria-label="表示の切り替え">
+            <a th:href="@{/diaries(month=${month}, view='list')}" class="btn"
+               th:classappend="${view == 'list'} ? 'btn-secondary' : 'btn-outline-secondary'"
+               th:attr="aria-current=${view == 'list'} ? 'true'">リスト</a>
+            <a th:href="@{/diaries(month=${month}, view='calendar')}" class="btn"
+               th:classappend="${view == 'calendar'} ? 'btn-secondary' : 'btn-outline-secondary'"
+               th:attr="aria-current=${view == 'calendar'} ? 'true'">カレンダー</a>
+        </div>
+    </div>
+
+    <!--/* 件数の要約 */-->
+    <p class="text-secondary" th:if="${diaryCount > 0}" th:text="|この月は ${diaryCount} 本の日記が積もっています|">
+        この月は 3 本の日記が積もっています
+    </p>
+    <p class="text-secondary" th:if="${diaryCount == 0}">この月の日記はまだありません</p>
+
+    <!--/* 日ごとの一覧（新しい日付から順。日記かつぶやきのある日だけ） */-->
+    <section th:if="${view == 'list'}">
+        <p th:if="${#lists.isEmpty(days)}" class="text-secondary">この月の日記とつぶやきはありません</p>
+        <ul th:unless="${#lists.isEmpty(days)}" class="list-unstyled mb-0">
+            <li th:each="day : ${days}" class="mb-2">
+                <a th:href="@{/diary/{date}(date=${day.date})}"
+                   class="card text-decoration-none text-body"
+                   th:classappend="${day.hasDiary} ? '' : 'diary-day-empty'">
+                    <div class="card-body py-2">
+                        <div class="d-flex justify-content-between align-items-baseline">
+                            <span class="fw-bold"
+                                  th:text="${day.date.year == today.year} ? ${#temporals.format(day.date, 'M月d日（E）')} : ${#temporals.format(day.date, 'yyyy年M月d日（E）')}">
+                                10月7日（水）
+                            </span>
+                            <span class="text-secondary small" th:text="|つぶやき ${day.postCount}|">つぶやき 3</span>
+                        </div>
+                        <p class="mb-0 mt-1" th:if="${day.hasDiary}" th:text="${day.excerpt}">日記の書き出し</p>
+                        <p class="mb-0 mt-1 text-secondary" th:unless="${day.hasDiary}">日記はまだありません</p>
+                    </div>
+                </a>
+            </li>
+        </ul>
+    </section>
+
+    <!--/* カレンダー（日曜始まり） */-->
+    <section th:if="${view == 'calendar'}">
+        <table class="table table-bordered text-center mb-2">
+            <caption class="visually-hidden" th:text="|${#temporals.format(month, 'yyyy年M月')}のカレンダー|"></caption>
+            <thead>
+            <tr>
+                <th scope="col">日</th>
+                <th scope="col">月</th>
+                <th scope="col">火</th>
+                <th scope="col">水</th>
+                <th scope="col">木</th>
+                <th scope="col">金</th>
+                <th scope="col">土</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="week : ${weeks}">
+                <td th:each="cell : ${week.days}" class="p-0"
+                    th:classappend="${cell.today} ? 'calendar-today'">
+                    <th:block th:unless="${cell.blank}">
+                        <!--/* 開ける日はリンク（何もない日も、開けば日記を書けるので）。範囲外は薄く表示 */-->
+                        <a th:if="${cell.available}" th:href="@{/diary/{date}(date=${cell.date})}"
+                           class="d-block py-2 text-decoration-none text-body">
+                            <span th:text="${cell.date.dayOfMonth}">7</span><br>
+                            <span th:if="${cell.hasDiary}" aria-label="日記あり">●</span>
+                            <span th:if="${!cell.hasDiary and cell.hasPosts}" aria-label="つぶやきのみ">○</span>
+                            <span th:if="${!cell.hasDiary and !cell.hasPosts}" aria-hidden="true">&nbsp;</span>
+                        </a>
+                        <span th:unless="${cell.available}" class="d-block py-2 text-body-tertiary">
+                            <span th:text="${cell.date.dayOfMonth}">7</span><br><span aria-hidden="true">&nbsp;</span>
+                        </span>
+                    </th:block>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        <p class="text-secondary small">● 日記あり　○ つぶやきのみ</p>
+    </section>
+
+    <!--/* 月の移動（登録月より前・今月より後へは移れない） */-->
+    <nav class="d-flex justify-content-between mt-3" aria-label="月の移動">
+        <a th:if="${previousMonth != null}"
+           th:href="@{/diaries(month=${previousMonth}, view=${view})}"
+           th:text="|← ${previousMonth.monthValue}月|">← 9月</a>
+        <span th:if="${previousMonth == null}" class="text-body-tertiary"
+              th:text="|← ${month.minusMonths(1).monthValue}月|">← 9月</span>
+        <a th:if="${nextMonth != null}"
+           th:href="@{/diaries(month=${nextMonth}, view=${view})}"
+           th:text="|${nextMonth.monthValue}月 →|">11月 →</a>
+        <span th:if="${nextMonth == null}" class="text-body-tertiary"
+              th:text="|${month.plusMonths(1).monthValue}月 →|">11月 →</span>
+    </nav>
+</main>
+</body>
+</html>
