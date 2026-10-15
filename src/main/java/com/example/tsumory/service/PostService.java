@@ -74,9 +74,11 @@ public class PostService {
      * 今日のつぶやきが {@link #DAILY_POST_LIMIT} 件に達していれば {@link DailyPostLimitExceededException}。
      *
      * <p>Claude API の応答を待つ間に DB 接続を握らないよう、このメソッドはトランザクションの外で動かし、保存だけをトランザクションにする。
+     *
+     * @return 保存したつぶやき（判定したカテゴリが入っている）
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public void create(Long userId, String rawContent) {
+    public Post create(Long userId, String rawContent) {
         var content = rawContent.strip();
         var now = clock.instant();
         var today = LocalDate.ofInstant(now, ZONE);
@@ -90,6 +92,7 @@ public class PostService {
             return postRepository.save(post);
         });
         log.info("つぶやき投稿: userId={}, postId={}, contentLength={}", userId, saved.getId(), content.length());
+        return saved;
     }
 
     /**

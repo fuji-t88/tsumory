@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -152,6 +153,29 @@ class PostServiceTest {
         verify(postRepository).save(captor.capture());
         assertThat(captor.getValue().getCategory()).isEqualTo(PostCategory.WORK);
         assertThat(captor.getValue().isCategorySetByUser()).isFalse();
+    }
+
+    @Test
+    void create_savesPostAndClassifiesCategory() {
+        // given
+        var clock = Clock.fixed(Instant.parse("2026-05-23T01:00:00Z"), ZoneId.of("Asia/Tokyo"));
+        // 原稿のコンストラクタ（引数 4 つ）に、保存だけをトランザクションにするための TransactionTemplate を足している
+        var postService = new PostService(
+                postRepository, userRepository, categoryClassifier, new TransactionTemplate(transactionManager), clock);
+        var userId = 1L;
+        var content = "ミーティングが3件あった";
+        var user = new User("testuser", "encoded", Instant.now(clock));
+        when(userRepository.getReferenceById(userId)).thenReturn(user);
+        when(categoryClassifier.classify(content)).thenReturn(Optional.of(PostCategory.WORK));
+        when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // when
+        Post result = postService.create(userId, content);
+
+        // then
+        assertThat(result.getCategory()).isEqualTo(PostCategory.WORK);
+        verify(categoryClassifier).classify(content);
+        verify(postRepository).save(any(Post.class));
     }
 
     @Test
