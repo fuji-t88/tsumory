@@ -303,7 +303,10 @@ erDiagram
 ### 日付の範囲
 
 - **開ける日付**は、ユーザーの登録日（`users.created_at` の日本時間の日付）から今日まで。未来の日付と、登録日より前の日付は 404
-- この判定は service の 1 か所（`DiaryService#isAvailableDate(userId, date)`）にまとめ、日記表示・日記生成・日記一覧のカレンダーで使う
+- この判定は service の 1 か所（`DiaryService#availableRange(userId)`）にまとめ、日記表示・日記生成・日記一覧のカレンダーで使う。範囲は record（`DiaryDateRange(first, last)`。`first` が登録日、`last` が今日）で返し、呼び出し側は「含むか」（`contains`）、「未来か」（`isFuture`）、月の範囲（`firstMonth`・`lastMonth`）を問い合わせるだけにする。登録日と「今日」から範囲を自分で組み立てない（業務ルールなので、仕様が変わったときに 1 か所だけ直せばよいように）
+  - 日記の生成は、未来の日付（メッセージを付けてホームへ戻す）と登録日より前（404）で応答を変えるので、範囲に「未来か」を聞いて振り分ける
+  - 「今日」は範囲を作るときに 1 回だけ求める（日記一覧のカレンダーの「今日」の印も `last` を使う。途中で 0 時をまたいでもずれない）
+  - `DiaryService#isAvailableDate(userId, date)` は `availableRange(userId).contains(date)` の短縮形として残す
 - **つぶやきを編集・削除できる日付**はフェーズ 1 のまま今日と昨日（`PostService#isEditableDate`）。2 つの判定を混ぜない
 - 月（日記一覧）は、登録月から今月まで。それ以外の月や `yyyy-MM` でない値は 404
 - **日付（`LocalDate`）からつぶやきの投稿時刻（`Instant`）の範囲への変換**は、`PostRepository` の default メソッド（`findByUserIdAndDate(userId, date, zone)`・`countByUserIdAndDate`・`findPostedAtByUserIdAndMonth(userId, month, zone)`）の 1 か所にまとめる。service は日付とタイムゾーン（`clock.getZone()`）を渡すだけで、範囲を組み立てない
@@ -552,7 +555,7 @@ anthropic:
 
 | 対象 | 方法 | 主な確認内容 |
 |---|---|---|
-| `DiaryService#isAvailableDate` | 単体テスト（固定の `Clock`） | 登録日・今日は開ける、登録日の前日・明日は開けない、0:00 ちょうどの境目 |
+| `DiaryService#availableRange`・`DiaryDateRange` | 単体テスト（固定の `Clock`） | 登録日・今日は開ける、登録日の前日・明日は開けない、0:00 ちょうどの境目、明日は「未来」・登録日の前日は「未来」でない、月の範囲 |
 | `DiaryGenerationService#generateForDate` | 単体テスト（`DiaryWriter`・`DiaryService` をモック） | 過去の日付でもその日のつぶやきを渡してその日の日記として保存する、範囲外の日付は生成しない、0 件なら `NoPostsException` |
 | `ClaudeService#buildUserMessage` | 単体テスト | 投稿順のまま `- [カテゴリ] 本文` の形で並ぶ、判定できなかったつぶやきは「その他」、本文の `<`・`>`・`&` のエスケープ |
 | `PostRepository` の default メソッド | 単体テスト（クエリのメソッドをモックにし、default メソッドだけを動かす） | 日付からの範囲が「その日 0:00 以上、翌日 0:00 未満」になる、タイムゾーンで範囲が変わる、月の範囲が翌月 1 日 0:00 の手前まで |
