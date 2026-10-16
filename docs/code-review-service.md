@@ -7,6 +7,7 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
   - AI 連携：`ClaudeService`（`DiaryWriter` の実装）・`PostCategoryClassifier`
   - 値・例外：`PostItem`・`DiaryItem`・`SearchHit`・`SearchResult`・`HighlightedText`・`DiaryDaySummary`・`DiaryCalendarDay`・`DiaryCalendarWeek`・`DiaryMonthSummary`、各例外クラス
 - 方法：コードを読んで観点と突き合わせた。コードは変えていない。指摘の重要度は次のとおり
+- 追加（2026-10-16）：指摘 11 は、「未来日付チェックが表示と生成の 2 か所に重複している気がする。業務ルールを一箇所にまとめたい」という問いを受けて、日付の範囲の判定を洗い出して足した（調べると 3 か所だった）
   - **高**：利用者に見える不具合や、セキュリティの穴になりうる
   - **中**：今は動くが、条件しだいで不具合になる。または、直さないと保守で誤りを招きやすい
   - **低**：読みやすさ・一貫性の問題。動作には影響しない
@@ -42,6 +43,7 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 | 8 | 低 | 可読性・保守性 | 「他人のつぶやきなら見つからない扱い」の取得処理が 2 か所に重複 | `PostService#updateCategory`・`#findEditablePost` | 対応済み |
 | 9 | 低 | 可読性・保守性 | 本番のコードから呼ばれていないメソッドがある | `PostService#findTodayPosts` | 保留 |
 | 10 | 低 | 可読性・保守性 | つぶやきはリポジトリ、日記はサービスを経由していて、取り方がそろっていない | `SearchService` | 対応済み |
+| 11 | 中 | 可読性・保守性 | 業務ルール「日記を開ける日付は登録日から今日まで」の判定が 3 か所にある（日記の表示・生成・日記一覧のカレンダー） | `DiaryService`・`DiaryGenerationService`・`DiaryListService` | 未対応 |
 
 高の指摘はない。セキュリティの基本（他人のデータの絞り込み、SQL のパラメータ化、ログに本文を出さない、画面に内部情報を出さない）は満たしている（末尾の「よくできている点」）。
 
@@ -122,6 +124,18 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 - 場所：`SearchService#search`。つぶやきは `PostRepository` を直接呼び、日記は `DiaryService#searchDiaries` を経由する
 - 何が起きるか：エスケープや振り分けの場所が、つぶやきは `SearchService`、日記は `DiaryService` と分かれる（指摘 4 の `LIKE` のエスケープの重複の原因でもある）
 - 直し方の案：つぶやきの検索も `PostService` にメソッドを足して経由するか、日記も `DiaryRepository` を直接呼ぶ形にそろえる
+
+### 11. 「日記を開ける日付」の判定が 3 か所にある（中）
+
+- 状態：未対応
+
+- 場所
+  - `DiaryService#isAvailableDate`：登録日から今日までか。日記の表示（`findByDate`）で使う
+  - `DiaryGenerationService#generateForDate`：未来の日付だけを `date.isAfter(LocalDate.now(clock))` で先に自分で判定し、そのあと `isAvailableDate` も呼ぶ（未来の判定が 2 回ある）
+  - `DiaryListService#summarize`：カレンダーのマスを開けるかを `!date.isBefore(registeredDate) && !date.isAfter(today)` で書き直している。月の範囲（登録月から今月まで）も、登録日と「今日」から自分で求めている
+- 何が起きるか：「登録日から今日まで」は仕様が変われば動きうる業務ルール（CLAUDE.md の「入力の検証（多層防御）」の制約の置き場所）。たとえば「過去データの取り込みで登録日より前も開けるようにする」「予約投稿のために明日まで開けるようにする」と変えるとき、3 か所のどれかを直し忘れると、カレンダーではリンクになるのに開くと 404、表示はできるのに生成は断られる、のようにずれる
+- 仕様：phase2-spec.md の「6. 処理の詳細 > 日付の範囲」は「この判定は service の 1 か所（`DiaryService#isAvailableDate(userId, date)`）にまとめ、日記表示・日記生成・日記一覧のカレンダーで使う」と決めている。仕様から外れている
+- 直し方の案：業務ルールを `DiaryService#availableRange(userId)` の 1 か所で決め、範囲を表す record（`DiaryDateRange(first, last)`）で返す。表示・生成・カレンダーは、どれもこの範囲に「含むか」「未来か」「月の範囲」を問い合わせる。生成は、未来の日付（メッセージを付けてホームへ）と登録日より前（404）で応答を変えるので、範囲に「未来か」を聞いて振り分ける
 
 ## エラーハンドリング
 
