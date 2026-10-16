@@ -164,6 +164,45 @@ tsumory/
 - エンティティには `@Getter` と必要な `@Setter` だけを付ける。`@Data`・`@EqualsAndHashCode`・`@ToString` は付けない（遅延ロードや循環参照で問題が起きるため）
 - エンティティの引数なしコンストラクタは `@NoArgsConstructor(access = AccessLevel.PROTECTED)` にする（JPA 用。アプリのコードからは、必須の値を受け取るコンストラクタで作る）
 - エンティティの関連（`@ManyToOne` など）は `fetch = FetchType.LAZY` を明示する（`@ManyToOne` の既定は EAGER で、一覧を取得すると関連先ごとに SELECT が発行される N+1 問題の原因になるため）
+- `NOT_SUPPORTED` のメソッドの中で DB を読むときも、短いトランザクション（`TransactionTemplate`）で囲む（例: `PostService#create` の上限の確認）。同じクラスのメソッドを直接呼ぶとトランザクションを持たず、Spring がその範囲に結び付けた `EntityManager` が、DB 接続をメソッドの終わりまで（外部 API の応答を待つ間も）握り続けるため
+- `spring.jpa.open-in-view` は `false` のままにする（有効だと、リクエストの終わりまで DB 接続を握る）。そのため controller・テンプレートでは遅延ロードの関連を読まない（`LazyInitializationException` になる）。表示用の値は service で record にして渡す
+
+### 入力の検証（多層防御）
+
+ユーザーの入力の決まりは、1 か所だけで守らない。フォームを通らない経路（将来の API・管理用の処理・テストデータ）や、改修でチェックが外れたときにも守りが抜けないようにする。
+
+- 決まりは次の層で重ねて守る
+
+  | 層 | 守り方 | 例 |
+  |---|---|---|
+  | フォーム | Bean Validation（`@NotBlank`・`@Size`・`@Pattern`）。入力値を残して再表示する | `PostForm`・`PostEditForm` |
+  | ドメイン | エンティティのコンストラクタと状態を変えるメソッドで確かめ、破っていれば例外を投げる | `Post`・`Diary`・`User` |
+  | DB | 書けるものは検査制約（`CHECK`）。DB に直接書く経路（`db/dev-seed.sql`・Adminer・手で流す SQL）に備える | `posts_content_no_invisible_chars` |
+
+- エンティティは自分の決まりを自分で守る
+  - 必須の値の `null` は `Objects.requireNonNull(値, "名前")`（`NullPointerException`）、決まり違反は `IllegalArgumentException` にする
+  - 例外のメッセージに値を入れない（本文やパスワードがログに出ないように）
+  - 状態を変えるメソッドは、すべての値を確かめてから書き換える（途中で失敗して、一部だけ書き換わった状態にしない）
+  - 時計や DB に依存する決まり（未来の日付、登録日より前など）はエンティティに入れず、service で守る（エンティティは `Clock` を持たない）
+- 上限や形式は定数 1 つから各層に配る。数字や正規表現を層ごとに書かない
+  - Java：エンティティや form の定数を `@Size(max = ...)`・`@Column(length = ...)`・`@Pattern(regexp = ...)` で使う（例: `Post.CONTENT_MAX_LENGTH`・`Post.NO_INVISIBLE_CHARS_REGEX`）。文言も `{max} 文字以内で入力してください` のように数字を書かない
+  - テンプレート：`maxlength` は、`InputLimitsAdvice`（`@ControllerAdvice`）が渡す値を `th:maxlength` で使う。Thymeleaf 3.1 は式の中での `T(...)` による static の参照を制限するので、定数はモデルで渡す
+  - DB：PostgreSQL の正規表現は Unicode の文字の種類（`\p{Cf}` など）を使えない。Java の定義から文字の範囲を書き出して SQL に書き、食い違いがないことをテストで確かめる（`PostContentCheckMigrationTest`）。範囲は `\uXXXX` の形で書き、見えない文字をファイルに直接書かない
+- 既存のテーブルに検査制約を足すときは `NOT VALID` を検討する。ただし `NOT VALID` でも、既存の行を UPDATE するとその行は確かめられる。残すと決めた古いデータ（フェーズ 1 の改行入りのつぶやきなど）が破る条件は、制約に入れない
+- AI のプロンプトに渡るユーザーの文字列は、見えない文字（改行以外の制御文字・書式文字・行と段落の区切り。`Post.INVISIBLE_CHAR_CLASS`）を入口で拒否する。画面では無害に見える文に指示を隠せるため。プロンプトを組み立てるときにも同じ文字を取り除く（入口の守りより前に保存されたデータに備える）
+  - 見える文字で書いた指示を、言葉（「無視して」など）で弾くことはしない。言い換えで抜けられ、普通の文まで弾いてしまうため。禁止事項の「プロンプトインジェクション」の守りで扱う
+
+### テンプレート・画面
+
+- テンプレートのコメントは Thymeleaf のコメント（`<!--/* */-->`）で書く。HTML のコメント（`<!-- -->`）はそのままブラウザに送られる
+- インラインのイベントハンドラ（`onclick`・`onchange`・`onsubmit` など）やインラインの `<script>` は書かない。スクリプトは `static/js/` に置き、`addEventListener` で付ける（Content-Security-Policy で `unsafe-inline` を禁止できるようにするため）。フォームの二重送信の防止は `form-submit.js` の `js-submit-once` を使う
+- エラー画面は `templates/error/404.html`・`500.html` と、ほかの状態コードの受け皿の `templates/error.html`。どれかがないと Spring Boot の英語の画面（Whitelabel Error Page）になる。エラー応答の設定は `spring.web.error.*` に書く（Spring Boot 4 では `server.error.*` は非推奨）
+
+### テスト
+
+- 守り（入力チェック・制約・例外）を足したら、本体の変更を一度外して、そのテストが失敗することを確かめる（テストが空振りしていないか）
+- `@WebMvcTest`（MockMvc）はエラー画面への切り替えを再現しない。エラー画面は、テスト用の controller から描画するか、`/error` をエラーの属性を付けて呼んで確かめる。実際の動き（状態コードごとの画面の選び分けなど）は、ランダムポートでサーバーを立てる一時的なテストで確かめ、確かめたら消す
+- DB の制約のように自動テストできないもの（Testcontainers を入れるまで）は、開発 DB でトランザクションの中で確かめ、最後にロールバックする。開発 DB にデータを残さない
 
 ### ログ
 
