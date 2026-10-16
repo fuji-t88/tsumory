@@ -18,6 +18,8 @@ class PostContentCheckMigrationTest {
 
     private static final String MIGRATION = "db/migration/V3__add_content_checks_to_posts.sql";
 
+    private static final Pattern INVISIBLE = Pattern.compile(Post.INVISIBLE_CHAR_CLASS);
+
     private static String migration() throws IOException {
         return new ClassPathResource(MIGRATION).getContentAsString(StandardCharsets.UTF_8);
     }
@@ -28,6 +30,14 @@ class PostContentCheckMigrationTest {
                 .matcher(sql);
         assertThat(matcher.find()).as(constraintName).isTrue();
         return matcher.group(1);
+    }
+
+    /**
+     * 制約の文字の範囲を、Java の正規表現の文字クラスにする。BMP の文字（\\uXXXX）は Java でも同じ書き方で、それより上の文字
+     * （PostgreSQL の \\UXXXXXXXX）は Java では \\x{XXXXXXXX} と書く。
+     */
+    private static Pattern asJavaCharClass(String ranges) {
+        return Pattern.compile("[" + ranges.replaceAll("\\\\U([0-9A-F]{8})", "\\\\x{$1}") + "]");
     }
 
     /** {@code predicate} に当てはまる文字（U+0001 から）を、PostgreSQL の正規表現の範囲（\\uXXXX・\\UXXXXXXXX）で書き出す。 */
@@ -56,11 +66,9 @@ class PostContentCheckMigrationTest {
 
     @Test
     void 見えない文字の範囲はPostの定義と同じ() throws IOException {
-        var invisible = Pattern.compile(Post.INVISIBLE_CHAR_CLASS);
-
         assertThat(rangesOf(migration(), "posts_content_no_invisible_chars"))
                 .isEqualTo(rangesFor(
-                        cp -> invisible.matcher(Character.toString(cp)).matches()));
+                        cp -> INVISIBLE.matcher(Character.toString(cp)).matches()));
     }
 
     @Test
@@ -71,17 +79,18 @@ class PostContentCheckMigrationTest {
     @Test
     void マイグレーション自体に見えない文字を直接書かない() throws IOException {
         // 範囲は \\uXXXX の形で書く。文字そのものを書くと、エディタやレビューで見えず、誤りに気づけない
-        var invisible = Pattern.compile(Post.INVISIBLE_CHAR_CLASS);
-
-        assertThat(invisible.matcher(migration()).find()).isFalse();
+        assertThat(INVISIBLE.matcher(migration()).find()).isFalse();
     }
 
     @Test
-    void 改行はDBの制約では止めない() {
+    void 改行はDBの制約では止めない() throws IOException {
         // フェーズ 1 の改行入りのつぶやきを UPDATE（カテゴリの変更）できるようにするため。改行はフォーム・Post・プロンプトで守る
-        var invisible = Pattern.compile(Post.INVISIBLE_CHAR_CLASS);
+        var dbInvisible = asJavaCharClass(rangesOf(migration(), "posts_content_no_invisible_chars"));
 
-        assertThat(invisible.matcher("\r").find()).isFalse();
-        assertThat(invisible.matcher("\n").find()).isFalse();
+        assertThat(dbInvisible.matcher("\r").find()).isFalse();
+        assertThat(dbInvisible.matcher("\n").find()).isFalse();
+        // 範囲の読み取りが空振りしていない（BMP の文字と、それより上のタグ文字の両方に当てはまる）
+        assertThat(dbInvisible.matcher("\u200B").find()).isTrue();
+        assertThat(dbInvisible.matcher(TestFixtures.hiddenAscii("x")).find()).isTrue();
     }
 }
