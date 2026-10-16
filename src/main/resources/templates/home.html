@@ -59,8 +59,8 @@
                                 <span th:replace="~{fragments/category-badge :: badge(${post.category})}"></span>
                                 <form th:action="@{/posts/{id}/category(id=${post.id})}" method="post" class="d-inline">
                                     <label th:for="|category-${post.id}|" class="visually-hidden">カテゴリ</label>
-                                    <select th:id="|category-${post.id}|" name="category" onchange="this.form.submit()"
-                                            class="form-select form-select-sm d-inline-block w-auto py-0">
+                                    <select th:id="|category-${post.id}|" name="category"
+                                            class="form-select form-select-sm d-inline-block w-auto py-0 js-auto-submit">
                                         <option th:each="c : ${categories}" th:value="${c.name()}"
                                                 th:text="${c.displayName}" th:selected="${c == post.category}">
                                             プライベート
@@ -120,7 +120,7 @@
                 </div>
                 <!--/* 今日の日記を書く（遡り生成と同じ POST /diary/{date}/generate に今日の日付を付けて送る） */-->
                 <form th:action="@{/diary/{date}/generate(date=${today})}" method="post"
-                      onsubmit="document.getElementById('genBtn').disabled = true; document.getElementById('genLoading').hidden = false;">
+                      class="js-submit-once" data-loading="genLoading">
                     <button type="submit" id="genBtn" class="btn btn-primary"
                             th:disabled="${#lists.isEmpty(posts)}">日記を生成</button>
                     <span id="genLoading" hidden aria-live="polite" class="ms-2 text-body-secondary small">
@@ -131,5 +131,6 @@
         </div>
     </section>
 </main>
+<script th:src="@{/js/form-submit.js}"></script>
 </body>
 </html>

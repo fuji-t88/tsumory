@@ -121,8 +121,8 @@ class PostControllerTest {
                 .contains("action=\"/posts/10/category\"")
                 .contains("action=\"/posts/11/category\"")
                 .contains("<label for=\"category-10\" class=\"visually-hidden\">カテゴリ</label>")
-                // 選んだ瞬間に送信するので、送信ボタンは置かない
-                .contains("id=\"category-10\" name=\"category\" onchange=\"this.form.submit()\"")
+                // 選んだ瞬間に送信するので、送信ボタンは置かない（送信は form-submit.js が change で行う）
+                .containsPattern("id=\"category-10\" name=\"category\"\\s+class=\"[^\"]*js-auto-submit\"")
                 .doesNotContain(">変更</button>")
                 // 10 は「プライベート」、11 は「その他」を選んだ状態
                 .containsPattern("id=\"category-10\"[^<]*>\\s*(<option[^>]*>[^<]*</option>\\s*)*"
@@ -162,6 +162,22 @@ class PostControllerTest {
         // 画面の maxlength も Post.CONTENT_MAX_LENGTH から出す（InputLimitsAdvice）
         mockMvc.perform(get("/").with(user(PRINCIPAL)))
                 .andExpect(content().string(containsString("maxlength=\"" + Post.CONTENT_MAX_LENGTH + "\"")));
+    }
+
+    @Test
+    void インラインのイベントハンドラを書かずにスクリプトを読み込む() throws Exception {
+        // CSP で unsafe-inline を禁止できるよう、処理は static/js/form-submit.js で付ける
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                .doesNotContainPattern("\\son[a-z]+=")
+                .contains("<script src=\"/js/form-submit.js\"></script>")
+                // 日記の生成：送信中はボタンを押せなくし、案内を出す
+                .containsPattern(
+                        "action=\"/diary/2026-10-07/generate\"[^>]*class=\"js-submit-once\" data-loading=\"genLoading\"");
     }
 
     @Test
