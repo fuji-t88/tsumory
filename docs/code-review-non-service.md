@@ -47,7 +47,7 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 | 8 | 低 | 可読性・保守性 | `Post` が自分で守っている入力の決まりが、改行の禁止だけ（空・100 文字はフォームと DB だけ） | `Post` | 対応済み |
 | 9 | 低 | 可読性・保守性 | controller の引数の名前と順番がメソッドごとにそろっていない | `PostController`・`DiaryController` | 対応済み |
 | 10 | 低 | 可読性・保守性 | コメントが古い、または作業メモが残っている | `AnthropicConfig`・`fragments/header.html` | 対応済み |
-| 11 | 中 | エラーハンドリング | `spring.jpa.open-in-view` が既定の有効のままで、Claude API の応答を待つ間も DB 接続を握り続ける。仕様の `ddl-auto: validate` もない | `application.yaml` | 未対応 |
+| 11 | 中 | エラーハンドリング | `spring.jpa.open-in-view` が既定の有効のままで、Claude API の応答を待つ間も DB 接続を握り続ける。仕様の `ddl-auto: validate` もない | `application.yaml` | 対応済み |
 
 高の指摘が 1 件ある（指摘 1。対応済み）。認証・認可、CSRF、XSS、他人のデータの絞り込み、オープンリダイレクト、ログの扱いは観点どおり（末尾の「確認したが問題がなかった点」）。
 
@@ -124,7 +124,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 11. `open-in-view` が有効のままで、Claude API を待つ間も DB 接続を握り続ける（中）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `f51486e`・`dbd3989`）：`application.yaml` に `spring.jpa.open-in-view: false` と `spring.jpa.hibernate.ddl-auto: validate` を書いた（`f51486e`）。直したあと同じ一時的なテストで測ると、日記の生成の待ち時間中の接続数は 0 になったが、つぶやきの分類はまだ 1 だった。原因は `PostService#create`・`#edit` にあった。どちらもトランザクションの外（`NOT_SUPPORTED`）で動くが、Spring はその範囲にも 1 つの `EntityManager` を結び付ける。上限の確認（`checkPostLimit`）と編集前の読み込み（`findEditablePost`）は同じクラスの中から呼んでいてトランザクションを持たないので、その接続をメソッドが終わるまで握っていた。この 2 つの読み込みも `TransactionTemplate` の短いトランザクションで囲み（`dbd3989`）、投稿の分類の待ち時間中も 0 になったことを確かめた。編集の経路は、開発 DB に分類まで進めるつぶやき（昨日の、手で直していないもの）がなく実サーバーでは測れなかったので、単体テストで、分類の前に読み込みのトランザクションがコミットまで済んでいることを確かめた。あわせて、全画面（ホーム・日記一覧・日記表示・カレンダー・検索）を実サーバーで開き、`open-in-view` を切っても遅延ロードの例外（500）にならないこと、`ddl-auto: validate` で起動できること（エンティティとスキーマが合っていること）を確かめた。テストは、`ApplicationYamlTest`（2 つの設定が消えていないこと）と `PostServiceTest` の 2 件（分類の前の読み込みが短いトランザクションで済んでいること）を足し、前提が変わった 2 件を直した
 
 - 場所：`src/main/resources/application.yaml`（`spring.jpa.open-in-view` と `spring.jpa.hibernate.ddl-auto` を書いていない）
 - 何が起きるか
