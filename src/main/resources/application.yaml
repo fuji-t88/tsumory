@@ -20,6 +20,12 @@ spring:
       include-message: never
       include-binding-errors: never
   jpa:
+    # JPA のセッションをリクエストの終わりまで開いたままにしない（既定は有効）。有効だと、一度 DB を読んだ接続を
+    # リクエストの終わりまで握り、Claude API の応答を待つ間（最大 120 秒）も接続プールを使い続けてしまう
+    open-in-view: false
+    hibernate:
+      # スキーマは Flyway で作る。起動時にエンティティと DB の列を突き合わせ、ずれていれば起動しない（作り替えはしない）
+      ddl-auto: validate
     properties:
       hibernate:
         format_sql: true
