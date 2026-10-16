@@ -45,8 +45,12 @@ public class SearchService {
      *
      * @param keyword 前後の空白を取り除いたキーワード。なければ空文字
      * @param category 絞り込むカテゴリ。「すべて」なら {@code null}。カテゴリを選んでいるときは、日記を検索しない（日記にはカテゴリがないため）
+     * @throws IllegalArgumentException キーワードもカテゴリも指定がないとき（呼び出し側の誤り。黙って 0 件を返すと気づけないため）
      */
     public SearchResult search(Long userId, String keyword, PostCategory category) {
+        if (keyword.isEmpty() && category == null) {
+            throw new IllegalArgumentException("Either keyword or category is required");
+        }
         var escaped = keyword.isEmpty() ? null : escapeLike(keyword);
 
         // つぶやきは、上限を超えたかを知るため 1 件多く取得する

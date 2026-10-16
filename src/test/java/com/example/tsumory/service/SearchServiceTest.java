@@ -7,6 +7,7 @@ import static com.example.tsumory.domain.TestFixtures.hanako;
 import static com.example.tsumory.domain.TestFixtures.post;
 import static com.example.tsumory.domain.TestFixtures.posts;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -14,6 +15,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.example.tsumory.domain.Post;
@@ -58,6 +60,13 @@ class SearchServiceTest {
     }
 
     private static final PageRequest FIRST_PAGE = PageRequest.of(0, 50);
+
+    @Test
+    void search_withoutKeywordAndCategory_throwsInsteadOfReturningNothing() {
+        assertThatThrownBy(() -> service.search(USER_ID, "", null)).isInstanceOf(IllegalArgumentException.class);
+
+        verifyNoInteractions(postRepository, diaryService);
+    }
 
     @Test
     void escapeLike_prefixesMetaCharactersWithBang() {
