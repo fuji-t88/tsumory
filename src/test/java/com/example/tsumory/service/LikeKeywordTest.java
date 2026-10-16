@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 class LikeKeywordTest {
 
     @Test
-    void escape_prefixesMetaCharactersWithBang() {
+    void LIKEで特別な意味を持つ文字の前にエスケープ文字を付ける() {
         assertThat(LikeKeyword.escape("Curry")).isEqualTo("Curry");
         // ユーザーが % や _ を入力しても、全件や任意の 1 文字に一致させない
         assertThat(LikeKeyword.escape("100%")).isEqualTo("100!%");
