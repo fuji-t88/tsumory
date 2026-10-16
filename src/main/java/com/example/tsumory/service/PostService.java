@@ -144,10 +144,7 @@ public class PostService {
      */
     @Transactional
     public void updateCategory(Long userId, Long postId, PostCategory category) {
-        var post = postRepository.findByIdAndUserId(postId, userId).orElseThrow(() -> {
-            log.warn("Post not found for user: userId={}, postId={}", userId, postId);
-            return new ResourceNotFoundException("Post", postId);
-        });
+        var post = findOwnPost(userId, postId);
         post.assignCategory(category);
         post.markCategorySetByUser();
         // どのカテゴリにしたかは出さない（CLAUDE.md の禁止事項「ログ」）
@@ -167,12 +164,18 @@ public class PostService {
         }
     }
 
-    private Post findEditablePost(Long userId, Long postId) {
-        var post = postRepository.findByIdAndUserId(postId, userId).orElseThrow(() -> {
+    /** 自分のつぶやきを返す。他人のつぶやきや削除済みなら {@link ResourceNotFoundException}（2 つは区別しない）。 */
+    private Post findOwnPost(Long userId, Long postId) {
+        return postRepository.findByIdAndUserId(postId, userId).orElseThrow(() -> {
             // 他人のつぶやきへのアクセスの試行を含む（削除済みの ID と区別はできない）
             log.warn("Post not found for user: userId={}, postId={}", userId, postId);
             return new ResourceNotFoundException("Post", postId);
         });
+    }
+
+    /** 自分のつぶやきのうち、編集・削除できる日付（今日と昨日）のものを返す。それ以外は {@link ResourceNotFoundException}。 */
+    private Post findEditablePost(Long userId, Long postId) {
+        var post = findOwnPost(userId, postId);
         var postedDate = LocalDate.ofInstant(post.getPostedAt(), ZONE);
         if (!isEditableDate(postedDate)) {
             // 0 時を過ぎて、開いたままの画面から一昨日の分を直そうとした場合など
