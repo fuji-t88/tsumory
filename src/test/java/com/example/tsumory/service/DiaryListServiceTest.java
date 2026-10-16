@@ -1,5 +1,6 @@
 package com.example.tsumory.service;
 
+import static com.example.tsumory.domain.TestFixtures.JST;
 import static com.example.tsumory.domain.TestFixtures.clockAt;
 import static com.example.tsumory.domain.TestFixtures.diary;
 import static com.example.tsumory.domain.TestFixtures.hanako;
@@ -66,7 +67,7 @@ class DiaryListServiceTest {
         when(diaryRepository.findByUserIdAndDiaryDateBetweenOrderByDiaryDateDesc(
                         USER_ID, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)))
                 .thenReturn(List.of(diaryOn(LocalDate.of(2026, 10, 7), "寝坊した一日。")));
-        when(postRepository.findPostedAtByUserIdAndMonth(USER_ID, OCTOBER, PostService.ZONE))
+        when(postRepository.findPostedAtByUserIdAndMonth(USER_ID, OCTOBER, JST))
                 .thenReturn(
                         List.of(jst("2026-10-07T08:00:00"), jst("2026-10-07T12:40:00"), jst("2026-10-12T21:00:00")));
 

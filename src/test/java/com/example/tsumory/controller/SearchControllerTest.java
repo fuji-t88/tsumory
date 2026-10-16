@@ -16,10 +16,10 @@ import com.example.tsumory.config.CustomUserDetails;
 import com.example.tsumory.config.CustomUserDetailsService;
 import com.example.tsumory.config.SecurityConfig;
 import com.example.tsumory.domain.PostCategory;
+import com.example.tsumory.domain.TestFixtures;
 import com.example.tsumory.repository.UserRepository;
 import com.example.tsumory.service.HighlightedText;
 import com.example.tsumory.service.HighlightedText.Segment;
-import com.example.tsumory.service.PostService;
 import com.example.tsumory.service.SearchHit;
 import com.example.tsumory.service.SearchResult;
 import com.example.tsumory.service.SearchService;
@@ -51,7 +51,7 @@ class SearchControllerTest {
     static class FixedClock {
         @Bean
         Clock clock() {
-            return Clock.fixed(Instant.parse("2026-10-15T12:00:00Z"), PostService.ZONE);
+            return Clock.fixed(Instant.parse("2026-10-15T12:00:00Z"), TestFixtures.JST);
         }
     }
 
@@ -80,7 +80,9 @@ class SearchControllerTest {
     @Test
     void 初めて開いたときは検索せずに最近の日記を新しい順に出す() throws Exception {
         var diaryHit = new SearchHit.DiaryHit(
-                LocalDate.of(2026, 10, 7), new HighlightedText(List.of(new Segment("寝坊した一日。", false))));
+                LocalDate.of(2026, 10, 7),
+                new HighlightedText(List.of(new Segment("寝坊した一日。", false))),
+                Instant.parse("2026-10-07T14:59:59Z"));
         when(searchService.recentDiaries(any(), any()))
                 .thenReturn(new PageImpl<>(List.of(diaryHit), PageRequest.of(0, 20), 21));
 
@@ -154,7 +156,9 @@ class SearchControllerTest {
                 PostCategory.PRIVATE,
                 Instant.parse("2026-10-07T03:40:00Z"));
         var diaryHit = new SearchHit.DiaryHit(
-                LocalDate.of(2025, 12, 31), new HighlightedText(List.of(new Segment("カレーの日", false))));
+                LocalDate.of(2025, 12, 31),
+                new HighlightedText(List.of(new Segment("カレーの日", false))),
+                Instant.parse("2025-12-31T14:59:59Z"));
         when(searchService.search(USER_ID, "カレー", null))
                 .thenReturn(new SearchResult(List.of(postHit, diaryHit), true, false));
 

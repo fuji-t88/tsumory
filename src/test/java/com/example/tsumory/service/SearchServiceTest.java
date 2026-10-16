@@ -1,6 +1,8 @@
 package com.example.tsumory.service;
 
+import static com.example.tsumory.domain.TestFixtures.NOW;
 import static com.example.tsumory.domain.TestFixtures.STUDY;
+import static com.example.tsumory.domain.TestFixtures.clockAt;
 import static com.example.tsumory.domain.TestFixtures.diaries;
 import static com.example.tsumory.domain.TestFixtures.diary;
 import static com.example.tsumory.domain.TestFixtures.hanako;
@@ -26,9 +28,9 @@ import com.example.tsumory.service.HighlightedText.Segment;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Limit;
@@ -49,10 +51,15 @@ class SearchServiceTest {
     @Mock
     private DiaryService diaryService;
 
-    @InjectMocks
     private SearchService service;
 
     private final User user = hanako();
+
+    @BeforeEach
+    void setUp() {
+        // 日付・時刻は日本時間で求める（Clock のタイムゾーン）
+        service = new SearchService(postRepository, diaryService, clockAt(NOW));
+    }
 
     /** 花子が {@code postedAt}（日本時間）に投稿したつぶやき。 */
     private Post postAt(String content, String postedAt) {

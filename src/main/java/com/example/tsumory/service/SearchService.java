@@ -4,6 +4,7 @@ import com.example.tsumory.domain.Diary;
 import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
 import com.example.tsumory.repository.PostRepository;
+import java.time.Clock;
 import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.List;
@@ -34,11 +35,15 @@ public class SearchService {
 
     static final int EXCERPT_AFTER = 60;
 
+    /** 日記を、つぶやきと混ぜて新しい順に並べるときの時刻（その日のつぶやきより後に並べる）。 */
+    private static final LocalTime DIARY_SORT_TIME = LocalTime.of(23, 59, 59);
+
     /** キーワードなしで開いたときに、1 ページに出す日記の件数。 */
     public static final int RECENT_PAGE_SIZE = 20;
 
     private final PostRepository postRepository;
     private final DiaryService diaryService;
+    private final Clock clock;
 
     /**
      * キーワードとカテゴリで検索する。どちらも指定がないときは呼ばない（controller は代わりに {@link #recentDiaries} を出す）。
@@ -97,8 +102,8 @@ public class SearchService {
         return keyword.replace("!", "!!").replace("%", "!%").replace("_", "!_");
     }
 
-    private static SearchHit toHit(Post post, String keyword) {
-        var postedAt = post.getPostedAt().atZone(PostService.ZONE);
+    private SearchHit toHit(Post post, String keyword) {
+        var postedAt = post.getPostedAt().atZone(clock.getZone());
         return new SearchHit.PostHit(
                 postedAt.toLocalDate(),
                 LocalTime.of(postedAt.getHour(), postedAt.getMinute()),
@@ -107,9 +112,13 @@ public class SearchService {
                 post.getPostedAt());
     }
 
-    private static SearchHit toHit(Diary diary, String keyword) {
+    private SearchHit toHit(Diary diary, String keyword) {
+        var sortKey = diary.getDiaryDate()
+                .atTime(DIARY_SORT_TIME)
+                .atZone(clock.getZone())
+                .toInstant();
         return new SearchHit.DiaryHit(
-                diary.getDiaryDate(), HighlightedText.of(excerpt(diary.getContent(), keyword), keyword));
+                diary.getDiaryDate(), HighlightedText.of(excerpt(diary.getContent(), keyword), keyword), sortKey);
     }
 
     /**

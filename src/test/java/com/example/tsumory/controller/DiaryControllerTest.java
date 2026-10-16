@@ -24,6 +24,7 @@ import com.example.tsumory.config.CustomUserDetailsService;
 import com.example.tsumory.config.SecurityConfig;
 import com.example.tsumory.domain.Diary;
 import com.example.tsumory.domain.PostCategory;
+import com.example.tsumory.domain.TestFixtures;
 import com.example.tsumory.domain.User;
 import com.example.tsumory.repository.UserRepository;
 import com.example.tsumory.service.DiaryGenerationException;
@@ -69,7 +70,7 @@ class DiaryControllerTest {
     static class FixedClock {
         @Bean
         Clock clock() {
-            return Clock.fixed(NOW, PostService.ZONE);
+            return Clock.fixed(NOW, TestFixtures.JST);
         }
     }
 

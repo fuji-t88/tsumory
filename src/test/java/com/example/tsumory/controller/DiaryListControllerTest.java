@@ -16,6 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.example.tsumory.config.CustomUserDetails;
 import com.example.tsumory.config.CustomUserDetailsService;
 import com.example.tsumory.config.SecurityConfig;
+import com.example.tsumory.domain.TestFixtures;
 import com.example.tsumory.repository.UserRepository;
 import com.example.tsumory.service.DiaryCalendarDay;
 import com.example.tsumory.service.DiaryCalendarWeek;
@@ -23,7 +24,6 @@ import com.example.tsumory.service.DiaryDaySummary;
 import com.example.tsumory.service.DiaryListService;
 import com.example.tsumory.service.DiaryMonthNotFoundException;
 import com.example.tsumory.service.DiaryMonthSummary;
-import com.example.tsumory.service.PostService;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -53,7 +53,7 @@ class DiaryListControllerTest {
         @Bean
         Clock clock() {
             // 2026-10-15 21:00（日本時間）
-            return Clock.fixed(Instant.parse("2026-10-15T12:00:00Z"), PostService.ZONE);
+            return Clock.fixed(Instant.parse("2026-10-15T12:00:00Z"), TestFixtures.JST);
         }
     }
 

@@ -23,14 +23,9 @@ public sealed interface SearchHit {
     record PostHit(LocalDate date, LocalTime time, HighlightedText content, PostCategory category, Instant sortKey)
             implements SearchHit {}
 
-    /** 日記。本文はキーワードの前後だけを切り出して強調付きで持つ。並べるときは、その日の 23:59:59 として比べる。 */
-    record DiaryHit(LocalDate date, HighlightedText excerpt) implements SearchHit {
-
-        @Override
-        public Instant sortKey() {
-            return date.atTime(LocalTime.of(23, 59, 59))
-                    .atZone(PostService.ZONE)
-                    .toInstant();
-        }
-    }
+    /**
+     * 日記。本文はキーワードの前後だけを切り出して強調付きで持つ。並べるときは、その日の 23:59:59 として比べる（{@code sortKey} は
+     * {@link SearchService} が {@code Clock} のタイムゾーンで求める）。
+     */
+    record DiaryHit(LocalDate date, HighlightedText excerpt, Instant sortKey) implements SearchHit {}
 }

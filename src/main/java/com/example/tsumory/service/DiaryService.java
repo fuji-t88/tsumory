@@ -27,7 +27,7 @@ public class DiaryService {
     @Transactional(readOnly = true)
     public LocalDate registeredDate(Long userId) {
         var user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
-        return LocalDate.ofInstant(user.getCreatedAt(), PostService.ZONE);
+        return LocalDate.ofInstant(user.getCreatedAt(), clock.getZone());
     }
 
     /** 日記を開ける日付（登録日から今日まで）なら {@code true}。日記表示と日記一覧のカレンダーで使う。 */
@@ -56,7 +56,7 @@ public class DiaryService {
     public Optional<DiaryItem> findDiaryForSummary(Long userId, LocalDate date) {
         return diaryRepository
                 .findByUserIdAndDiaryDate(userId, date)
-                .map(diary -> DiaryItem.from(diary, PostService.ZONE));
+                .map(diary -> DiaryItem.from(diary, clock.getZone()));
     }
 
     /**

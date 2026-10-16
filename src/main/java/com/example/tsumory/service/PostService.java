@@ -6,7 +6,6 @@ import com.example.tsumory.repository.PostRepository;
 import com.example.tsumory.repository.UserRepository;
 import java.time.Clock;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -22,8 +21,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Transactional(readOnly = true)
 public class PostService {
 
-    public static final ZoneId ZONE = ZoneId.of("Asia/Tokyo");
-
     /** 1 日（日本時間）に投稿できるつぶやきの件数。 */
     public static final int DAILY_POST_LIMIT = 16;
 
@@ -34,7 +31,7 @@ public class PostService {
     private final Clock clock;
 
     public LocalDate today() {
-        return LocalDate.ofInstant(clock.instant(), ZONE);
+        return LocalDate.now(clock);
     }
 
     /** つぶやきの編集・削除を受け付ける日付（今日と昨日）なら {@code true}。日記を開ける日付は {@link DiaryService#isAvailableDate} で別に判定する。 */
@@ -46,7 +43,7 @@ public class PostService {
     /** その日（日本時間）のつぶやきを、画面に出す形にして投稿時刻の古い順に返す。 */
     public List<PostItem> findPosts(Long userId, LocalDate date) {
         return findPostsByDate(userId, date).stream()
-                .map(post -> PostItem.from(post, ZONE))
+                .map(post -> PostItem.from(post, clock.getZone()))
                 .toList();
     }
 
@@ -66,7 +63,7 @@ public class PostService {
 
     /** 編集モードで開くつぶやきを返す。自分の今日か昨日のつぶやきでなければ {@link ResourceNotFoundException}。 */
     public PostItem getEditablePost(Long userId, Long postId) {
-        return PostItem.from(findEditablePost(userId, postId), ZONE);
+        return PostItem.from(findEditablePost(userId, postId), clock.getZone());
     }
 
     /**
@@ -81,7 +78,7 @@ public class PostService {
     public Post create(Long userId, String rawContent) {
         var content = rawContent.strip();
         var now = clock.instant();
-        var today = LocalDate.ofInstant(now, ZONE);
+        var today = LocalDate.ofInstant(now, clock.getZone());
         // 上限に達しているなら、Claude API を呼ぶ前に断る（料金をかけないため）
         checkPostLimit(userId, today);
         var post = new Post(userRepository.getReferenceById(userId), content, now);
@@ -176,7 +173,7 @@ public class PostService {
     /** 自分のつぶやきのうち、編集・削除できる日付（今日と昨日）のものを返す。それ以外は {@link ResourceNotFoundException}。 */
     private Post findEditablePost(Long userId, Long postId) {
         var post = findOwnPost(userId, postId);
-        var postedDate = LocalDate.ofInstant(post.getPostedAt(), ZONE);
+        var postedDate = LocalDate.ofInstant(post.getPostedAt(), clock.getZone());
         if (!isEditableDate(postedDate)) {
             // 0 時を過ぎて、開いたままの画面から一昨日の分を直そうとした場合など
             log.warn("Post not editable: userId={}, postId={}, postedDate={}", userId, postId, postedDate);
