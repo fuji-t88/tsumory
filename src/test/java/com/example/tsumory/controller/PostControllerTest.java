@@ -316,6 +316,20 @@ class PostControllerTest {
     }
 
     @Test
+    void 全角スペースだけならエラーを表示して投稿しない() throws Exception {
+        // service は strip() で全角スペースも取り除くので、フォームで止めないと空の本文で Post を作ろうとして 500 になる
+        mockMvc.perform(post("/posts")
+                        .param("content", "　　")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(view().name("home"))
+                .andExpect(content().string(containsString("内容を入力してください")));
+
+        verify(postService, never()).create(anyLong(), anyString());
+    }
+
+    @Test
     void 文字数を超えたらエラーを表示し入力値を残す() throws Exception {
         var content = "あ".repeat(101);
 

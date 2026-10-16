@@ -55,10 +55,10 @@ public class Post {
     @Column(nullable = false)
     private boolean categorySetByUser = false;
 
-    /** @throws IllegalArgumentException 本文に改行が含まれるとき */
+    /** @throws IllegalArgumentException 本文が空・{@link #CONTENT_MAX_LENGTH} 文字を超える・改行を含むとき */
     public Post(User user, String content, Instant now) {
         this.user = user;
-        this.content = requireSingleLine(content);
+        this.content = requireValidContent(content);
         this.postedAt = now;
         this.updatedAt = now;
     }
@@ -66,10 +66,10 @@ public class Post {
     /**
      * 本文と更新時刻を変える。投稿時刻とカテゴリは変えない（判定し直すまでは前のカテゴリのまま）。
      *
-     * @throws IllegalArgumentException 本文に改行が含まれるとき
+     * @throws IllegalArgumentException 本文が空・{@link #CONTENT_MAX_LENGTH} 文字を超える・改行を含むとき
      */
     public void edit(String content, Instant now) {
-        this.content = requireSingleLine(content);
+        this.content = requireValidContent(content);
         this.updatedAt = now;
     }
 
@@ -89,6 +89,21 @@ public class Post {
 
     public boolean isEdited() {
         return updatedAt.isAfter(postedAt);
+    }
+
+    /**
+     * 本文の決まり（空でない、{@link #CONTENT_MAX_LENGTH} 文字以内、改行なし）を守る。フォーム（{@code PostForm}・{@code PostEditForm}）でも
+     * 確かめているが、フォームを通らない経路（テストデータ、将来の API など）でも、保存の時点の DB のエラー（500）ではなく、作る時点で気づけるようにする。
+     * 文字数はフォームの {@code @Size} と同じく {@link String#length()} で数える。本文の値はメッセージに入れない（ログや画面に出ることがあるため）。
+     */
+    private static String requireValidContent(String content) {
+        if (content.isBlank()) {
+            throw new IllegalArgumentException("Post content must not be blank");
+        }
+        if (content.length() > CONTENT_MAX_LENGTH) {
+            throw new IllegalArgumentException("Post content must be at most " + CONTENT_MAX_LENGTH + " characters");
+        }
+        return requireSingleLine(content);
     }
 
     /**
