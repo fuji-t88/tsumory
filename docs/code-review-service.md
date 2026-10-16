@@ -129,6 +129,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 - 状態：対応済み
   - ✓ 対応済み（2026-10-16、コミット `9b33ce6`。仕様の追記はコミット `da8b07c`）：record `DiaryDateRange(first, last)` を足し、業務ルール「登録日から今日まで」は `DiaryService#availableRange(userId)` の 1 か所で決めるようにした（「今日」もここで 1 回だけ求める）。表示（`findByDate`）は `isAvailableDate`（`availableRange(userId).contains(date)` の短縮形）、生成は `range.isFuture` で未来（`InvalidDiaryDateException`）と登録日より前（`DiaryNotFoundException`）を振り分け、カレンダーは `range.containsMonth`・`contains`・`last`（「今日」の印）を使う。生成は自分で「今日」を求めなくなったので、`DiaryGenerationService` から `Clock` を外した。テストは `DiaryDateRangeTest`（境目・未来かどうか・月の範囲）と `DiaryServiceTest` の 2 件（範囲そのもの、日本時間の 0 時で切り替わる）を足し、生成とカレンダーのテストは範囲をモックで返す形に直した（既存の振る舞いのテストはそのまま通った）
+  - 追記（2026-10-16、コミット `d275740`）：生成メソッドの冒頭で業務ルールが 1 行で読めるよう、`DiaryGenerationService` の 2 つの判定を private のガード `requireAvailableDate(userId, date)` に抜き出した。範囲そのものは `availableRange` が決め、ガードは未来（`InvalidDiaryDateException`）と登録日より前（`DiaryNotFoundException`）に振り分けるだけ。振る舞いは変えていないので、既存のテスト（未来・登録日より前の生成）で確かめた
+  - 書籍の原稿との違い：原稿の環境では、表示（`findByDate`）が未来の日付を拒否しておらず「重複はない」という結論になり、生成の中に `requireNotFutureDate(date)` を抜き出して窓口にしている。このリポジトリでは、表示が `isAvailableDate`（登録日から今日まで）で未来の日付も 404 にしており（仕様 phase2-spec.md の「日付の範囲」どおり）、カレンダーにも写しがあったので、重複は実際にあった。3 か所が同じ業務ルールを使うので、窓口は生成の中ではなく `DiaryService#availableRange` に置き、原稿の「ガードに名前を付けて意図を 1 行で読ませる」点だけを取り込んだ。ガードの名前は、未来だけでなく登録日より前も扱うので `requireAvailableDate` にした
 
 - 場所
   - `DiaryService#isAvailableDate`：登録日から今日までか。日記の表示（`findByDate`）で使う
