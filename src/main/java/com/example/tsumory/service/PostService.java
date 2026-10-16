@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,6 +56,32 @@ public class PostService {
     /** 今日（日本時間）のつぶやきを投稿時刻の古い順に返す。日記を書く材料にする。 */
     public List<Post> findTodayPosts(Long userId) {
         return findPostsByDate(userId, LocalDate.now(clock));
+    }
+
+    /**
+     * つぶやきをキーワードとカテゴリで検索し、新しい順に最大 {@code limit} 件返す。キーワードとカテゴリのどちらかは指定する。
+     *
+     * <p>キーワードは {@code LIKE} 用にエスケープしてから渡す（日記の {@link DiaryService#searchDiaries} と同じく、エスケープ前のキーワードを受け取る）。
+     *
+     * @param keyword 前後の空白を取り除いたキーワード。なければ空文字
+     * @param category 絞り込むカテゴリ。「すべて」なら {@code null}
+     */
+    public List<Post> searchPosts(Long userId, String keyword, PostCategory category, Limit limit) {
+        if (keyword.isEmpty()) {
+            return postRepository.searchByCategory(userId, category, limit);
+        }
+        var escaped = escapeLike(keyword);
+        return category == null
+                ? postRepository.searchByKeyword(userId, escaped, limit)
+                : postRepository.searchByKeywordAndCategory(userId, escaped, category, limit);
+    }
+
+    /**
+     * {@code LIKE} に渡すキーワードの {@code !}・{@code %}・{@code _} の前に {@code !} を付ける（クエリの {@code ESCAPE '!'} に対応）。
+     * {@code !} 自身を先に置き換えないと、付けた {@code !} まで二重にエスケープされる。
+     */
+    static String escapeLike(String keyword) {
+        return keyword.replace("!", "!!").replace("%", "!%").replace("_", "!_");
     }
 
     public long countPosts(Long userId, LocalDate date) {

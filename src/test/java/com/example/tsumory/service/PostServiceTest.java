@@ -42,6 +42,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Limit;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -631,5 +632,41 @@ class PostServiceTest {
 
         assertThatThrownBy(() -> service.delete(USER_ID, POST_ID)).isInstanceOf(ResourceNotFoundException.class);
         verify(postRepository, never()).delete(any());
+    }
+
+    // --- 検索 ---
+
+    private static final Limit LIMIT = Limit.of(51);
+
+    @Test
+    void searchPosts_routesToQueryByKeywordAndCategory() {
+        var service = serviceAt("2026-10-08T12:00:00");
+
+        service.searchPosts(USER_ID, "カレー", null, LIMIT);
+        service.searchPosts(USER_ID, "カレー", PostCategory.WORK, LIMIT);
+        service.searchPosts(USER_ID, "", PostCategory.LEARNING, LIMIT);
+
+        verify(postRepository).searchByKeyword(USER_ID, "カレー", LIMIT);
+        verify(postRepository).searchByKeywordAndCategory(USER_ID, "カレー", PostCategory.WORK, LIMIT);
+        verify(postRepository).searchByCategory(USER_ID, PostCategory.LEARNING, LIMIT);
+    }
+
+    @Test
+    void searchPosts_escapesKeywordForLike() {
+        serviceAt("2026-10-08T12:00:00").searchPosts(USER_ID, "達成率100%!", null, LIMIT);
+
+        verify(postRepository).searchByKeyword(USER_ID, "達成率100!%!!", LIMIT);
+    }
+
+    @Test
+    void escapeLike_prefixesMetaCharactersWithBang() {
+        assertThat(PostService.escapeLike("Curry")).isEqualTo("Curry");
+        // ユーザーが % や _ を入力しても、全件や任意の 1 文字に一致させない
+        assertThat(PostService.escapeLike("100%")).isEqualTo("100!%");
+        assertThat(PostService.escapeLike("snake_case")).isEqualTo("snake!_case");
+        // エスケープ文字の ! 自身も、先にエスケープする（二重にならない）
+        assertThat(PostService.escapeLike("達成率100%!")).isEqualTo("達成率100!%!!");
+        // ESCAPE '!' にしたので、\ は普通の文字
+        assertThat(PostService.escapeLike("C:\tmp")).isEqualTo("C:\tmp");
     }
 }

@@ -3,11 +3,9 @@ package com.example.tsumory.service;
 import com.example.tsumory.domain.Diary;
 import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
-import com.example.tsumory.repository.PostRepository;
 import java.time.Clock;
 import java.time.LocalTime;
 import java.util.Comparator;
-import java.util.List;
 import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Limit;
@@ -41,7 +39,7 @@ public class SearchService {
     /** キーワードなしで開いたときに、1 ページに出す日記の件数。 */
     public static final int RECENT_PAGE_SIZE = 20;
 
-    private final PostRepository postRepository;
+    private final PostService postService;
     private final DiaryService diaryService;
     private final Clock clock;
 
@@ -56,21 +54,11 @@ public class SearchService {
         if (keyword.isEmpty() && category == null) {
             throw new IllegalArgumentException("Either keyword or category is required");
         }
-        var escaped = keyword.isEmpty() ? null : escapeLike(keyword);
-
+        // キーワードはエスケープ前のまま渡す（LIKE 用のエスケープは PostService#searchPosts・DiaryService#searchDiaries が行う）。
         // つぶやきは、上限を超えたかを知るため 1 件多く取得する
-        var limit = Limit.of(MAX_RESULTS + 1);
-        List<Post> posts;
-        if (escaped == null) {
-            posts = postRepository.searchByCategory(userId, category, limit);
-        } else if (category == null) {
-            posts = postRepository.searchByKeyword(userId, escaped, limit);
-        } else {
-            posts = postRepository.searchByKeywordAndCategory(userId, escaped, category, limit);
-        }
-        // 日記は 1 ページ目（上限件数）だけを取り、次のページがあれば上限を超えたとみなす。
-        // キーワードのエスケープは DiaryService#searchDiaries が行うので、エスケープ前のキーワードを渡す
-        var diaries = escaped != null && category == null
+        var posts = postService.searchPosts(userId, keyword, category, Limit.of(MAX_RESULTS + 1));
+        // 日記は 1 ページ目（上限件数）だけを取り、次のページがあれば上限を超えたとみなす
+        var diaries = !keyword.isEmpty() && category == null
                 ? diaryService.searchDiaries(userId, keyword, PageRequest.of(0, MAX_RESULTS))
                 : Page.<Diary>empty();
 
@@ -91,15 +79,6 @@ public class SearchService {
         return diaryService
                 .searchDiaries(userId, null, PageRequest.of(pageable.getPageNumber(), RECENT_PAGE_SIZE))
                 .map(diary -> toHit(diary, ""));
-    }
-
-    /**
-     * つぶやきの検索用に、{@code LIKE} に渡すキーワードの {@code !}・{@code %}・{@code _} の前に {@code !} を付ける（クエリの
-     * {@code ESCAPE '!'} に対応）。日記の検索は {@code DiaryService#searchDiaries} の中で同じ決まりでエスケープする。{@code !} 自身を先に
-     * 置き換えないと、付けた {@code !} まで二重にエスケープされる。
-     */
-    static String escapeLike(String keyword) {
-        return keyword.replace("!", "!!").replace("%", "!%").replace("_", "!_");
     }
 
     private SearchHit toHit(Post post, String keyword) {

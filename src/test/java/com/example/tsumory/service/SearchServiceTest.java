@@ -13,8 +13,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -23,7 +21,6 @@ import static org.mockito.Mockito.when;
 import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
 import com.example.tsumory.domain.User;
-import com.example.tsumory.repository.PostRepository;
 import com.example.tsumory.service.HighlightedText.Segment;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -46,7 +43,7 @@ class SearchServiceTest {
     private static final Limit LIMIT = Limit.of(51);
 
     @Mock
-    private PostRepository postRepository;
+    private PostService postService;
 
     @Mock
     private DiaryService diaryService;
@@ -58,7 +55,7 @@ class SearchServiceTest {
     @BeforeEach
     void setUp() {
         // 日付・時刻は日本時間で求める（Clock のタイムゾーン）
-        service = new SearchService(postRepository, diaryService, clockAt(NOW));
+        service = new SearchService(postService, diaryService, clockAt(NOW));
     }
 
     /** 花子が {@code postedAt}（日本時間）に投稿したつぶやき。 */
@@ -72,24 +69,12 @@ class SearchServiceTest {
     void search_withoutKeywordAndCategory_throwsInsteadOfReturningNothing() {
         assertThatThrownBy(() -> service.search(USER_ID, "", null)).isInstanceOf(IllegalArgumentException.class);
 
-        verifyNoInteractions(postRepository, diaryService);
-    }
-
-    @Test
-    void escapeLike_prefixesMetaCharactersWithBang() {
-        assertThat(SearchService.escapeLike("Curry")).isEqualTo("Curry");
-        // ユーザーが % や _ を入力しても、全件や任意の 1 文字に一致させない
-        assertThat(SearchService.escapeLike("100%")).isEqualTo("100!%");
-        assertThat(SearchService.escapeLike("snake_case")).isEqualTo("snake!_case");
-        // エスケープ文字の ! 自身も、先にエスケープする（二重にならない）
-        assertThat(SearchService.escapeLike("達成率100%!")).isEqualTo("達成率100!%!!");
-        // ESCAPE '!' にしたので、\ は普通の文字
-        assertThat(SearchService.escapeLike("C:\tmp")).isEqualTo("C:\tmp");
+        verifyNoInteractions(postService, diaryService);
     }
 
     @Test
     void search_keywordOnly_searchesPostsAndDiariesAndMergesNewestFirst() {
-        when(postRepository.searchByKeyword(USER_ID, "カレー", LIMIT))
+        when(postService.searchPosts(USER_ID, "カレー", null, LIMIT))
                 .thenReturn(
                         List.of(postAt("夜もカレーにした", "2026-10-07T20:00:00"), postAt("昼は社食のカレー", "2026-10-06T12:40:00")));
         when(diaryService.searchDiaries(USER_ID, "カレー", FIRST_PAGE))
@@ -110,14 +95,14 @@ class SearchServiceTest {
     }
 
     @Test
-    void search_escapesKeywordForPostsAndLeavesDiariesToDiaryService() {
-        when(postRepository.searchByKeyword(USER_ID, "100!%", LIMIT)).thenReturn(List.of());
+    void search_passesUnescapedKeywordToBothServices() {
+        when(postService.searchPosts(USER_ID, "100%", null, LIMIT)).thenReturn(List.of());
         when(diaryService.searchDiaries(USER_ID, "100%", FIRST_PAGE)).thenReturn(Page.empty());
 
         service.search(USER_ID, "100%", null);
 
-        // つぶやきはここでエスケープし、日記はエスケープ前のキーワードを DiaryService に渡す（二重にエスケープしない）
-        verify(postRepository).searchByKeyword(USER_ID, "100!%", LIMIT);
+        // LIKE 用のエスケープは、つぶやき・日記それぞれのサービスが行う（ここでエスケープすると二重になる）
+        verify(postService).searchPosts(USER_ID, "100%", null, LIMIT);
         verify(diaryService).searchDiaries(USER_ID, "100%", FIRST_PAGE);
     }
 
@@ -125,7 +110,7 @@ class SearchServiceTest {
     void search_postHitHasJstTimeHighlightAndCategory() {
         var hit = postAt("昼のカレーが辛すぎた", "2026-10-07T00:30:00");
         hit.assignCategory(PostCategory.PRIVATE);
-        when(postRepository.searchByKeyword(USER_ID, "カレー", LIMIT)).thenReturn(List.of(hit));
+        when(postService.searchPosts(USER_ID, "カレー", null, LIMIT)).thenReturn(List.of(hit));
         when(diaryService.searchDiaries(USER_ID, "カレー", FIRST_PAGE)).thenReturn(Page.empty());
 
         var result =
@@ -140,8 +125,7 @@ class SearchServiceTest {
 
     @Test
     void search_withCategory_doesNotSearchDiaries() {
-        when(postRepository.searchByKeywordAndCategory(USER_ID, "カレー", PostCategory.WORK, LIMIT))
-                .thenReturn(List.of());
+        when(postService.searchPosts(USER_ID, "カレー", PostCategory.WORK, LIMIT)).thenReturn(List.of());
 
         service.search(USER_ID, "カレー", PostCategory.WORK);
 
@@ -150,13 +134,12 @@ class SearchServiceTest {
 
     @Test
     void search_categoryOnly_searchesPostsByCategory() {
-        when(postRepository.searchByCategory(USER_ID, PostCategory.LEARNING, LIMIT))
+        when(postService.searchPosts(USER_ID, "", PostCategory.LEARNING, LIMIT))
                 .thenReturn(List.of(post(user, STUDY, "2026-10-07T20:00:00", PostCategory.LEARNING)));
 
         var result = service.search(USER_ID, "", PostCategory.LEARNING);
 
         assertThat(result.hits()).hasSize(1);
-        verify(postRepository, never()).searchByKeyword(anyLong(), anyString(), any());
         verify(diaryService, never()).searchDiaries(anyLong(), any(), any());
     }
 
@@ -164,8 +147,7 @@ class SearchServiceTest {
     void search_moreThan50_returns50AndMarksTruncated() {
         // 検索の中身（どの本文が一致するか）はリポジトリのモックで決めるので、ここでは件数だけを見る
         // つぶやきは上限より 1 件多い 51 件
-        when(postRepository.searchByKeyword(eq(USER_ID), anyString(), eq(LIMIT)))
-                .thenReturn(posts(user, 51, "2026-10-07T09:00:00"));
+        when(postService.searchPosts(USER_ID, "会議", null, LIMIT)).thenReturn(posts(user, 51, "2026-10-07T09:00:00"));
         // 日記は 1 ページ目の 50 件。51 件目以降が次のページにある
         when(diaryService.searchDiaries(USER_ID, "会議", FIRST_PAGE))
                 .thenReturn(new PageImpl<>(diaries(user, 50, LocalDate.of(2026, 8, 1)), FIRST_PAGE, 51));
