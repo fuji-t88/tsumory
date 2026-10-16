@@ -11,6 +11,7 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
   - スクリプト：`static/js/diary-generate.js`
   - あわせて見たもの：repository（`PostRepository`・`DiaryRepository`・`UserRepository`）。他人のデータや SQL に関わるため
 - 方法：コードを読んで観点と突き合わせた。エラー画面（指摘 1）だけは、読んだだけでは確かめられないので、実際のサーバー（ランダムポート）を立てる一時的なテストで応答を確かめ、確かめたあとテストは消した。コードは変えていない。指摘の重要度は次のとおり
+- 追加（2026-10-16）：指摘 11 は、指摘 1 の対応中に仕様の「9. 設定」と `application.yaml` を見比べて見つけ、あとから足した。実際のサーバーを立てる一時的なテストで確かめた（確かめたあと消した）
   - **高**：利用者に見える不具合や、セキュリティの穴になりうる
   - **中**：今は動くが、条件しだいで不具合になる。または、直さないと保守で誤りを招きやすい
   - **低**：読みやすさ・一貫性の問題。動作には影響しない
@@ -46,6 +47,7 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 | 8 | 低 | 可読性・保守性 | `Post` が自分で守っている入力の決まりが、改行の禁止だけ（空・100 文字はフォームと DB だけ） | `Post` | 対応済み |
 | 9 | 低 | 可読性・保守性 | controller の引数の名前と順番がメソッドごとにそろっていない | `PostController`・`DiaryController` | 対応済み |
 | 10 | 低 | 可読性・保守性 | コメントが古い、または作業メモが残っている | `AnthropicConfig`・`fragments/header.html` | 対応済み |
+| 11 | 中 | エラーハンドリング | `spring.jpa.open-in-view` が既定の有効のままで、Claude API の応答を待つ間も DB 接続を握り続ける。仕様の `ddl-auto: validate` もない | `application.yaml` | 未対応 |
 
 高の指摘が 1 件ある（指摘 1。対応済み）。認証・認可、CSRF、XSS、他人のデータの絞り込み、オープンリダイレクト、ログの扱いは観点どおり（末尾の「確認したが問題がなかった点」）。
 
@@ -119,6 +121,20 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
   - `header.html`：「日記一覧（`/diary`）への近道」のように役割を書き、`<!--/* */-->` にする。同じファイルのログアウトのコメントも `<!--/* */-->` にそろえる
 
 ## エラーハンドリング
+
+### 11. `open-in-view` が有効のままで、Claude API を待つ間も DB 接続を握り続ける（中）
+
+- 状態：未対応
+
+- 場所：`src/main/resources/application.yaml`（`spring.jpa.open-in-view` と `spring.jpa.hibernate.ddl-auto` を書いていない）
+- 何が起きるか
+  - `open-in-view` は書かないと有効（Spring Boot の既定）。リクエストの初めから終わりまで JPA のセッション（`EntityManager`）が開いたままになる。Spring は Hibernate の接続の扱いを `DELAYED_ACQUISITION_AND_HOLD`（一度取った接続をセッションが閉じるまで握る）にするので、リクエストの途中で一度 DB を読むと、そのリクエストが終わるまで DB 接続を返さない
+  - `DiaryGenerationService#generateForDate`・`PostService#create`・`#edit` は、Claude API を待つ間に DB 接続を握らないよう、トランザクションの外で API を呼ぶ作りにしている（CLAUDE.md の「Spring・Lombok」）。しかし `open-in-view` が有効だと、その前に読んだときの接続を握ったまま待つので、この作りが効いていない
+  - 実際のサーバーで、Claude API の呼び出しをモックにして、待っている間の使用中の接続数（HikariCP）を数えた。日記の生成・つぶやきの分類のどちらも **1**（握ったまま）だった
+  - 接続プールの既定は 10 本。日記の生成（最大 120 秒）が同時に 10 件あると、ほかのすべてのリクエストが DB 接続を待って止まる。起動時にも Spring Boot が「spring.jpa.open-in-view is enabled by default」と WARN を出している
+  - `ddl-auto` は書かないと、PostgreSQL では `none`（エンティティと DB のスキーマを突き合わせない）。エンティティの列の定義とマイグレーションがずれても、起動時に気づけない
+- 仕様：phase1-spec.md の「9. 設定（`application.yaml`）」は `open-in-view: false` と `ddl-auto: validate` を書くと決めている。仕様にあるのに設定されていない
+- 直し方の案：`application.yaml` に `spring.jpa.open-in-view: false` と `spring.jpa.hibernate.ddl-auto: validate` を書く。`open-in-view` を切ると、controller やテンプレートで遅延ロードの関連（`Post#getUser` など）を読むと `LazyInitializationException` になるので、全画面を実際に開いて確かめる
 
 ### 1. 404 のエラー画面がない（高）
 
