@@ -43,7 +43,7 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 | 8 | 低 | 可読性・保守性 | 「他人のつぶやきなら見つからない扱い」の取得処理が 2 か所に重複 | `PostService#updateCategory`・`#findEditablePost` | 対応済み |
 | 9 | 低 | 可読性・保守性 | 本番のコードから呼ばれていないメソッドがある | `PostService#findTodayPosts` | 保留 |
 | 10 | 低 | 可読性・保守性 | つぶやきはリポジトリ、日記はサービスを経由していて、取り方がそろっていない | `SearchService` | 対応済み |
-| 11 | 中 | 可読性・保守性 | 業務ルール「日記を開ける日付は登録日から今日まで」の判定が 3 か所にある（日記の表示・生成・日記一覧のカレンダー） | `DiaryService`・`DiaryGenerationService`・`DiaryListService` | 未対応 |
+| 11 | 中 | 可読性・保守性 | 業務ルール「日記を開ける日付は登録日から今日まで」の判定が 3 か所にある（日記の表示・生成・日記一覧のカレンダー） | `DiaryService`・`DiaryGenerationService`・`DiaryListService` | 対応済み |
 
 高の指摘はない。セキュリティの基本（他人のデータの絞り込み、SQL のパラメータ化、ログに本文を出さない、画面に内部情報を出さない）は満たしている（末尾の「よくできている点」）。
 
@@ -127,7 +127,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 11. 「日記を開ける日付」の判定が 3 か所にある（中）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `9b33ce6`。仕様の追記はコミット `da8b07c`）：record `DiaryDateRange(first, last)` を足し、業務ルール「登録日から今日まで」は `DiaryService#availableRange(userId)` の 1 か所で決めるようにした（「今日」もここで 1 回だけ求める）。表示（`findByDate`）は `isAvailableDate`（`availableRange(userId).contains(date)` の短縮形）、生成は `range.isFuture` で未来（`InvalidDiaryDateException`）と登録日より前（`DiaryNotFoundException`）を振り分け、カレンダーは `range.containsMonth`・`contains`・`last`（「今日」の印）を使う。生成は自分で「今日」を求めなくなったので、`DiaryGenerationService` から `Clock` を外した。テストは `DiaryDateRangeTest`（境目・未来かどうか・月の範囲）と `DiaryServiceTest` の 2 件（範囲そのもの、日本時間の 0 時で切り替わる）を足し、生成とカレンダーのテストは範囲をモックで返す形に直した（既存の振る舞いのテストはそのまま通った）
 
 - 場所
   - `DiaryService#isAvailableDate`：登録日から今日までか。日記の表示（`findByDate`）で使う
