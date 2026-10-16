@@ -657,16 +657,4 @@ class PostServiceTest {
 
         verify(postRepository).searchByKeyword(USER_ID, "達成率100!%!!", LIMIT);
     }
-
-    @Test
-    void escapeLike_prefixesMetaCharactersWithBang() {
-        assertThat(PostService.escapeLike("Curry")).isEqualTo("Curry");
-        // ユーザーが % や _ を入力しても、全件や任意の 1 文字に一致させない
-        assertThat(PostService.escapeLike("100%")).isEqualTo("100!%");
-        assertThat(PostService.escapeLike("snake_case")).isEqualTo("snake!_case");
-        // エスケープ文字の ! 自身も、先にエスケープする（二重にならない）
-        assertThat(PostService.escapeLike("達成率100%!")).isEqualTo("達成率100!%!!");
-        // ESCAPE '!' にしたので、\ は普通の文字
-        assertThat(PostService.escapeLike("C:\tmp")).isEqualTo("C:\tmp");
-    }
 }

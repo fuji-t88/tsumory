@@ -69,14 +69,7 @@ public class DiaryService {
         if (keyword == null || keyword.isBlank()) {
             return diaryRepository.findByUserIdOrderByDiaryDateDesc(userId, pageable);
         }
-        return diaryRepository.searchByContent(userId, escapeForLike(keyword), pageable);
-    }
-
-    // ESCAPE 文字 `!` 自身を先に二重化し、その後で
-    // LIKE のメタ文字 `%` `_` をエスケープする。
-    // 順序が逆だと、後から導入した `!` を再エスケープしてしまう。
-    private static String escapeForLike(String keyword) {
-        return keyword.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+        return diaryRepository.searchByContent(userId, LikeKeyword.escape(keyword), pageable);
     }
 
     /** その日の日記を、なければ INSERT、あれば上書きする。生成時刻は今（過去の日の日記を書いても、書いた時刻が入る）。 */

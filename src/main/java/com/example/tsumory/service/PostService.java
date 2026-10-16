@@ -70,18 +70,10 @@ public class PostService {
         if (keyword.isEmpty()) {
             return postRepository.searchByCategory(userId, category, limit);
         }
-        var escaped = escapeLike(keyword);
+        var escaped = LikeKeyword.escape(keyword);
         return category == null
                 ? postRepository.searchByKeyword(userId, escaped, limit)
                 : postRepository.searchByKeywordAndCategory(userId, escaped, category, limit);
-    }
-
-    /**
-     * {@code LIKE} に渡すキーワードの {@code !}・{@code %}・{@code _} の前に {@code !} を付ける（クエリの {@code ESCAPE '!'} に対応）。
-     * {@code !} 自身を先に置き換えないと、付けた {@code !} まで二重にエスケープされる。
-     */
-    static String escapeLike(String keyword) {
-        return keyword.replace("!", "!!").replace("%", "!%").replace("_", "!_");
     }
 
     public long countPosts(Long userId, LocalDate date) {
