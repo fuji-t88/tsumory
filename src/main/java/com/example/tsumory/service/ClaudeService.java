@@ -156,11 +156,13 @@ public class ClaudeService implements DiaryWriter {
      * つぶやきを投稿順のまま、1 行ずつ {@code - [仕事] 本文} の形で埋め込む。
      *
      * <p>プロンプトインジェクションを防ぐため、全体を {@code <posts>} で囲み、本文の {@code <}・{@code >}・{@code &} はエスケープする。
+     * 本文の改行は空白に置き換える。フェーズ 1 で保存された改行入りのつぶやきが、偽のつぶやきの行を紛れ込ませないようにするため
+     * （新しい投稿・編集はフォームと {@link Post} が改行を拒否するが、DB から読んだつぶやきはその守りを通らない）。
      * テストから呼べるよう、private にしない。
      */
     String buildUserMessage(LocalDate date, List<Post> posts) {
         var bullets = posts.stream()
-                .map(p -> "- [%s] %s".formatted(displayName(p.getCategory()), escape(p.getContent())))
+                .map(p -> "- [%s] %s".formatted(displayName(p.getCategory()), escape(toOneLine(p.getContent()))))
                 .collect(Collectors.joining("\n"));
         return """
                 %sのつぶやき:
@@ -173,6 +175,10 @@ public class ClaudeService implements DiaryWriter {
     // 万一カテゴリが未設定のつぶやきが紛れ込んでも、プロンプトを組み立てられるようにする（通常は初期値の OTHER が入っている）
     private String displayName(PostCategory category) {
         return category == null ? "未分類" : category.getDisplayName();
+    }
+
+    private static String toOneLine(String text) {
+        return text.replaceAll("\\R", " ");
     }
 
     private static String escape(String text) {
