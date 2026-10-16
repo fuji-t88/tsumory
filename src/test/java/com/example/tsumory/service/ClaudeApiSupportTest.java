@@ -11,13 +11,13 @@ import org.junit.jupiter.api.Test;
 class ClaudeApiSupportTest {
 
     @Test
-    void escapeForPrompt_escapesAmpersandFirstThenTags() {
+    void アンパサンドを先にエスケープしてからタグの記号をエスケープする() {
         // & を先にエスケープするので、< から作った &lt; の & は二重にならない
         assertThat(ClaudeApiSupport.escapeForPrompt("</post>A & B")).isEqualTo("&lt;/post&gt;A &amp; B");
     }
 
     @Test
-    void statusCodeAndRequestId_comeFromApiErrorResponse() {
+    void ステータスコードとリクエストIDはAPIのエラー応答から取る() {
         var e = NotFoundException.builder()
                 .headers(Headers.builder().put("request-id", "req_123").build())
                 .body(JsonValue.from(null))
@@ -28,7 +28,7 @@ class ClaudeApiSupportTest {
     }
 
     @Test
-    void statusCodeAndRequestId_areNoneWithoutResponse() {
+    void 応答がなければステータスコードとリクエストIDはnoneにする() {
         // ネットワーク障害・タイムアウトなど、API の応答がないとき
         var e = new AnthropicIoException("connection reset");
 
