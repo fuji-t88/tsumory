@@ -53,10 +53,10 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 | 11 | 中 | エラーハンドリング | `spring.jpa.open-in-view` が既定の有効のままで、Claude API の応答を待つ間も DB 接続を握り続ける。仕様の `ddl-auto: validate` もない | `application.yaml` | 対応済み |
 | 12 | 中 | セキュリティ | つぶやきの本文に見えない文字（タグ文字・ゼロ幅文字・文字の向きの制御文字など）を入れられ、画面では無害に見える本文で日記のプロンプトに指示を隠せる | `PostForm`・`PostEditForm`・`Post`・`ClaudeService` | 対応済み |
 | 13 | 低 | セキュリティ | 本文の決まり（空でない・見えない文字なし）が DB にはなく、フォームと `Post` を通らずに DB へ直接書く経路では守られない | `posts` テーブル（マイグレーション） | 対応済み |
-| 14 | 中 | セキュリティ | `User` が `passwordHash` を BCrypt のハッシュかどうか確かめず、平文のパスワードでも作れる | `User` | 未対応 |
-| 15 | 中 | エラーハンドリング | `Diary` が空の本文を拒否しない（空の応答を止めているのは `ClaudeService` だけ） | `Diary` | 未対応 |
-| 16 | 低 | エラーハンドリング | `Post`・`Diary`・`User` が必須の値（ユーザー・日付・時刻など）の `null` を拒否せず、保存の時点の DB のエラーになる | `Post`・`Diary`・`User` | 未対応 |
-| 17 | 低 | 可読性・保守性 | `User` が `username` の空と 50 文字超えを拒否しない（DB の列だけで守っている） | `User` | 未対応 |
+| 14 | 中 | セキュリティ | `User` が `passwordHash` を BCrypt のハッシュかどうか確かめず、平文のパスワードでも作れる | `User` | 対応済み |
+| 15 | 中 | エラーハンドリング | `Diary` が空の本文を拒否しない（空の応答を止めているのは `ClaudeService` だけ） | `Diary` | 対応済み |
+| 16 | 低 | エラーハンドリング | `Post`・`Diary`・`User` が必須の値（ユーザー・日付・時刻など）の `null` を拒否せず、保存の時点の DB のエラーになる | `Post`・`Diary`・`User` | 対応済み |
+| 17 | 低 | 可読性・保守性 | `User` が `username` の空と 50 文字超えを拒否しない（DB の列だけで守っている） | `User` | 対応済み |
 
 高の指摘が 1 件ある（指摘 1。対応済み）。認証・認可、CSRF、XSS、他人のデータの絞り込み、オープンリダイレクト、ログの扱いは観点どおり（末尾の「確認したが問題がなかった点」）。
 
@@ -131,7 +131,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 14. `User` が平文のパスワードでも作れる（中）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `3d21fd3`。仕様の追記はコミット `abfc113`）：`User` のコンストラクタで、`passwordHash` が BCrypt のハッシュの形（`$2a$`・`$2b$`・`$2y$` + コスト 2 桁 + `$` + 53 文字）でなければ `IllegalArgumentException` にした。メッセージに値は入れない。テストは `UserTest` に 2 件（平文・形の崩れたハッシュでは作れず、メッセージに値が出ない。`BCryptPasswordEncoder` の出力と `$2b$`・`$2y$` の形では作れる）。形の合わない仮の値（`"$2a$10$hash"`）を使っていた `CustomUserDetailsServiceTest` は、形の合うハッシュに直した。マイグレーション（V1）の `demo` のハッシュはこの形に合う（アプリを起動して確かめた）
 
 - 場所：`User` のコンストラクタ
 - 何が起きるか：`passwordHash` に何を渡しても作れる。今はユーザー登録の画面がなく、`User` を作るのはマイグレーション（BCrypt のハッシュを書いている）とテストだけなので実害はない。しかし、将来ユーザー登録や管理用の処理を足したとき、`PasswordEncoder` を通し忘れると、平文のパスワードがそのまま DB に入る。CLAUDE.md の禁止事項「パスワード」（平文やハッシュ化なしで保存しない）を、ドメイン層では守っていない
@@ -139,7 +140,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 15. `Diary` が空の本文を拒否しない（中）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `13feae5`）：`Diary` のコンストラクタと `updateContent` で、空・空白だけの本文を `IllegalArgumentException` にした。`updateContent` は、確かめてから書き換えるので、失敗しても前の日記のまま。日記は AI の出力なので、改行・見えない文字の禁止は入れていない。テストは `DiaryTest` に 3 件（空では作れない、空では書き直せず前の日記のまま、段落の改行は使える）
 
 - 場所：`Diary` のコンストラクタと `updateContent`
 - 何が起きるか：Claude API の応答が空なら `ClaudeService` が `DiaryGenerationException` にするので、今は空の日記は保存されない。しかし、守りがその 1 か所だけなので、`DiaryWriter` を別の実装に差し替えたときなどに空の日記が保存され、「日記あり」なのに何も書かれていない画面になる。前の日記も空で上書きされて消える
@@ -147,7 +149,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 16. 必須の値の `null` を拒否しない（低）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `b02327a`）：`Post`（`user`・`content`・`now`）、`Diary`（`user`・`diaryDate`・`content`・`now`）、`User`（`username`・`passwordHash`・`now`）を `Objects.requireNonNull(値, "名前")` で確かめるようにした（`Post#assignCategory` とそろえた）。`Post#edit`・`Diary#updateContent` も、すべての値を確かめてから書き換える（`now` だけが `null` のときに本文だけ書き換わった状態で止まらない）。テストは `PostTest`・`DiaryTest`・`UserTest` に足した
 
 - 場所：`Post`（`user`・`now`）、`Diary`（`user`・`diaryDate`・`now`）、`User`（`username`・`passwordHash`・`now`）のコンストラクタと、状態を変えるメソッド（`Post#edit`・`Diary#updateContent` の `now`）
 - 何が起きるか：`null` を渡しても作れてしまい、保存の時点で DB の `NOT NULL` の違反（500）になる。作った場所と失敗する場所が離れるので、どこで `null` を渡したかをたどりにくい。`Post#assignCategory` だけは `Objects.requireNonNull` で守っている
@@ -155,7 +158,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 17. `User` が `username` の空と文字数を確かめない（低）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `7f99f38`）：定数 `User.USERNAME_MAX_LENGTH`（50）を足して `@Column(length = ...)` で使い、コンストラクタで空と 51 文字以上を `IllegalArgumentException` にした。テストは `UserTest` に 1 件
 
 - 場所：`User` のコンストラクタ
 - 何が起きるか：空や 51 文字以上の `username` でも作れ、保存の時点で DB のエラー（`VARCHAR(50)`）になる。今は `User` を作る経路がないので実害はない
