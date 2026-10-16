@@ -17,7 +17,7 @@
         <div class="mb-2">
             <label for="q" class="form-label">キーワード</label>
             <div class="d-flex gap-2">
-                <input type="search" th:field="*{q}" maxlength="50" class="form-control"
+                <input type="search" th:field="*{q}" th:maxlength="${keywordMaxLength}" class="form-control"
                        th:classappend="${#fields.hasErrors('q')} ? 'is-invalid'">
                 <button type="submit" class="btn btn-primary flex-shrink-0">検索</button>
             </div>

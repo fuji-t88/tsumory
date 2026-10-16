@@ -23,6 +23,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Post {
 
+    /**
+     * 本文の上限（文字数）。フォーム（{@code PostForm}・{@code PostEditForm}）の {@code @Size}、列の長さ、画面の {@code maxlength}
+     * （{@code InputLimitsAdvice} が渡す）がこの値を使う。変えるときは、DB の列（{@code VARCHAR(100)}）もマイグレーションで変える。
+     */
+    public static final int CONTENT_MAX_LENGTH = 100;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -31,7 +37,7 @@ public class Post {
     @JoinColumn(name = "user_id", nullable = false, updatable = false)
     private User user;
 
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false, length = CONTENT_MAX_LENGTH)
     private String content;
 
     @Column(nullable = false, updatable = false)

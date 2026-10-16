@@ -20,7 +20,7 @@
             <h2 class="h5 card-title mb-3">いまの気持ちをつぶやく</h2>
             <form th:action="@{/posts}" th:object="${postForm}" method="post">
                 <div class="mb-2">
-                    <textarea th:field="*{content}" maxlength="100" rows="2" class="form-control"
+                    <textarea th:field="*{content}" th:maxlength="${postContentMaxLength}" rows="2" class="form-control"
                               th:disabled="${postLimitReached}"
                               th:classappend="${#fields.hasErrors('content')} ? 'is-invalid'"></textarea>
                     <p th:if="${#fields.hasErrors('content')}" th:errors="*{content}" class="invalid-feedback"
@@ -79,7 +79,7 @@
                     <form th:if="${editingPost != null and editingPost.id eq post.id}"
                           th:action="@{/posts/{id}/edit(id=${post.id})}" th:object="${postEditForm}" method="post">
                         <div class="mb-2">
-                            <textarea th:field="*{content}" maxlength="100" rows="2" class="form-control"
+                            <textarea th:field="*{content}" th:maxlength="${postContentMaxLength}" rows="2" class="form-control"
                                       th:classappend="${#fields.hasErrors('content')} ? 'is-invalid'"></textarea>
                             <p th:if="${#fields.hasErrors('content')}" th:errors="*{content}"
                                class="invalid-feedback" role="alert"></p>

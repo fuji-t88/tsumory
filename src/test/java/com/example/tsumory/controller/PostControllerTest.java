@@ -25,6 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.example.tsumory.config.CustomUserDetails;
 import com.example.tsumory.config.CustomUserDetailsService;
 import com.example.tsumory.config.SecurityConfig;
+import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
 import com.example.tsumory.repository.UserRepository;
 import com.example.tsumory.service.DailyPostLimitExceededException;
@@ -154,6 +155,13 @@ class PostControllerTest {
                         .string(containsString("<a href=\"/diary\" class=\"btn btn-outline-secondary btn-sm\">履歴</a>")))
                 // コンテキスト導線（「今日のつぶやき」の見出し）
                 .andExpect(content().string(containsString("<a href=\"/diary\" class=\"small\">過去の日記を見る →</a>")));
+    }
+
+    @Test
+    void 本文の入力欄の上限はフォームの検証と同じ文字数にする() throws Exception {
+        // 画面の maxlength も Post.CONTENT_MAX_LENGTH から出す（InputLimitsAdvice）
+        mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andExpect(content().string(containsString("maxlength=\"" + Post.CONTENT_MAX_LENGTH + "\"")));
     }
 
     @Test

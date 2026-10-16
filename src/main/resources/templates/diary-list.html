@@ -16,7 +16,7 @@
 
     <form th:action="@{/diary}" method="get" class="mb-4">
         <div class="input-group">
-            <input type="text" name="keyword" class="form-control" th:value="${keyword}" maxlength="50"
+            <input type="text" name="keyword" class="form-control" th:value="${keyword}" th:maxlength="${keywordMaxLength}"
                    placeholder="日記の内容を検索" aria-label="日記の内容を検索"
                    th:classappend="${keywordError != null} ? 'is-invalid'">
             <button class="btn btn-outline-secondary" type="submit">検索</button>

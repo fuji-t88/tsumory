@@ -122,6 +122,8 @@ class DiaryControllerTest {
 
         // テンプレートのコメントは Thymeleaf のコメントで書き、ブラウザに送らない
         assertThat(html).doesNotContain("<!--");
+        // キーワードの入力欄の上限は、検索画面と同じ SearchForm.KEYWORD_MAX_LENGTH（InputLimitsAdvice が渡す）
+        assertThat(html).contains("maxlength=\"50\"");
         assertThat(html)
                 .contains("日記一覧")
                 .contains("2026年10月7日の日記")

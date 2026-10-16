@@ -2,6 +2,7 @@ package com.example.tsumory.controller;
 
 import com.example.tsumory.config.CustomUserDetails;
 import com.example.tsumory.domain.PostCategory;
+import com.example.tsumory.form.SearchForm;
 import com.example.tsumory.service.DiaryGenerationException;
 import com.example.tsumory.service.DiaryGenerationService;
 import com.example.tsumory.service.DiaryItem;
@@ -33,13 +34,10 @@ public class DiaryController {
 
     static final String NO_POSTS_MESSAGE = "つぶやきがないため日記を生成できません";
     static final String FUTURE_DATE_MESSAGE = "未来の日付の日記は表示できません";
-    static final String KEYWORD_TOO_LONG_MESSAGE = "50 文字以内で入力してください";
+    static final String KEYWORD_TOO_LONG_MESSAGE = SearchForm.KEYWORD_MAX_LENGTH + " 文字以内で入力してください";
 
     /** 日記の一覧（{@code GET /diary}）で 1 ページに出す件数。 */
     static final int DIARY_LIST_PAGE_SIZE = 10;
-
-    /** キーワードの上限（文字数）。検索画面と同じ。 */
-    static final int KEYWORD_MAX_LENGTH = 50;
 
     static final String GENERATION_FAILED_MESSAGE = "日記の生成に失敗しました。時間をおいて再度お試しください";
 
@@ -69,7 +67,7 @@ public class DiaryController {
         var trimmed = keyword == null ? "" : keyword.strip();
         var pageable = PageRequest.of(Math.max(0, page), DIARY_LIST_PAGE_SIZE);
         model.addAttribute("keyword", trimmed);
-        if (trimmed.length() > KEYWORD_MAX_LENGTH) {
+        if (trimmed.length() > SearchForm.KEYWORD_MAX_LENGTH) {
             // 検索画面（SearchForm）と同じ上限。超えたら検索せずにメッセージを出す
             model.addAttribute("keywordError", KEYWORD_TOO_LONG_MESSAGE);
             model.addAttribute("diaries", Page.<DiaryItem>empty(pageable));

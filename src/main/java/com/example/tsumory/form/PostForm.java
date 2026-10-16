@@ -1,5 +1,6 @@
 package com.example.tsumory.form;
 
+import com.example.tsumory.domain.Post;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -11,6 +12,6 @@ import jakarta.validation.constraints.Size;
  */
 public record PostForm(
         @NotBlank(message = "内容を入力してください")
-        @Size(max = 100, message = "100 文字以内で入力してください")
+        @Size(max = Post.CONTENT_MAX_LENGTH, message = "{max} 文字以内で入力してください")
         @Pattern(regexp = "[^\r\n]*", message = "改行は入れられません")
         String content) {}
