@@ -111,15 +111,12 @@ public class SearchService {
             // DB の lower() と Java の比べ方がずれて見つからなかったときは、先頭から切り出す
             index = 0;
         }
-        var start = Math.max(0, index - EXCERPT_BEFORE);
-        var end = Math.min(oneLine.length(), index + keyword.length() + EXCERPT_AFTER);
-        // サロゲートペアを途中で切らない
-        if (start > 0 && Character.isLowSurrogate(oneLine.charAt(start))) {
-            start--;
-        }
-        if (end < oneLine.length() && Character.isLowSurrogate(oneLine.charAt(end))) {
-            end++;
-        }
-        return (start > 0 ? "…" : "") + oneLine.substring(start, end) + (end < oneLine.length() ? "…" : "");
+        // 絵文字などのサロゲートペアを途中で切らないよう、文字（コードポイント）単位で数える（DiaryListService#excerpt と同じ数え方）
+        var total = oneLine.codePointCount(0, oneLine.length());
+        var matchStart = oneLine.codePointCount(0, index);
+        var start = Math.max(0, matchStart - EXCERPT_BEFORE);
+        var end = Math.min(total, matchStart + keyword.codePointCount(0, keyword.length()) + EXCERPT_AFTER);
+        var text = oneLine.substring(oneLine.offsetByCodePoints(0, start), oneLine.offsetByCodePoints(0, end));
+        return (start > 0 ? "…" : "") + text + (end < total ? "…" : "");
     }
 }

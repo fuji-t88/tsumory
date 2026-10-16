@@ -183,6 +183,15 @@ class SearchServiceTest {
     }
 
     @Test
+    void excerpt_countsEmojiAsOneCharacter() {
+        // 絵文字（サロゲートペア）も 1 文字として数える。前 30 文字・後ろ 60 文字は、絵文字でも同じ文字数になる
+        var content = "😀".repeat(40) + "カレー" + "🍛".repeat(70);
+
+        assertThat(SearchService.excerpt(content, "カレー"))
+                .isEqualTo("…" + "😀".repeat(30) + "カレー" + "🍛".repeat(60) + "…");
+    }
+
+    @Test
     void excerpt_keepsWholeTextWhenShortAndReplacesLineBreaks() {
         assertThat(SearchService.excerpt("朝は寝坊。\n昼はカレー。", "カレー")).isEqualTo("朝は寝坊。 昼はカレー。");
     }
