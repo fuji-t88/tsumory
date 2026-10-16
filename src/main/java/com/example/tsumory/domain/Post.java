@@ -63,7 +63,7 @@ public class Post {
 
     // DB の既定値は INSERT で列を省いたときだけ効く。JPA は値を明示して INSERT するので、初期値で OTHER を持たせる
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = PostCategory.NAME_MAX_LENGTH)
     private PostCategory category = PostCategory.OTHER;
 
     /** ユーザーが手でカテゴリを直したら true。true のあいだは AI の判定で上書きしない（判断は service が行う）。 */
