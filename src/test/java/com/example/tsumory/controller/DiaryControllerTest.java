@@ -169,9 +169,24 @@ class DiaryControllerTest {
     void 五十一文字のキーワードはエラーを出して検索しない() throws Exception {
         mockMvc.perform(get("/diary").param("keyword", "あ".repeat(51)).with(user(PRINCIPAL)))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("50 文字以内で入力してください")));
+                .andExpect(content().string(containsString("50 文字以内で入力してください")))
+                .andExpect(content().string(containsString("is-invalid")));
 
         verify(diaryService, never()).searchDiaries(any(), any(), any());
+    }
+
+    @Test
+    void キーワードの文字数は前後の空白を取り除いてから数える() throws Exception {
+        // DiaryListForm が空白を取り除いてから検証するので、前後の空白で上限を超えても検索する
+        var keyword = "あ".repeat(50);
+        when(diaryService.searchDiaries(USER_ID, keyword, PageRequest.of(0, 10)))
+                .thenReturn(Page.empty());
+
+        mockMvc.perform(get("/diary").param("keyword", "  " + keyword + "  ").with(user(PRINCIPAL)))
+                .andExpect(status().isOk())
+                .andExpect(content().string(not(containsString("文字以内で入力してください"))));
+
+        verify(diaryService).searchDiaries(USER_ID, keyword, PageRequest.of(0, 10));
     }
 
     @Test

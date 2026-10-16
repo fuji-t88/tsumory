@@ -14,14 +14,14 @@
 <main class="container py-4" style="max-width: 720px;">
     <h2 class="h4 mb-3">日記一覧</h2>
 
-    <form th:action="@{/diary}" method="get" class="mb-4">
+    <form th:action="@{/diary}" th:object="${diaryListForm}" method="get" class="mb-4">
         <div class="input-group">
             <input type="text" name="keyword" class="form-control" th:value="${keyword}" th:maxlength="${keywordMaxLength}"
                    placeholder="日記の内容を検索" aria-label="日記の内容を検索"
-                   th:classappend="${keywordError != null} ? 'is-invalid'">
+                   th:classappend="${#fields.hasErrors('keyword')} ? 'is-invalid'">
             <button class="btn btn-outline-secondary" type="submit">検索</button>
         </div>
-        <p th:if="${keywordError != null}" th:text="${keywordError}" class="text-danger small mb-0 mt-1" role="alert">
+        <p th:if="${#fields.hasErrors('keyword')}" th:errors="*{keyword}" class="text-danger small mb-0 mt-1" role="alert">
             50 文字以内で入力してください
         </p>
     </form>

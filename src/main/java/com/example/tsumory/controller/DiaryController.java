@@ -2,7 +2,7 @@ package com.example.tsumory.controller;
 
 import com.example.tsumory.config.CustomUserDetails;
 import com.example.tsumory.domain.PostCategory;
-import com.example.tsumory.form.SearchForm;
+import com.example.tsumory.form.DiaryListForm;
 import com.example.tsumory.service.DiaryGenerationException;
 import com.example.tsumory.service.DiaryGenerationService;
 import com.example.tsumory.service.DiaryItem;
@@ -10,6 +10,7 @@ import com.example.tsumory.service.DiaryService;
 import com.example.tsumory.service.InvalidDiaryDateException;
 import com.example.tsumory.service.NoPostsException;
 import com.example.tsumory.service.PostService;
+import jakarta.validation.Valid;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -20,7 +21,9 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,7 +37,6 @@ public class DiaryController {
 
     static final String NO_POSTS_MESSAGE = "つぶやきがないため日記を生成できません";
     static final String FUTURE_DATE_MESSAGE = "未来の日付の日記は表示できません";
-    static final String KEYWORD_TOO_LONG_MESSAGE = SearchForm.KEYWORD_MAX_LENGTH + " 文字以内で入力してください";
 
     /** 日記の一覧（{@code GET /diary}）で 1 ページに出す件数。 */
     static final int DIARY_LIST_PAGE_SIZE = 10;
@@ -60,21 +62,20 @@ public class DiaryController {
     @GetMapping
     public String diaryList(
             @AuthenticationPrincipal CustomUserDetails principal,
-            @RequestParam(name = "keyword", required = false) String keyword,
+            @Valid @ModelAttribute("diaryListForm") DiaryListForm form,
+            BindingResult binding,
             @RequestParam(name = "page", defaultValue = "0") int page,
             Model model) {
         var userId = principal.userId();
-        var trimmed = keyword == null ? "" : keyword.strip();
         var pageable = PageRequest.of(Math.max(0, page), DIARY_LIST_PAGE_SIZE);
-        model.addAttribute("keyword", trimmed);
-        if (trimmed.length() > SearchForm.KEYWORD_MAX_LENGTH) {
-            // 検索画面（SearchForm）と同じ上限。超えたら検索せずにメッセージを出す
-            model.addAttribute("keywordError", KEYWORD_TOO_LONG_MESSAGE);
+        model.addAttribute("keyword", form.keyword());
+        if (binding.hasErrors()) {
+            // キーワードが長すぎるときは、検索せずにエラーを出す（入力欄の下に出す）
             model.addAttribute("diaries", Page.<DiaryItem>empty(pageable));
             return "diary-list";
         }
         var diaries = diaryService
-                .searchDiaries(userId, trimmed, pageable)
+                .searchDiaries(userId, form.keyword(), pageable)
                 .map(diary -> DiaryItem.from(diary, clock.getZone()));
         model.addAttribute("diaries", diaries);
         return "diary-list";
