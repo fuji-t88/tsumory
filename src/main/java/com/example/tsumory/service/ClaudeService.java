@@ -150,6 +150,7 @@ public class ClaudeService implements DiaryWriter {
      * <p>プロンプトインジェクションを防ぐため、全体を {@code <posts>} で囲み、本文の {@code <}・{@code >}・{@code &} はエスケープする。
      * 本文の改行は空白に置き換える。フェーズ 1 で保存された改行入りのつぶやきが、偽のつぶやきの行を紛れ込ませないようにするため
      * （新しい投稿・編集はフォームと {@link Post} が改行を拒否するが、DB から読んだつぶやきはその守りを通らない）。
+     * 同じ理由で、見えない文字（{@link Post#INVISIBLE_CHAR_CLASS}。画面に出ないまま指示を隠せる）も取り除く。
      * テストから呼べるよう、private にしない。
      */
     String buildUserMessage(LocalDate date, List<Post> posts) {
@@ -157,7 +158,7 @@ public class ClaudeService implements DiaryWriter {
                 .map(p -> "- [%s] %s"
                         .formatted(
                                 displayName(p.getCategory()),
-                                ClaudeApiSupport.escapeForPrompt(toOneLine(p.getContent()))))
+                                ClaudeApiSupport.escapeForPrompt(toPromptLine(p.getContent()))))
                 .collect(Collectors.joining("\n"));
         return """
                 %sのつぶやき:
@@ -172,7 +173,8 @@ public class ClaudeService implements DiaryWriter {
         return category == null ? "未分類" : category.getDisplayName();
     }
 
-    private static String toOneLine(String text) {
-        return text.replaceAll("\\R", " ");
+    // 改行は空白にし（前後の語がくっつかないように）、残りの見えない文字は取り除く。改行を先に置き換えるので、行・段落の区切りも空白になる
+    private static String toPromptLine(String text) {
+        return text.replaceAll("\\R", " ").replaceAll(Post.INVISIBLE_CHAR_CLASS, "");
     }
 }
