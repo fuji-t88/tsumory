@@ -18,7 +18,8 @@
     <section class="card shadow-sm mb-4">
         <div class="card-body">
             <h2 class="h5 card-title mb-3">いまの気持ちをつぶやく</h2>
-            <form th:action="@{/posts}" th:object="${postForm}" method="post">
+            <form th:action="@{/posts}" th:object="${postForm}" method="post"
+                  class="js-submit-once" data-submitting-label="つぶやいています…">
                 <div class="mb-2">
                     <textarea th:field="*{content}" th:maxlength="${postContentMaxLength}" rows="2" class="form-control"
                               th:disabled="${postLimitReached}"
@@ -77,7 +78,8 @@
                         </div>
                     </div>
                     <form th:if="${editingPost != null and editingPost.id eq post.id}"
-                          th:action="@{/posts/{id}/edit(id=${post.id})}" th:object="${postEditForm}" method="post">
+                          th:action="@{/posts/{id}/edit(id=${post.id})}" th:object="${postEditForm}" method="post"
+                          class="js-submit-once" data-submitting-label="保存しています…">
                         <div class="mb-2">
                             <textarea th:field="*{content}" th:maxlength="${postContentMaxLength}" rows="2" class="form-control"
                                       th:classappend="${#fields.hasErrors('content')} ? 'is-invalid'"></textarea>

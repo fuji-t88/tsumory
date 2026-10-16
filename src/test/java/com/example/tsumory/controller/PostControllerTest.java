@@ -181,6 +181,23 @@ class PostControllerTest {
     }
 
     @Test
+    void 投稿と編集のフォームは送信中にボタンを押せなくする() throws Exception {
+        // 保存の前に AI がカテゴリを判定するので数秒かかる。連打で同じつぶやきが何件もできないよう、form-submit.js が 2 回目の送信を止める
+        when(postService.getEditablePost(USER_ID, 10L)).thenReturn(TODAY_POST);
+
+        var html = mockMvc.perform(get("/posts/10/edit").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                .containsPattern("action=\"/posts\"[^>]*class=\"js-submit-once\" data-submitting-label=\"つぶやいています…\"")
+                .containsPattern(
+                        "action=\"/posts/10/edit\"[^>]*class=\"js-submit-once\" data-submitting-label=\"保存しています…\"")
+                .contains("<script src=\"/js/form-submit.js\"></script>");
+    }
+
+    @Test
     void 開発用のコメントを画面のHTMLに出さない() throws Exception {
         // テンプレートのコメントは Thymeleaf のコメント（<!--/* */-->）で書き、ブラウザに送らない
         mockMvc.perform(get("/").with(user(PRINCIPAL))).andExpect(content().string(not(containsString("<!--"))));
