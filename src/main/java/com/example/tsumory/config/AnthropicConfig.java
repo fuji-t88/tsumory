@@ -7,7 +7,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-// Claude API のクライアント。ClaudeService が使う
+// Claude API のクライアント。ClaudeService（日記）と PostCategoryClassifier（カテゴリ分類）が共有する。
+// タイムアウトはここで日記に合わせて長くし、分類は呼び出しごとに短いタイムアウトで上書きする（RequestOptions）
 @Configuration
 @EnableConfigurationProperties(ClaudeProperties.class)
 public class AnthropicConfig {

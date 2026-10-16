@@ -120,6 +120,8 @@ class DiaryControllerTest {
                 .andReturn();
         var html = result.getResponse().getContentAsString();
 
+        // テンプレートのコメントは Thymeleaf のコメントで書き、ブラウザに送らない
+        assertThat(html).doesNotContain("<!--");
         assertThat(html)
                 .contains("日記一覧")
                 .contains("2026年10月7日の日記")

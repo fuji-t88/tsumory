@@ -7,9 +7,9 @@
         <a th:href="@{/}" class="navbar-brand fw-bold">Tsumory</a>
         <div class="d-flex align-items-center gap-2">
             <span class="text-secondary small" sec:authentication="name">demo</span>
-            <!-- ナビバーに追加 -->
+            <!--/* 日記一覧（/diary）への近道。メニューの「日記一覧」と同じ行き先を、上段からも押せるようにする */-->
             <a th:href="@{/diary}" class="btn btn-outline-secondary btn-sm">履歴</a>
-            <!-- ログアウトは CSRF トークン付きの POST なので、リンクではなくフォームのボタンにする -->
+            <!--/* ログアウトは CSRF トークン付きの POST なので、リンクではなくフォームのボタンにする */-->
             <form th:action="@{/logout}" method="post" class="m-0">
                 <button type="submit" class="btn btn-outline-secondary btn-sm">ログアウト</button>
             </form>

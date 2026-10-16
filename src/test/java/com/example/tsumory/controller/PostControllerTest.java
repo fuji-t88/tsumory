@@ -158,6 +158,12 @@ class PostControllerTest {
     }
 
     @Test
+    void 開発用のコメントを画面のHTMLに出さない() throws Exception {
+        // テンプレートのコメントは Thymeleaf のコメント（<!--/* */-->）で書き、ブラウザに送らない
+        mockMvc.perform(get("/").with(user(PRINCIPAL))).andExpect(content().string(not(containsString("<!--"))));
+    }
+
+    @Test
     void ナビゲーションにログアウトボタンを表示する() throws Exception {
         mockMvc.perform(get("/").with(user(PRINCIPAL)))
                 .andExpect(content().string(containsString("action=\"/logout\"")))

@@ -14,7 +14,6 @@
 <main class="container py-4" style="max-width: 720px;">
     <h2 class="h4 mb-3">日記一覧</h2>
 
-    <!-- 検索フォーム -->
     <form th:action="@{/diary}" method="get" class="mb-4">
         <div class="input-group">
             <input type="text" name="keyword" class="form-control" th:value="${keyword}" maxlength="50"
@@ -27,7 +26,6 @@
         </p>
     </form>
 
-    <!-- 日記一覧 -->
     <div th:if="${diaries.isEmpty()}" class="text-center text-muted my-5">
         <p>日記が見つかりません。</p>
     </div>

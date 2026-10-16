@@ -69,6 +69,8 @@ class ErrorPageTest {
         assertThat(requestId).isNotBlank();
         assertThat(userIdSeenByController.get()).isEqualTo("1");
         assertThat(html).contains("問題が発生しました").contains("お問い合わせの際は").contains(requestId);
+        // テンプレートのコメントは Thymeleaf のコメントで書き、ブラウザに送らない
+        assertThat(html).doesNotContain("<!--");
     }
 
     @Test

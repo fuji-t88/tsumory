@@ -8,7 +8,7 @@
     <link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
 <body>
-<!-- エラー画面のヘッダーはサービス名だけ（ユーザー名・ログアウトは出さない） -->
+<!--/* エラー画面のヘッダーはサービス名だけ（ユーザー名・ログアウトは出さない） */-->
 <header class="border-bottom mb-3">
     <div class="container app-container py-2">
         <a th:href="@{/}" class="navbar-brand fw-bold">Tsumory</a>
@@ -17,7 +17,7 @@
 <main class="container app-container py-5 text-center">
     <h1 class="h3 mb-3">問題が発生しました</h1>
     <p class="text-secondary mb-4">時間をおいて、もう一度お試しください。</p>
-    <!-- ログの requestId と同じ値。RequestLoggingFilter がリクエスト属性に入れる -->
+    <!--/* ログの requestId と同じ値。RequestLoggingFilter がリクエスト属性に入れる */-->
     <div th:if="${requestId}" class="mb-4">
         <p class="small text-secondary mb-1">お問い合わせの際は、次のエラー ID をお伝えください</p>
         <code class="user-select-all" th:text="${requestId}">00000000-0000-0000-0000-000000000000</code>

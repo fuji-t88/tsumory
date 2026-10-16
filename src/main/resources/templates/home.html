@@ -56,9 +56,7 @@
                         <div class="flex-grow-1">
                             <div th:text="${post.content}">コーヒーがおいしい</div>
                             <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
-                                <!-- カテゴリバッジ -->
                                 <span th:replace="~{fragments/category-badge :: badge(${post.category})}"></span>
-                                <!-- カテゴリ変更フォーム -->
                                 <form th:action="@{/posts/{id}/category(id=${post.id})}" method="post" class="d-inline">
                                     <label th:for="|category-${post.id}|" class="visually-hidden">カテゴリ</label>
                                     <select th:id="|category-${post.id}|" name="category" onchange="this.form.submit()"
