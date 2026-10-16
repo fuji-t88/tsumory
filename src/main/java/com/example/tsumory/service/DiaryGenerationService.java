@@ -1,7 +1,6 @@
 package com.example.tsumory.service;
 
 import com.example.tsumory.domain.Diary;
-import java.time.Clock;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,7 +18,6 @@ public class DiaryGenerationService {
     private final PostService postService;
     private final DiaryService diaryService;
     private final DiaryWriter diaryWriter;
-    private final Clock clock;
 
     /**
      * その日のつぶやきから日記を書き、その日の日記として保存する（遡り生成。今日の分もこれで書く）。
@@ -43,11 +41,13 @@ public class DiaryGenerationService {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Diary generateForDate(Long userId, LocalDate date) {
         // 業務上の失敗は WARN で残す（CLAUDE.md の「ログ」）。AI は呼ばない
-        if (date.isAfter(LocalDate.now(clock))) {
+        // 開ける日付の範囲（業務ルール）は DiaryService が決める。ここでは、範囲の外を「未来」と「登録日より前」に振り分けるだけ
+        var range = diaryService.availableRange(userId);
+        if (range.isFuture(date)) {
             log.warn("Diary date is in the future: userId={}, date={}", userId, date);
             throw new InvalidDiaryDateException(date);
         }
-        if (!diaryService.isAvailableDate(userId, date)) {
+        if (!range.contains(date)) {
             log.warn("Diary date not available: userId={}, date={}", userId, date);
             throw new DiaryNotFoundException(date);
         }

@@ -5,7 +5,6 @@ import static com.example.tsumory.domain.TestFixtures.MEETING;
 import static com.example.tsumory.domain.TestFixtures.NOW;
 import static com.example.tsumory.domain.TestFixtures.OVERSLEPT;
 import static com.example.tsumory.domain.TestFixtures.TODAY;
-import static com.example.tsumory.domain.TestFixtures.clockAt;
 import static com.example.tsumory.domain.TestFixtures.diary;
 import static com.example.tsumory.domain.TestFixtures.hanako;
 import static com.example.tsumory.domain.TestFixtures.mockPosts;
@@ -55,10 +54,10 @@ class DiaryGenerationServiceTest {
 
     @BeforeEach
     void setUp() {
-        // 今日は TestFixtures の基準（2026-10-08、日本時間）
-        service = new DiaryGenerationService(postService, diaryService, diaryWriter, clockAt(NOW));
+        service = new DiaryGenerationService(postService, diaryService, diaryWriter);
 
-        lenient().when(diaryService.isAvailableDate(any(), any())).thenReturn(true);
+        // 開ける日付の範囲は DiaryService が決める。登録日は 10/1、今日は TestFixtures の基準の 10/8（日本時間）
+        lenient().when(diaryService.availableRange(USER_ID)).thenReturn(new DiaryDateRange(PAST, TODAY));
     }
 
     @Test
@@ -131,7 +130,6 @@ class DiaryGenerationServiceTest {
     @Test
     void generateForDate_beforeRegistration_throwsNotFoundWithoutCallingWriter() {
         var beforeRegistration = LocalDate.of(2026, 9, 1);
-        when(diaryService.isAvailableDate(USER_ID, beforeRegistration)).thenReturn(false);
 
         assertThatThrownBy(() -> service.generateForDate(USER_ID, beforeRegistration))
                 .isInstanceOf(DiaryNotFoundException.class);

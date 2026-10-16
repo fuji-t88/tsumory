@@ -40,12 +40,9 @@ public class DiaryListService {
 
     /** その月の日記一覧を返す。登録月より前・今月より後なら {@link DiaryMonthNotFoundException}。 */
     public DiaryMonthSummary summarize(Long userId, YearMonth month) {
-        // 「今日」と登録日はここで 1 回だけ求める
-        var today = LocalDate.now(clock);
-        var registeredDate = diaryService.registeredDate(userId);
-        var firstMonth = YearMonth.from(registeredDate);
-        var lastMonth = YearMonth.from(today);
-        if (month.isBefore(firstMonth) || month.isAfter(lastMonth)) {
+        // 開ける日付の範囲（業務ルール）は DiaryService が決める。「今日」は範囲を作るときに 1 回だけ求められる
+        var range = diaryService.availableRange(userId);
+        if (!range.containsMonth(month)) {
             throw new DiaryMonthNotFoundException(month);
         }
 
@@ -61,10 +58,10 @@ public class DiaryListService {
         return new DiaryMonthSummary(
                 month,
                 daySummaries(diaries, postCounts),
-                calendarWeeks(month, diaries, postCounts, registeredDate, today),
+                calendarWeeks(month, diaries, postCounts, range),
                 diaries.size(),
-                month.equals(firstMonth) ? null : month.minusMonths(1),
-                month.equals(lastMonth) ? null : month.plusMonths(1));
+                month.equals(range.firstMonth()) ? null : month.minusMonths(1),
+                month.equals(range.lastMonth()) ? null : month.plusMonths(1));
     }
 
     private static List<DiaryDaySummary> daySummaries(Map<LocalDate, Diary> diaries, Map<LocalDate, Long> postCounts) {
@@ -85,11 +82,7 @@ public class DiaryListService {
 
     /** 日曜始まりの週に分ける。月の 1 日より前と末日より後は空きマスで埋め、どの週も 7 マスにする。 */
     private static List<DiaryCalendarWeek> calendarWeeks(
-            YearMonth month,
-            Map<LocalDate, Diary> diaries,
-            Map<LocalDate, Long> postCounts,
-            LocalDate registeredDate,
-            LocalDate today) {
+            YearMonth month, Map<LocalDate, Diary> diaries, Map<LocalDate, Long> postCounts, DiaryDateRange range) {
         var cells = new ArrayList<DiaryCalendarDay>();
         var leadingBlanks = month.atDay(1).getDayOfWeek().getValue() % DAYS_PER_WEEK; // 日曜は 0
         for (var i = 0; i < leadingBlanks; i++) {
@@ -101,8 +94,9 @@ public class DiaryListService {
                     date,
                     diaries.containsKey(date),
                     postCounts.containsKey(date),
-                    !date.isBefore(registeredDate) && !date.isAfter(today),
-                    date.equals(today)));
+                    range.contains(date),
+                    // 開ける最後の日が今日
+                    date.equals(range.last())));
         }
         while (cells.size() % DAYS_PER_WEEK != 0) {
             cells.add(DiaryCalendarDay.blank());

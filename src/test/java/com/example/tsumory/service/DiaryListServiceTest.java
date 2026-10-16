@@ -46,9 +46,11 @@ class DiaryListServiceTest {
 
     @BeforeEach
     void setUp() {
-        // 今日は 2026-10-15（日本時間）。登録日は 2026-09-10（DiaryService のモックで決める）
+        // 開ける日付の範囲は DiaryService が決める（モック）。登録日は 2026-09-10、今日は 2026-10-15（日本時間）
         service = new DiaryListService(diaryRepository, postRepository, diaryService, clockAt("2026-10-15T12:00:00"));
-        lenient().when(diaryService.registeredDate(USER_ID)).thenReturn(LocalDate.of(2026, 9, 10));
+        lenient()
+                .when(diaryService.availableRange(USER_ID))
+                .thenReturn(new DiaryDateRange(LocalDate.of(2026, 9, 10), LocalDate.of(2026, 10, 15)));
         lenient()
                 .when(diaryRepository.findByUserIdAndDiaryDateBetweenOrderByDiaryDateDesc(any(), any(), any()))
                 .thenReturn(List.of());

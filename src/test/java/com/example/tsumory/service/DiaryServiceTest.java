@@ -96,6 +96,20 @@ class DiaryServiceTest {
     }
 
     @Test
+    void availableRange_isFromRegisteredDateToToday() {
+        // 業務ルール「登録日から今日まで」はここ 1 か所で決める（表示・生成・カレンダーはこの範囲に問い合わせる）
+        assertThat(service.availableRange(USER_ID)).isEqualTo(new DiaryDateRange(REGISTERED_DATE, TODAY));
+    }
+
+    @Test
+    void availableRange_todaySwitchesAtJstMidnight() {
+        assertThat(serviceAt("2026-10-09T00:00:00").availableRange(USER_ID).last())
+                .isEqualTo(TODAY.plusDays(1));
+        assertThat(serviceAt("2026-10-08T23:59:59").availableRange(USER_ID).last())
+                .isEqualTo(TODAY);
+    }
+
+    @Test
     void isAvailableDate_fromRegisteredDateToToday() {
         assertThat(service.isAvailableDate(USER_ID, REGISTERED_DATE)).isTrue();
         assertThat(service.isAvailableDate(USER_ID, TODAY)).isTrue();

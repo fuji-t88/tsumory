@@ -30,10 +30,19 @@ public class DiaryService {
         return LocalDate.ofInstant(user.getCreatedAt(), clock.getZone());
     }
 
-    /** 日記を開ける日付（登録日から今日まで）なら {@code true}。日記表示と日記一覧のカレンダーで使う。 */
+    /**
+     * 日記を開ける日付の範囲（登録日から今日まで）。業務ルールはここ 1 か所で決め、日記の表示・生成・日記一覧のカレンダーはこの範囲に問い合わせる。
+     * 「今日」はここで 1 回だけ求める。
+     */
+    @Transactional(readOnly = true)
+    public DiaryDateRange availableRange(Long userId) {
+        return new DiaryDateRange(registeredDate(userId), LocalDate.now(clock));
+    }
+
+    /** 日記を開ける日付（{@link #availableRange} の範囲）なら {@code true}。 */
     @Transactional(readOnly = true)
     public boolean isAvailableDate(Long userId, LocalDate date) {
-        return !date.isBefore(registeredDate(userId)) && !date.isAfter(LocalDate.now(clock));
+        return availableRange(userId).contains(date);
     }
 
     /** その日の日記を返す。開ける日付（登録日から今日まで）でなければ {@link DiaryNotFoundException}。 */
