@@ -136,6 +136,11 @@ erDiagram
   - `Post#isEdited()`：`updatedAt` が `postedAt` より後なら `true`
   - `Diary#updateContent(String content, Instant now)`：本文と `generatedAt` を変える
 - `User` と `Post`・`Diary` の関係は片方向（`User` 側にコレクションを持たない）
+- エンティティは、作る時点（コンストラクタ）と状態を変える時点で、自分の決まりを守る。フォームや service でも確かめていても、それを通らない経路（将来の API・管理用の処理、テストデータなど）で、保存の時点の DB のエラーではなく、作る時点で気づけるようにするため。例外のメッセージに値は入れない（本文やパスワードがログに出ないように）
+  - 必須の値（ユーザー・日付・時刻・本文など）の `null` は `NullPointerException`（`Objects.requireNonNull`）
+  - `User`：`username` は空でなく 50 文字以内。`passwordHash` は BCrypt のハッシュの形（`$2a$`・`$2b$`・`$2y$` + コスト 2 桁 + `$` + 53 文字）でなければ `IllegalArgumentException`（平文のパスワードを保存させない。CLAUDE.md の禁止事項「パスワード」）
+  - `Diary`：本文は空・空白だけでない。日記は AI の出力なので、つぶやきのような改行・見えない文字の禁止は入れない（段落の改行は許す。画面に出すだけで、プロンプトに戻らない）
+  - `Post`：本文の決まりは phase2-spec.md の「5. 画面 > 入力チェック（変更）」
 
 ## 4. 画面
 
