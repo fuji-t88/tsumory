@@ -1,10 +1,13 @@
 package com.example.tsumory.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.SoftAssertions.assertSoftly;
 import static org.junit.jupiter.params.provider.Arguments.argumentSet;
 
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -13,42 +16,66 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 class DiaryTest {
 
-    private static final Instant GENERATED_AT = Instant.parse("2026-10-08T13:00:00Z");
-    private static final Instant REGENERATED_AT = Instant.parse("2026-10-08T14:00:00Z");
+    private static final Instant GENERATED_AT = TestFixtures.jst("2026-10-08T22:00:00");
+    private static final Instant REGENERATED_AT = TestFixtures.jst("2026-10-08T23:00:00");
 
-    private static Diary newDiary() {
-        return new Diary(TestFixtures.hanako(), TestFixtures.TODAY, TestFixtures.DIARY_CONTENT, GENERATED_AT);
+    /**
+     * 日記の日付（{@link TestFixtures#TODAY}、10/8）の生成時刻の境目。世界でいちばん早く 10/8 になるオフセット（UTC+18:00）の 0 時で、
+     * これより前の生成時刻は拒否する。
+     */
+    private static final Instant EARLIEST_START =
+            OffsetDateTime.parse("2026-10-08T00:00:00+18:00").toInstant();
+
+    // 例外のメッセージは、決まった文言と同じかで確かめる。日記の本文も個人的な内容なので、メッセージに入っていないことも確かめられる
+    private static final String BLANK = "Diary content must not be blank";
+    private static final String BEFORE_DATE = "Diary cannot be generated before its date starts";
+
+    private final User user = TestFixtures.hanako();
+
+    private Diary newDiary() {
+        return new Diary(user, TestFixtures.TODAY, TestFixtures.DIARY_CONTENT, GENERATED_AT);
+    }
+
+    /** 書いたときのまま（本文・生成時刻・日付のどれも変わっていない）。失敗した書き直しが、一部だけ書き換えて止まっていないことを確かめる。 */
+    private static void assertUnchanged(Diary diary) {
+        assertSoftly(softly -> {
+            softly.assertThat(diary.getContent()).isEqualTo(TestFixtures.DIARY_CONTENT);
+            softly.assertThat(diary.getGeneratedAt()).isEqualTo(GENERATED_AT);
+            softly.assertThat(diary.getDiaryDate()).isEqualTo(TestFixtures.TODAY);
+        });
     }
 
     @Test
     void 必須の値がnullなら作れない() {
         // 保存の時点の DB のエラー（500）ではなく、作る時点で気づける
-        var user = TestFixtures.hanako();
         var today = TestFixtures.TODAY;
         var content = TestFixtures.DIARY_CONTENT;
 
-        assertThatThrownBy(() -> new Diary(null, today, content, GENERATED_AT))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessage("user");
-        assertThatThrownBy(() -> new Diary(user, null, content, GENERATED_AT))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessage("diaryDate");
-        assertThatThrownBy(() -> new Diary(user, today, null, GENERATED_AT))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessage("content");
-        assertThatThrownBy(() -> new Diary(user, today, content, null))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessage("now");
+        assertSoftly(softly -> {
+            softly.assertThatThrownBy(() -> new Diary(null, today, content, GENERATED_AT))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("user");
+            softly.assertThatThrownBy(() -> new Diary(user, null, content, GENERATED_AT))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("diaryDate");
+            softly.assertThatThrownBy(() -> new Diary(user, today, null, GENERATED_AT))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("content");
+            softly.assertThatThrownBy(() -> new Diary(user, today, content, null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("now");
+        });
     }
 
     @Test
     void 時刻がnullなら書き直せず前の日記のまま() {
         var diary = newDiary();
 
-        assertThatThrownBy(() -> diary.updateContent("書き直した日記", null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> diary.updateContent("書き直した日記", null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("now");
         // 本文だけが書き換わった状態で止まらない
-        assertThat(diary.getContent()).isEqualTo(TestFixtures.DIARY_CONTENT);
-        assertThat(diary.getGeneratedAt()).isEqualTo(GENERATED_AT);
+        assertUnchanged(diary);
     }
 
     static Stream<Arguments> blankContents() {
@@ -59,8 +86,9 @@ class DiaryTest {
     @MethodSource("blankContents")
     void 空や空白だけの本文では作れない(String content) {
         // 「日記あり」なのに何も書かれていない画面にしない
-        assertThatThrownBy(() -> new Diary(TestFixtures.hanako(), TestFixtures.TODAY, content, GENERATED_AT))
-                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Diary(user, TestFixtures.TODAY, content, GENERATED_AT))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(BLANK);
     }
 
     @Test
@@ -68,9 +96,10 @@ class DiaryTest {
         // 前の日記を空で上書きして消さない
         var diary = newDiary();
 
-        assertThatThrownBy(() -> diary.updateContent(" ", REGENERATED_AT)).isInstanceOf(IllegalArgumentException.class);
-        assertThat(diary.getContent()).isEqualTo(TestFixtures.DIARY_CONTENT);
-        assertThat(diary.getGeneratedAt()).isEqualTo(GENERATED_AT);
+        assertThatThrownBy(() -> diary.updateContent(" ", REGENERATED_AT))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(BLANK);
+        assertUnchanged(diary);
     }
 
     @Test
@@ -78,31 +107,30 @@ class DiaryTest {
         // 日記は AI の出力。つぶやきと違い、改行は禁止しない
         var content = "朝は寝坊した。\n\n昼はカレーを食べた。";
 
-        assertThat(new Diary(TestFixtures.hanako(), TestFixtures.TODAY, content, GENERATED_AT).getContent())
+        assertThat(new Diary(user, TestFixtures.TODAY, content, GENERATED_AT).getContent())
                 .isEqualTo(content);
     }
 
     @Test
-    void その日が来る前の生成時刻では作れない() {
-        // 内部一貫性の制約：その日が来る前に、その日の日記は書けない。世界でいちばん早く 10/8 になる UTC+18:00 の 0 時
-        // （UTC の 10/7 6:00）が境目
-        var user = TestFixtures.hanako();
-        var earliestStart = Instant.parse("2026-10-07T06:00:00Z");
+    void 境目ちょうどの生成時刻なら作れる() {
+        assertThat(new Diary(user, TestFixtures.TODAY, TestFixtures.DIARY_CONTENT, EARLIEST_START).getGeneratedAt())
+                .isEqualTo(EARLIEST_START);
+    }
 
+    @Test
+    void 境目より前の生成時刻では作れない() {
+        // 内部一貫性の制約：その日が来る前に、その日の日記は書けない
         assertThatThrownBy(() ->
-                        new Diary(user, TestFixtures.TODAY, TestFixtures.DIARY_CONTENT, earliestStart.minusNanos(1)))
+                        new Diary(user, TestFixtures.TODAY, TestFixtures.DIARY_CONTENT, EARLIEST_START.minusNanos(1)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Diary cannot be generated before its date starts");
-        assertThat(new Diary(user, TestFixtures.TODAY, TestFixtures.DIARY_CONTENT, earliestStart).getGeneratedAt())
-                .isEqualTo(earliestStart);
-        // 日本時間の 10/8 0 時ちょうど（UTC の 10/7 15:00）にも書ける
-        assertThat(new Diary(
-                                user,
-                                TestFixtures.TODAY,
-                                TestFixtures.DIARY_CONTENT,
-                                TestFixtures.jst("2026-10-08T00:00:00"))
-                        .getDiaryDate())
-                .isEqualTo(TestFixtures.TODAY);
+                .hasMessage(BEFORE_DATE);
+    }
+
+    @Test
+    void 日本時間の0時ちょうどに作れる() {
+        assertThatCode(() -> new Diary(
+                        user, TestFixtures.TODAY, TestFixtures.DIARY_CONTENT, TestFixtures.jst("2026-10-08T00:00:00")))
+                .doesNotThrowAnyException();
     }
 
     @Test
@@ -111,19 +139,18 @@ class DiaryTest {
         // （未来の日付の日記を断るのは service の業務ルール）
         var generatedAt = TestFixtures.jst("2026-10-07T16:00:00");
 
-        assertThat(new Diary(TestFixtures.hanako(), TestFixtures.TODAY, TestFixtures.DIARY_CONTENT, generatedAt)
-                        .getGeneratedAt())
+        assertThat(new Diary(user, TestFixtures.TODAY, TestFixtures.DIARY_CONTENT, generatedAt).getGeneratedAt())
                 .isEqualTo(generatedAt);
     }
 
     @Test
-    void その日が来る前の生成時刻では書き直せず前の日記のまま() {
+    void 境目より前の生成時刻では書き直せず前の日記のまま() {
         var diary = newDiary();
 
-        assertThatThrownBy(() -> diary.updateContent("書き直した日記", Instant.parse("2026-10-07T05:59:59Z")))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThat(diary.getContent()).isEqualTo(TestFixtures.DIARY_CONTENT);
-        assertThat(diary.getGeneratedAt()).isEqualTo(GENERATED_AT);
+        assertThatThrownBy(() -> diary.updateContent("書き直した日記", EARLIEST_START.minusNanos(1)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(BEFORE_DATE);
+        assertUnchanged(diary);
     }
 
     @Test

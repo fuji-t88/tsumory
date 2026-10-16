@@ -2,6 +2,7 @@ package com.example.tsumory.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.SoftAssertions.assertSoftly;
 import static org.junit.jupiter.params.provider.Arguments.argumentSet;
 
 import java.time.Instant;
@@ -14,22 +15,31 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 class UserTest {
 
-    private static final Instant CREATED_AT = Instant.parse("2026-09-30T15:00:00Z");
+    private static final Instant CREATED_AT = TestFixtures.jst(TestFixtures.REGISTERED_AT);
 
     private static final String HASH = TestFixtures.PASSWORD_HASH;
+
+    // 例外のメッセージは、決まった文言と同じかで確かめる。どの決まりで拒否したかが分かり、渡した値（平文のパスワードなど）が
+    // メッセージに入っていない（ログに出ない）ことも同時に確かめられる
+    private static final String NOT_BCRYPT = "Password hash must be a BCrypt hash";
+    private static final String USERNAME_BLANK = "Username must not be blank";
+    private static final String USERNAME_TOO_LONG =
+            "Username must be at most " + User.USERNAME_MAX_LENGTH + " characters";
 
     @Test
     void 必須の値がnullなら作れない() {
         // 保存の時点の DB のエラー（500）ではなく、作る時点で気づける
-        assertThatThrownBy(() -> new User(null, HASH, CREATED_AT))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessage("username");
-        assertThatThrownBy(() -> new User("hanako", null, CREATED_AT))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessage("passwordHash");
-        assertThatThrownBy(() -> new User("hanako", HASH, null))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessage("now");
+        assertSoftly(softly -> {
+            softly.assertThatThrownBy(() -> new User(null, HASH, CREATED_AT))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("username");
+            softly.assertThatThrownBy(() -> new User("hanako", null, CREATED_AT))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("passwordHash");
+            softly.assertThatThrownBy(() -> new User("hanako", HASH, null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("now");
+        });
     }
 
     static Stream<Arguments> notHashes() {
@@ -47,9 +57,7 @@ class UserTest {
         // PasswordEncoder を通し忘れても、平文のパスワードを保存させない（CLAUDE.md の禁止事項「パスワード」）
         assertThatThrownBy(() -> new User("hanako", notHash, CREATED_AT))
                 .isInstanceOf(IllegalArgumentException.class)
-                // 値はメッセージに入れない（平文のパスワードがログに出ないように）
-                .hasMessageNotContaining("password")
-                .hasMessage("Password hash must be a BCrypt hash");
+                .hasMessage(NOT_BCRYPT);
     }
 
     @Test
@@ -72,14 +80,16 @@ class UserTest {
 
     static Stream<Arguments> invalidUsernames() {
         return Stream.of(
-                argumentSet("空文字列", ""),
-                argumentSet("空白だけ", "  "),
-                argumentSet("上限より 1 文字長い", "a".repeat(User.USERNAME_MAX_LENGTH + 1)));
+                argumentSet("空文字列", "", USERNAME_BLANK),
+                argumentSet("空白だけ", "  ", USERNAME_BLANK),
+                argumentSet("上限より 1 文字長い", "a".repeat(User.USERNAME_MAX_LENGTH + 1), USERNAME_TOO_LONG));
     }
 
     @ParameterizedTest
     @MethodSource("invalidUsernames")
-    void 空や上限を超えるユーザー名では作れない(String username) {
-        assertThatThrownBy(() -> new User(username, HASH, CREATED_AT)).isInstanceOf(IllegalArgumentException.class);
+    void 空や上限を超えるユーザー名では作れない(String username, String message) {
+        assertThatThrownBy(() -> new User(username, HASH, CREATED_AT))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(message);
     }
 }
