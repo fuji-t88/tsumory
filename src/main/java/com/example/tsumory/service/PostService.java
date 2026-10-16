@@ -53,11 +53,6 @@ public class PostService {
         return postRepository.findByUserIdAndDate(userId, date, clock.getZone());
     }
 
-    /** 今日（日本時間）のつぶやきを投稿時刻の古い順に返す。日記を書く材料にする。 */
-    public List<Post> findTodayPosts(Long userId) {
-        return findPostsByDate(userId, LocalDate.now(clock));
-    }
-
     /**
      * つぶやきをキーワードとカテゴリで検索し、新しい順に最大 {@code limit} 件返す。キーワードとカテゴリのどちらかは指定する。
      *
