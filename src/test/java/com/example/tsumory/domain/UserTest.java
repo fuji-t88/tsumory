@@ -1,5 +1,6 @@
 package com.example.tsumory.domain;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
@@ -24,5 +25,14 @@ class UserTest {
         assertThatThrownBy(() -> new User("hanako", HASH, null))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("now");
+    }
+
+    @Test
+    void ユーザー名は空でなく上限の文字数まで() {
+        assertThat(new User("a".repeat(User.USERNAME_MAX_LENGTH), HASH, CREATED_AT).getUsername())
+                .hasSize(User.USERNAME_MAX_LENGTH);
+        for (var username : new String[] {"", "  ", "a".repeat(User.USERNAME_MAX_LENGTH + 1)}) {
+            assertThatThrownBy(() -> new User(username, HASH, CREATED_AT)).isInstanceOf(IllegalArgumentException.class);
+        }
     }
 }
