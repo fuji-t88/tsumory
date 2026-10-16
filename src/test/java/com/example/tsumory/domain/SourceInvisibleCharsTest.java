@@ -26,7 +26,7 @@ class SourceInvisibleCharsTest {
             Pattern.compile(Post.INVISIBLE_CHAR_CLASS + "|[\\u200D\\uFE00-\\uFE0F]");
 
     /** 確かめるディレクトリ（プロジェクト直下から）。テストはプロジェクト直下で動く。 */
-    private static final List<Path> ROOTS = List.of(Path.of("src"), Path.of("db"));
+    private static final List<Path> ROOTS = List.of(Path.of("src"), Path.of("db"), Path.of("docs"));
 
     private static final Set<String> TEXT_EXTENSIONS =
             Set.of("java", "sql", "html", "js", "css", "yaml", "yml", "properties", "kts", "md", "txt");
@@ -75,7 +75,8 @@ class SourceInvisibleCharsTest {
         assertThat(files)
                 .contains(
                         Path.of("src/test/java/com/example/tsumory/domain/SourceInvisibleCharsTest.java"),
-                        Path.of("src/main/resources/db/migration/V3__add_content_checks_to_posts.sql"));
+                        Path.of("src/main/resources/db/migration/V3__add_content_checks_to_posts.sql"),
+                        Path.of("docs/spec.md"));
         assertThat(violations).isEmpty();
     }
 }
