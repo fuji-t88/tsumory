@@ -32,16 +32,16 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 | # | 重要度 | 観点 | 指摘 | 場所 | 状態 |
 |---|---|---|---|---|---|
-| 1 | 中 | セキュリティ | 改行を含む既存のつぶやきが、日記のプロンプトに偽の行を紛れ込ませられる | `ClaudeService#buildUserMessage` | 未対応 |
-| 2 | 中 | エラーハンドリング | 同じ日の日記を同時に生成すると、2 件目が一意制約の違反で 500 になる | `DiaryService#saveDiary` | 未対応 |
-| 3 | 中 | 可読性・保守性 | タイムゾーンの基準が `Clock` と定数 `PostService.ZONE` の 2 つに分かれている | `PostService`・`DiaryService`・`SearchService`・`SearchHit` | 未対応 |
-| 4 | 中 | 可読性・保守性 | 同じ処理が 2 か所ずつある（`LIKE` のエスケープ、プロンプトのエスケープ、日記の書き出しの切り出し、Claude API の失敗ログ） | `SearchService`・`DiaryService`・`ClaudeService`・`PostCategoryClassifier`・`DiaryListService` | 未対応 |
-| 5 | 低 | 可読性・保守性 | Javadoc が古い（存在しないメソッドへのリンク、今は違う日付の範囲） | `DiaryService#findDiaryForSummary`・`PostService#isEditableDate` | 未対応 |
+| 1 | 中 | セキュリティ | 改行を含む既存のつぶやきが、日記のプロンプトに偽の行を紛れ込ませられる | `ClaudeService#buildUserMessage` | 対応済み |
+| 2 | 中 | エラーハンドリング | 同じ日の日記を同時に生成すると、2 件目が一意制約の違反で 500 になる | `DiaryService#saveDiary` | 対応済み |
+| 3 | 中 | 可読性・保守性 | タイムゾーンの基準が `Clock` と定数 `PostService.ZONE` の 2 つに分かれている | `PostService`・`DiaryService`・`SearchService`・`SearchHit` | 対応済み |
+| 4 | 中 | 可読性・保守性 | 同じ処理が 2 か所ずつある（`LIKE` のエスケープ、プロンプトのエスケープ、日記の書き出しの切り出し、Claude API の失敗ログ） | `SearchService`・`DiaryService`・`ClaudeService`・`PostCategoryClassifier`・`DiaryListService` | 対応済み |
+| 5 | 低 | 可読性・保守性 | Javadoc が古い（存在しないメソッドへのリンク、今は違う日付の範囲） | `DiaryService#findDiaryForSummary`・`PostService#isEditableDate` | 対応済み |
 | 6 | 低 | 可読性・保守性 | ログメッセージの言語が 1 か所だけ日本語 | `PostService#create` | 保留 |
-| 7 | 低 | エラーハンドリング | キーワードもカテゴリもなしで `search` を呼ぶと、黙って 0 件を返す | `SearchService#search` | 未対応 |
-| 8 | 低 | 可読性・保守性 | 「他人のつぶやきなら見つからない扱い」の取得処理が 2 か所に重複 | `PostService#updateCategory`・`#findEditablePost` | 未対応 |
+| 7 | 低 | エラーハンドリング | キーワードもカテゴリもなしで `search` を呼ぶと、黙って 0 件を返す | `SearchService#search` | 対応済み |
+| 8 | 低 | 可読性・保守性 | 「他人のつぶやきなら見つからない扱い」の取得処理が 2 か所に重複 | `PostService#updateCategory`・`#findEditablePost` | 対応済み |
 | 9 | 低 | 可読性・保守性 | 本番のコードから呼ばれていないメソッドがある | `PostService#findTodayPosts` | 保留 |
-| 10 | 低 | 可読性・保守性 | つぶやきはリポジトリ、日記はサービスを経由していて、取り方がそろっていない | `SearchService` | 未対応 |
+| 10 | 低 | 可読性・保守性 | つぶやきはリポジトリ、日記はサービスを経由していて、取り方がそろっていない | `SearchService` | 対応済み |
 
 高の指摘はない。セキュリティの基本（他人のデータの絞り込み、SQL のパラメータ化、ログに本文を出さない、画面に内部情報を出さない）は満たしている（末尾の「よくできている点」）。
 
@@ -49,7 +49,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 3. タイムゾーンの基準が 2 つある（中）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `2c25f23`）：定数 `PostService.ZONE` を廃止し、日付・時刻の変換はすべて `clock.getZone()`・`LocalDate.now(clock)` で求めるようにした（`PostService`・`DiaryService`・`SearchService`）。`SearchHit.DiaryHit` は並べるための時刻を自分で求めず、`Clock` を持つ `SearchService` が求めて `sortKey` として渡す形にした。テストの `PostService.ZONE` は `TestFixtures.JST` に置き換え、`PostServiceTest` に「同じ瞬間でも、UTC の `Clock` なら日付が前日になる」テストを足した
 
 - 場所
   - `Clock` から求めている：`PostService#findPostsByDate`・`#countPosts`・`#findTodayPosts`、`DiaryService#isAvailableDate`、`DiaryListService`、`DiaryGenerationService`
@@ -60,8 +61,9 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 4. 同じ処理が 2 か所ずつある（中）
 
-- 状態：未対応
+- 状態：対応済み
   - 判断メモ（2026-10-15）：`DiaryService#escapeForLike` を `private` にしたのは書籍の原稿に合わせたため。`LIKE` のエスケープを共通化するなら、原稿との違いとして扱うかを決めてから直す
+  - ✓ 対応済み（2026-10-16、コミット `a71de91`・`094adec`・`2026022`）：`LIKE` のエスケープは package-private の `LikeKeyword#escape` にまとめ、つぶやき（`PostService#searchPosts`）と日記（`DiaryService#searchDiaries`）の両方から呼ぶ。書籍の原稿に合わせて `private` にしていた `DiaryService#escapeForLike` はなくした（原稿との違いとして扱う）。プロンプトのエスケープと Claude API の失敗のログに出す値（経過時間・ステータス・`request-id`）は `ClaudeApiSupport` にまとめた。失敗のログは、応答がないときもステータスと `request-id` を `none` で出す 1 つの形になった。本文の切り出しは `SearchService#excerpt` もコードポイントで数えるようにした。テストは `LikeKeywordTest`・`ClaudeApiSupportTest` を足し、`SearchServiceTest` に絵文字を含む本文の切り出しを足した
 
 | 処理 | 1 か所目 | 2 か所目 | 違い |
 |---|---|---|---|
@@ -76,7 +78,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 5. Javadoc が古い（低）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `223c0b0`）：`DiaryService#findDiaryForSummary` を「`{@link #findByDate}` と違い、開ける日付（登録日から今日まで）かは確かめない」に、`PostService#isEditableDate` を「つぶやきの編集・削除を受け付ける日付」（日記を開ける日付は `DiaryService#isAvailableDate` で別に判定する）に直した。コメントだけの変更なので、テストは足していない
 
 - `DiaryService#findDiaryForSummary`（52 行目）：「`{@link #findDiary}` と違い、日付が今日・昨日かは確かめない」とあるが、`findDiary` というメソッドはない（今は `findByDate`）。また、`findByDate` が確かめる範囲は今は「登録日から今日まで」で、「今日・昨日」ではない
 - `PostService#isEditableDate`（40 行目）：「編集・削除、日記の表示と生成を受け付ける日付（今日と昨日）」とあるが、日記の表示と生成は今は `DiaryService#isAvailableDate`（登録日から今日まで）で判定している。`isEditableDate` が受け持つのは、つぶやきの編集・削除だけ
@@ -96,7 +99,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 8. 「自分のつぶやきを取る」処理が重複（低）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `b1e647d`）：private メソッド `PostService#findOwnPost` にまとめ、`updateCategory` はそれを呼び、`findEditablePost` はそれに日付の判定を足す形にした。動作は変わらないので、既存のテスト（他人のつぶやき・一昨日のつぶやきの `updateCategory`・`edit`・`delete`）で確かめた
 
 - 場所：`PostService#updateCategory`（147〜150 行目）と `#findEditablePost`（171〜175 行目）に、同じ `findByIdAndUserId(...).orElseThrow(() -> { log.warn(...); return new ResourceNotFoundException(...); })` がある
 - 直し方の案：`findOwnPost(userId, postId)` のような private メソッドにまとめ、`findEditablePost` はそれに日付の判定を足す形にする
@@ -112,7 +116,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 10. 検索でのつぶやきと日記の取り方がそろっていない（低）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `8f43a5f`）：`PostService#searchPosts(userId, keyword, category, limit)` を足し、`SearchService` はつぶやきも日記もサービス経由で取るようにした（`PostRepository` を直接使わない）。どちらのサービスもエスケープ前のキーワードを受け取り、自分でエスケープする。テストは `PostServiceTest` に振り分けとエスケープを足し、`SearchServiceTest` は `PostService` のモックを使う形に直した
 
 - 場所：`SearchService#search`。つぶやきは `PostRepository` を直接呼び、日記は `DiaryService#searchDiaries` を経由する
 - 何が起きるか：エスケープや振り分けの場所が、つぶやきは `SearchService`、日記は `DiaryService` と分かれる（指摘 4 の `LIKE` のエスケープの重複の原因でもある）
@@ -122,7 +127,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 2. 同じ日の日記を同時に生成すると 500 になる（中）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `8bb2e15`。仕様の追記はコミット `507f186`）：トランザクションの外で動く `DiaryGenerationService#generateForDate` で `DataIntegrityViolationException` を受け、WARN（例外はクラス名だけ）を残してから `saveDiary` をもう 1 回呼ぶ。1 回目のトランザクションはロールバック済みなので、2 回目は先に保存された日記の上書きになる（後から保存した方の本文が残る）。Claude API は呼び直さない。2 回目も失敗したら一意制約以外の原因なので、そのまま投げる（500）。仕様（phase1-spec.md の「二重押下の防止（サーバー側）」）の「片方は 500 になる」を、この動きに直した。テストは `DiaryGenerationServiceTest` に 2 件（やり直して成功する、2 回目も失敗したら投げる）
 
 - 場所：`DiaryService#saveDiary`（84〜97 行目）
 - 何が起きるか：別々のタブから、同じ日の「日記を生成」をほぼ同時に押すと、どちらも `findByUserIdAndDiaryDate` で「まだない」と判断して INSERT する。`diaries` には `(user_id, diary_date)` の一意制約があるので、2 件目の INSERT が `DataIntegrityViolationException` になる。この例外はどこでも受けていないので、`RequestLoggingFilter` が ERROR を出して 500 のエラー画面になる。Claude API の料金は 2 回分かかる
@@ -131,7 +137,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 7. 前提を満たさない呼び出しで黙って 0 件を返す（低）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `2cbc816`）：`SearchService#search` の先頭で、キーワードもカテゴリもないときは `IllegalArgumentException` を投げるようにした（controller はこの場合 `recentDiaries` を使うので、画面からは起きない）。テストは `SearchServiceTest` に、例外になり、リポジトリ・サービスを呼ばないことを足した
 
 - 場所：`SearchService#search`（49〜61 行目）
 - 何が起きるか：Javadoc は「キーワードもカテゴリも指定がないときは呼ばない」としているが、呼んだ場合は `searchByCategory(userId, null, ...)` になり、JPQL の `p.category = :category` が `NULL` との比較になって 0 件を返す。例外にもログにもならないので、controller の振り分けを誤って変えたときに気づきにくい
@@ -149,7 +156,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 1. 改行を含む既存のつぶやきでプロンプトに偽の行を紛れ込ませられる（中）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `3c3ba46`）：`ClaudeService#buildUserMessage` で、本文の改行（`\R`）を空白に置き換えてからエスケープするようにした。入力側（フォームと `Post`）の守りと重ねて、DB に残る改行入りのつぶやきにも効く。テストは `ClaudeServiceTest` に、改行と「- [仕事] …」を含む既存のつぶやき（`Post` のコンストラクタを通らない状態を `ReflectionTestUtils` で再現）が 1 行のまま入ることを足した
 
 - 場所：`ClaudeService#buildUserMessage`（161〜171 行目）
 - 何が起きるか：日記のプロンプトは 1 行に 1 つぶやき（`- [仕事] 本文`）で並べる。新しい投稿・編集では、フォームと `Post` のコンストラクタ・`edit` が改行を拒否する（コミット `8074373`）。しかし、それより前（フェーズ 1）に保存された改行入りのつぶやきは DB に残っていて、JPA が DB から読むときはコンストラクタを通らないので、そのまま `buildUserMessage` に渡る。本文に `改行 + "- [仕事] 嘘の予定"` が入っていれば、偽のつぶやきとしてプロンプトに入る
