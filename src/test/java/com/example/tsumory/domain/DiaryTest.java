@@ -88,6 +88,7 @@ class DiaryTest {
         assertUnchanged(diary);
     }
 
+    /** 空・空白だけの本文。作るときと書き直すときの両方のテストが読むので、ケースを足せば両方の経路で確かめられる。 */
     static Stream<Arguments> blankContents() {
         return Stream.of(argumentSet("空文字列", ""), argumentSet("空白と改行だけ", "  \n\n "), argumentSet("全角スペースだけ", "　"));
     }
@@ -101,12 +102,13 @@ class DiaryTest {
                 .hasMessage(BLANK);
     }
 
-    @Test
-    void 空の本文では書き直せず前の日記のまま() {
+    @ParameterizedTest
+    @MethodSource("blankContents")
+    void 空や空白だけの本文では書き直せず前の日記のまま(String content) {
         // 前の日記を空で上書きして消さない
         var diary = newDiary();
 
-        assertThatThrownBy(() -> diary.updateContent(" ", REGENERATED_AT))
+        assertThatThrownBy(() -> diary.updateContent(content, REGENERATED_AT))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(BLANK);
         assertUnchanged(diary);
