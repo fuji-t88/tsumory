@@ -38,7 +38,7 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 | 3 | 中 | 可読性・保守性 | タイムゾーンの基準が `Clock` と定数 `PostService.ZONE` の 2 つに分かれている | `PostService`・`DiaryService`・`SearchService`・`SearchHit` | 対応済み |
 | 4 | 中 | 可読性・保守性 | 同じ処理が 2 か所ずつある（`LIKE` のエスケープ、プロンプトのエスケープ、日記の書き出しの切り出し、Claude API の失敗ログ） | `SearchService`・`DiaryService`・`ClaudeService`・`PostCategoryClassifier`・`DiaryListService` | 対応済み |
 | 5 | 低 | 可読性・保守性 | Javadoc が古い（存在しないメソッドへのリンク、今は違う日付の範囲） | `DiaryService#findDiaryForSummary`・`PostService#isEditableDate` | 対応済み |
-| 6 | 低 | 可読性・保守性 | ログメッセージの言語が 1 か所だけ日本語 | `PostService#create` | 保留 |
+| 6 | 低 | 可読性・保守性 | ログメッセージの言語が 1 か所だけ日本語 | `PostService#create` | 対応済み |
 | 7 | 低 | エラーハンドリング | キーワードもカテゴリもなしで `search` を呼ぶと、黙って 0 件を返す | `SearchService#search` | 対応済み |
 | 8 | 低 | 可読性・保守性 | 「他人のつぶやきなら見つからない扱い」の取得処理が 2 か所に重複 | `PostService#updateCategory`・`#findEditablePost` | 対応済み |
 | 9 | 低 | 可読性・保守性 | 本番のコードから呼ばれていないメソッドがある | `PostService#findTodayPosts` | 保留 |
@@ -90,8 +90,9 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 6. ログメッセージの言語が 1 か所だけ日本語（低）
 
-- 状態：保留
+- 状態：対応済み（2026-10-16 に保留から変更）
   - 判断メモ（2026-10-15）：書籍の原稿のログ（`log.info("つぶやき投稿: ...")`）に合わせると決めて日本語にした。ログの言語を統一するときに見直す
+  - ✓ 対応済み（2026-10-16、コミット `c0bd1a9`）：ユーザーの判断で、原稿に合わせるより、ログの検索・集計で漏れないことを優先した。`"Post created: userId=..., postId=..., contentLength=..."` にし、ほかのログ（`Post edited`・`Post deleted`）とそろえた。ログの文言を確かめるテストはなく、テストは変えずに 365 件すべて通った。ログの言語の方針は CLAUDE.md の「ログ」に書いた（英語で書く）
 
 - 場所：`PostService#create`（94 行目）の `"つぶやき投稿: userId=..."`。ほかのログはすべて英語（`"Post edited: ..."`・`"Post deleted: ..."` など）
 - 観点：「ドメイン用語がクラス・メソッド・テンプレート・ログメッセージで一貫して使われているか」
