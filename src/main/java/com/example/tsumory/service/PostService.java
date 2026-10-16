@@ -116,7 +116,7 @@ public class PostService {
             checkPostLimit(userId, today);
             return postRepository.save(post);
         });
-        log.info("つぶやき投稿: userId={}, postId={}, contentLength={}", userId, saved.getId(), content.length());
+        log.info("Post created: userId={}, postId={}, contentLength={}", userId, saved.getId(), content.length());
         return saved;
     }
 
