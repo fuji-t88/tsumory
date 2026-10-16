@@ -327,6 +327,21 @@ class PostServiceTest {
     }
 
     @Test
+    void create_checksTheLimitInAShortTransactionBeforeClassifying() {
+        // 判定の前に読む上限の確認も、短いトランザクションで済ませる。トランザクションの外で直接読むと、その接続を
+        // メソッドが終わるまで（Claude API の応答を待つ間も）握り続けるため
+        var service = serviceAt(NOW);
+
+        service.create(USER_ID, MEETING);
+
+        var order = inOrder(transactionManager, postRepository, categoryClassifier);
+        order.verify(transactionManager).getTransaction(any());
+        order.verify(postRepository).countByUserIdAndDate(USER_ID, TODAY, JST);
+        order.verify(transactionManager).commit(any());
+        order.verify(categoryClassifier).classify(MEETING);
+    }
+
+    @Test
     void create_classifiesOutsideTheTransactionAndSavesInside() {
         // Claude API の応答を待つ間に DB 接続を握らない：判定 → トランザクション開始 → 保存 → コミット の順
         var service = serviceAt(NOW);
@@ -475,6 +490,21 @@ class PostServiceTest {
     }
 
     @Test
+    void edit_readsThePostInAShortTransactionBeforeClassifying() {
+        // create と同じく、判定の前の読み込みも短いトランザクションで済ませ、Claude API を待つ間に DB 接続を握らない
+        var service = serviceAt(NOW);
+        stubFind(todaysLunch());
+
+        service.edit(USER_ID, POST_ID, STUDY, PostCategory.OTHER);
+
+        var order = inOrder(transactionManager, postRepository, categoryClassifier);
+        order.verify(transactionManager).getTransaction(any());
+        order.verify(postRepository).findByIdAndUserId(POST_ID, USER_ID);
+        order.verify(transactionManager).commit(any());
+        order.verify(categoryClassifier).classify(STUDY);
+    }
+
+    @Test
     void edit_classifiesOutsideTheTransactionAndSavesInside() {
         var service = serviceAt(NOW);
         var post = todaysLunch();
@@ -497,7 +527,9 @@ class PostServiceTest {
         assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, BAKERY, PostCategory.OTHER))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(categoryClassifier, never()).classify(any());
-        verify(transactionManager, never()).getTransaction(any());
+        // 読み込みの短いトランザクションはロールバックし、保存のトランザクションは始めない
+        verify(transactionManager).rollback(any());
+        verify(transactionManager, never()).commit(any());
     }
 
     @Test
@@ -511,8 +543,9 @@ class PostServiceTest {
 
         assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, LUNCH_WITH_CLIENT, post.getCategory()))
                 .isInstanceOf(ResourceNotFoundException.class);
-        verify(transactionManager).rollback(any());
-        verify(transactionManager, never()).commit(any());
+        // 判定の前の読み込み（1 つ目のトランザクション）はコミットし、保存（2 つ目）はロールバックする
+        verify(transactionManager, times(1)).commit(any());
+        verify(transactionManager, times(1)).rollback(any());
     }
 
     @Test

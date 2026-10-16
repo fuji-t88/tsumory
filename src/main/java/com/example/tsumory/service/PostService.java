@@ -97,7 +97,7 @@ public class PostService {
      * 今日のつぶやきとして投稿する。保存の前に AI でカテゴリを判定し、判定できたときだけ入れる（できなければ初期値の OTHER）。
      * 今日のつぶやきが {@link #DAILY_POST_LIMIT} 件に達していれば {@link DailyPostLimitExceededException}。
      *
-     * <p>Claude API の応答を待つ間に DB 接続を握らないよう、このメソッドはトランザクションの外で動かし、保存だけをトランザクションにする。
+     * <p>Claude API の応答を待つ間に DB 接続を握らないよう、このメソッドはトランザクションの外で動かし、DB を読む・保存するところだけを短いトランザクションにする。
      *
      * @return 保存したつぶやき（判定したカテゴリが入っている）
      */
@@ -106,8 +106,10 @@ public class PostService {
         var content = rawContent.strip();
         var now = clock.instant();
         var today = LocalDate.ofInstant(now, clock.getZone());
-        // 上限に達しているなら、Claude API を呼ぶ前に断る（料金をかけないため）
-        checkPostLimit(userId, today);
+        // 上限に達しているなら、Claude API を呼ぶ前に断る（料金をかけないため）。
+        // 読むだけでも短いトランザクションで囲む。このメソッドの中（トランザクションの外）で直接 DB を読むと、その接続をメソッドが
+        // 終わるまで（Claude API の応答を待つ間も）握り続けるため
+        transactionTemplate.executeWithoutResult(status -> checkPostLimit(userId, today));
         var post = new Post(userRepository.getReferenceById(userId), content, now);
         categoryClassifier.classify(content).ifPresent(post::assignCategory);
         var saved = transactionTemplate.execute(status -> {
@@ -125,12 +127,13 @@ public class PostService {
      * <p>本文が変わったときは AI でカテゴリを判定し直し、判定できたときだけ入れる（できなければ前のカテゴリのまま）。ただし、ユーザーが手で直したカテゴリ
      * （以前に直したものも、このリクエストで直したものも）は判定し直さない。
      *
-     * <p>{@link #create} と同じく、Claude API はトランザクションの外で呼び、保存だけをトランザクションにする。
+     * <p>{@link #create} と同じく、Claude API はトランザクションの外で呼び、DB を読む・保存するところだけを短いトランザクションにする。
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void edit(Long userId, Long postId, String content, PostCategory category) {
         var stripped = content.strip();
-        var current = findEditablePost(userId, postId);
+        // create と同じく、Claude API を待つ間に DB 接続を握らないよう、読むだけでも短いトランザクションで囲む
+        var current = transactionTemplate.execute(status -> findEditablePost(userId, postId));
         var contentChanged = !stripped.equals(current.getContent());
         // 今のカテゴリと違う値が送られたら、ユーザーが手で直したとみなす
         var categoryChangedByUser = category != current.getCategory();
