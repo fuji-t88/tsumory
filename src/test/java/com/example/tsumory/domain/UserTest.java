@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 class UserTest {
 
@@ -25,6 +26,30 @@ class UserTest {
         assertThatThrownBy(() -> new User("hanako", HASH, null))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("now");
+    }
+
+    @Test
+    void 平文のパスワードでは作れない() {
+        // PasswordEncoder を通し忘れても、平文のパスワードを保存させない（CLAUDE.md の禁止事項「パスワード」）
+        for (var notHash : new String[] {"password", "$2a$10$hash", "", HASH.substring(0, 59), HASH + "x"}) {
+            assertThatThrownBy(() -> new User("hanako", notHash, CREATED_AT))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    // 値はメッセージに入れない（平文のパスワードがログに出ないように）
+                    .hasMessageNotContaining("password")
+                    .hasMessage("Password hash must be a BCrypt hash");
+        }
+    }
+
+    @Test
+    void BCryptPasswordEncoderのハッシュで作れる() {
+        var hash = new BCryptPasswordEncoder().encode("correct horse battery staple");
+
+        assertThat(new User("hanako", hash, CREATED_AT).getPasswordHash()).isEqualTo(hash);
+        // $2b$・$2y$ の形のハッシュも受け付ける（ほかのツールで作ったハッシュ）
+        assertThat(new User("hanako", "$2b$" + HASH.substring(4), CREATED_AT).getPasswordHash())
+                .startsWith("$2b$");
+        assertThat(new User("hanako", "$2y$" + HASH.substring(4), CREATED_AT).getPasswordHash())
+                .startsWith("$2y$");
     }
 
     @Test

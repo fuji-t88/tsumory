@@ -19,7 +19,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 @ExtendWith(MockitoExtension.class)
 class CustomUserDetailsServiceTest {
 
-    private static final String HASH = "$2a$10$hash";
+    // User は BCrypt のハッシュの形でないと作れない
+    private static final String HASH = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
     @Mock
     private UserRepository userRepository;
