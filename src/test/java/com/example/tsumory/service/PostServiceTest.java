@@ -279,6 +279,17 @@ class PostServiceTest {
     }
 
     @Test
+    void isPostLimitReached_trueFromTheLimitCount() {
+        var service = serviceAt("2026-10-08T12:00:00");
+        when(postRepository.countByUserIdAndDate(USER_ID, TODAY, JST))
+                .thenReturn((long) PostService.DAILY_POST_LIMIT - 1)
+                .thenReturn((long) PostService.DAILY_POST_LIMIT);
+
+        assertThat(service.isPostLimitReached(USER_ID, TODAY)).isFalse();
+        assertThat(service.isPostLimitReached(USER_ID, TODAY)).isTrue();
+    }
+
+    @Test
     void create_allowsUpToTheDailyLimit() {
         // UTC ではまだ 10/7 だが、日本時間では 10/8 の 0:30。日本時間の今日の件数で数える
         var service = serviceAt("2026-10-08T00:30:00");

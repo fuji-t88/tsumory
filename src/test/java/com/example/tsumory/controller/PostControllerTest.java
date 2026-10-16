@@ -37,7 +37,6 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -332,10 +331,8 @@ class PostControllerTest {
 
     @Test
     void 今日のつぶやきが上限に達したら投稿フォームを無効にしてその旨を出す() throws Exception {
-        var posts = IntStream.rangeClosed(1, PostService.DAILY_POST_LIMIT)
-                .mapToObj(i -> new PostItem((long) i, "つぶやき" + i, LocalTime.of(9, 0), false, PostCategory.OTHER))
-                .toList();
-        when(postService.findPosts(USER_ID, TODAY)).thenReturn(posts);
+        // 上限に達したかの判定は PostService が持つ（投稿を断る判定と同じもの）
+        when(postService.isPostLimitReached(USER_ID, TODAY)).thenReturn(true);
 
         mockMvc.perform(get("/").with(user(PRINCIPAL)))
                 .andExpect(content().string(containsString("disabled=\"disabled\">つぶやく")))

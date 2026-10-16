@@ -151,7 +151,7 @@ public class PostController {
         model.addAttribute("today", today);
         model.addAttribute("posts", posts.stream().map(PostView::from).toList());
         model.addAttribute("postLimit", PostService.DAILY_POST_LIMIT);
-        model.addAttribute("postLimitReached", posts.size() >= PostService.DAILY_POST_LIMIT);
+        model.addAttribute("postLimitReached", postService.isPostLimitReached(userId, today));
         model.addAttribute(
                 "diary", diaryService.findDiaryForSummary(userId, today).orElse(null));
         model.addAttribute("editingPost", editingPost);

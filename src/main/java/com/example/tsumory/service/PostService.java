@@ -80,6 +80,14 @@ public class PostService {
         return postRepository.countByUserIdAndDate(userId, date, clock.getZone());
     }
 
+    /**
+     * その日（日本時間）のつぶやきが上限（{@link #DAILY_POST_LIMIT} 件）に達していれば {@code true}。画面で投稿フォームを無効にする判定と、
+     * 投稿を断る判定（{@link #create}）の両方がこれを使い、2 つの判定がずれないようにする。
+     */
+    public boolean isPostLimitReached(Long userId, LocalDate date) {
+        return countPosts(userId, date) >= DAILY_POST_LIMIT;
+    }
+
     /** 編集モードで開くつぶやきを返す。自分の今日か昨日のつぶやきでなければ {@link ResourceNotFoundException}。 */
     public PostItem getEditablePost(Long userId, Long postId) {
         return PostItem.from(findEditablePost(userId, postId), clock.getZone());
@@ -174,7 +182,7 @@ public class PostService {
     }
 
     private void checkPostLimit(Long userId, LocalDate today) {
-        if (countPosts(userId, today) >= DAILY_POST_LIMIT) {
+        if (isPostLimitReached(userId, today)) {
             log.warn("Post limit reached: userId={}, date={}, limit={}", userId, today, DAILY_POST_LIMIT);
             throw new DailyPostLimitExceededException(userId, DAILY_POST_LIMIT);
         }
