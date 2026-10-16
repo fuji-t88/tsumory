@@ -49,7 +49,7 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 | 9 | 低 | 可読性・保守性 | controller の引数の名前と順番がメソッドごとにそろっていない | `PostController`・`DiaryController` | 対応済み |
 | 10 | 低 | 可読性・保守性 | コメントが古い、または作業メモが残っている | `AnthropicConfig`・`fragments/header.html` | 対応済み |
 | 11 | 中 | エラーハンドリング | `spring.jpa.open-in-view` が既定の有効のままで、Claude API の応答を待つ間も DB 接続を握り続ける。仕様の `ddl-auto: validate` もない | `application.yaml` | 対応済み |
-| 12 | 中 | セキュリティ | つぶやきの本文に見えない文字（タグ文字・ゼロ幅文字・文字の向きの制御文字など）を入れられ、画面では無害に見える本文で日記のプロンプトに指示を隠せる | `PostForm`・`PostEditForm`・`Post`・`ClaudeService` | 未対応 |
+| 12 | 中 | セキュリティ | つぶやきの本文に見えない文字（タグ文字・ゼロ幅文字・文字の向きの制御文字など）を入れられ、画面では無害に見える本文で日記のプロンプトに指示を隠せる | `PostForm`・`PostEditForm`・`Post`・`ClaudeService` | 対応済み |
 
 高の指摘が 1 件ある（指摘 1。対応済み）。認証・認可、CSRF、XSS、他人のデータの絞り込み、オープンリダイレクト、ログの扱いは観点どおり（末尾の「確認したが問題がなかった点」）。
 
@@ -184,7 +184,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 12. 本文に見えない文字を入れられ、日記のプロンプトに指示を隠せる（中）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `8bfb4fa`・`5efe6ef`。仕様の追記はコミット `dfef1ce`）：入口（`8bfb4fa`）では、`Post.INVISIBLE_CHAR_CLASS`（改行以外の制御文字 Cc・書式文字 Cf・行と段落の区切り Zl・Zp。ゼロ幅接合子 U+200D は除く）を定義し、`PostForm`・`PostEditForm` の `@Pattern`（「見えない文字や制御文字は入れられません」）と、`Post` のコンストラクタ・`edit`（`IllegalArgumentException`。メッセージに本文は入れない）の両方で拒否するようにした。改行の決まりとは別の `@Pattern` にし、CR・LF には改行のエラーだけが出るようにした。出口（`5efe6ef`）では、入口で拒否する前に保存された本文にも効くよう、`ClaudeService#buildUserMessage` で改行を空白にしたあと同じ文字を取り除く。テストは、`PostTest` に 3 件（タグ文字・ゼロ幅スペース・向きの制御文字・行区切り・NEL・タブ・BOM で作れない、直せない、家族の絵文字・異体字セレクタ・全角スペースは使える）、`PostControllerTest` に 3 件（投稿・編集でエラーを出して保存しない、絵文字をつなぐ文字は投稿できる）、`ClaudeServiceTest` に 1 件（DB に残る本文から取り除く）を足した。タグ文字の手口は `TestFixtures#hiddenAscii` で再現している。本体の変更を外すと守りのテスト 5 件が失敗することも確かめた。見える文字で書いた指示は、上の「入口では防げないもの」のとおり、今ある守りで扱う
 
 - 場所：`PostForm`・`PostEditForm`（入力チェック）、`Post`（ドメインの守り）、`ClaudeService#buildUserMessage`（プロンプトの組み立て）
 - 今ある守り（プロンプトインジェクション）
