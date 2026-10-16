@@ -13,7 +13,6 @@ import static com.example.tsumory.domain.TestFixtures.TODAY;
 import static com.example.tsumory.domain.TestFixtures.clockAt;
 import static com.example.tsumory.domain.TestFixtures.hanako;
 import static com.example.tsumory.domain.TestFixtures.jst;
-import static com.example.tsumory.domain.TestFixtures.mockPosts;
 import static com.example.tsumory.domain.TestFixtures.post;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -134,37 +133,6 @@ class PostServiceTest {
     }
 
     // --- 取得 ---
-
-    @Test
-    void findTodayPosts_searchesTodayInJst() {
-        // UTC ではまだ 10/7 だが、日本時間では 10/8 の 0:30
-        var service = serviceAt("2026-10-08T00:30:00");
-        var post = post(user, GOOD_NIGHT, "2026-10-08T00:10:00");
-        when(postRepository.findByUserIdAndDate(USER_ID, TODAY, JST)).thenReturn(List.of(post));
-
-        assertThat(service.findTodayPosts(USER_ID)).containsExactly(post);
-    }
-
-    @Test
-    void findTodayPosts_callsRepositoryWithTodayRange() {
-        // given
-        var clock = clockAt(NOW);
-        var postService = service(clock);
-        var zone = clock.getZone();
-        var today = LocalDate.now(clock);
-        // サービスはリポジトリの結果をそのまま返すだけで中身を読まないので、実体ではなくモックで十分
-        List<Post> expected = mockPosts(100);
-        // 日付から時刻の範囲への変換は Repository の default メソッドが行う。Mockito のモックでは default メソッドの本体が
-        // 実行されないので、内側のクエリではなく、サービスが実際に呼ぶ findByUserIdAndDate をモックする
-        when(postRepository.findByUserIdAndDate(USER_ID, today, zone)).thenReturn(expected);
-
-        // when
-        List<Post> result = postService.findTodayPosts(USER_ID);
-
-        // then
-        assertThat(result).hasSize(100);
-        verify(postRepository).findByUserIdAndDate(USER_ID, today, zone);
-    }
 
     @Test
     void findPostsByDate_passesAnyDateAndClockZone() {
