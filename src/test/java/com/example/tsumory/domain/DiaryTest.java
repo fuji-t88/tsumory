@@ -2,9 +2,14 @@ package com.example.tsumory.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.params.provider.Arguments.argumentSet;
 
 import java.time.Instant;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class DiaryTest {
 
@@ -46,14 +51,16 @@ class DiaryTest {
         assertThat(diary.getGeneratedAt()).isEqualTo(GENERATED_AT);
     }
 
-    @Test
-    void 空や空白だけの本文では作れない() {
+    static Stream<Arguments> blankContents() {
+        return Stream.of(argumentSet("空文字列", ""), argumentSet("空白と改行だけ", "  \n\n "), argumentSet("全角スペースだけ", "　"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("blankContents")
+    void 空や空白だけの本文では作れない(String content) {
         // 「日記あり」なのに何も書かれていない画面にしない
-        var user = TestFixtures.hanako();
-        for (var content : new String[] {"", "  \n\n ", "　"}) {
-            assertThatThrownBy(() -> new Diary(user, TestFixtures.TODAY, content, GENERATED_AT))
-                    .isInstanceOf(IllegalArgumentException.class);
-        }
+        assertThatThrownBy(() -> new Diary(TestFixtures.hanako(), TestFixtures.TODAY, content, GENERATED_AT))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
