@@ -97,7 +97,7 @@ tsumory/
   | `service` | 例外 | `ResourceNotFoundException` |
   | `repository` | DB アクセス（Spring Data JPA） | `PostRepository` |
   | `domain` | ドメインモデル（エンティティなど） | `Post` |
-  | `form` | Thymeleaf のフォーム入力（Bean Validation 付き） | `PostForm`、`PostEditForm`、`SearchForm` |
+  | `form` | Thymeleaf のフォーム入力（Bean Validation 付き） | `PostForm`、`PostEditForm`、`SearchForm`、`DiaryListForm` |
   | `config` | 設定 | `SecurityConfig` |
   | `config` | `application.yaml` の設定値を受ける record（`@ConfigurationProperties` + `@Validated`） | `ClaudeProperties` |
   | `config` | リクエストごとにリクエスト ID とユーザー ID をログに付け、リクエストの結果を記録する（`OncePerRequestFilter`） | `RequestLoggingFilter` |
