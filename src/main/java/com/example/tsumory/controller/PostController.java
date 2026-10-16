@@ -69,7 +69,7 @@ public class PostController {
             @AuthenticationPrincipal CustomUserDetails principal,
             @PathVariable Long id,
             Model model,
-            RedirectAttributes redirectAttributes) {
+            RedirectAttributes flash) {
         try {
             var post = postService.getEditablePost(principal.userId(), id);
             model.addAttribute("postForm", new PostForm(null));
@@ -77,7 +77,7 @@ public class PostController {
             populateHomeModel(principal.userId(), model, PostView.from(post));
             return "home";
         } catch (ResourceNotFoundException e) {
-            return redirectWithNotFound(redirectAttributes);
+            return redirectWithNotFound(flash);
         }
     }
 
@@ -86,11 +86,11 @@ public class PostController {
             @AuthenticationPrincipal CustomUserDetails principal,
             @PathVariable Long id,
             @Valid @ModelAttribute("postEditForm") PostEditForm form,
-            BindingResult bindingResult,
+            BindingResult binding,
             Model model,
-            RedirectAttributes redirectAttributes) {
+            RedirectAttributes flash) {
         try {
-            if (bindingResult.hasErrors()) {
+            if (binding.hasErrors()) {
                 // 入力エラーでも、編集できないつぶやきなら再表示せずに戻す
                 var post = postService.getEditablePost(principal.userId(), id);
                 model.addAttribute("postForm", new PostForm(null));
@@ -100,7 +100,7 @@ public class PostController {
             postService.edit(principal.userId(), id, form.content(), form.category());
             return "redirect:/";
         } catch (ResourceNotFoundException e) {
-            return redirectWithNotFound(redirectAttributes);
+            return redirectWithNotFound(flash);
         }
     }
 
@@ -131,14 +131,12 @@ public class PostController {
 
     @PostMapping("/posts/{id}/delete")
     public String delete(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            @PathVariable Long id,
-            RedirectAttributes redirectAttributes) {
+            @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long id, RedirectAttributes flash) {
         try {
             postService.delete(principal.userId(), id);
             return "redirect:/";
         } catch (ResourceNotFoundException e) {
-            return redirectWithNotFound(redirectAttributes);
+            return redirectWithNotFound(flash);
         }
     }
 
@@ -162,8 +160,8 @@ public class PostController {
     }
 
     // ログは PostService が WARN で出しているので、ここでは出さない
-    private static String redirectWithNotFound(RedirectAttributes redirectAttributes) {
-        redirectAttributes.addFlashAttribute("message", POST_NOT_FOUND_MESSAGE);
+    private static String redirectWithNotFound(RedirectAttributes flash) {
+        flash.addFlashAttribute("message", POST_NOT_FOUND_MESSAGE);
         return "redirect:/";
     }
 }
