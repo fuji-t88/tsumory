@@ -41,16 +41,7 @@ public class DiaryGenerationService {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Diary generateForDate(Long userId, LocalDate date) {
         // 業務上の失敗は WARN で残す（CLAUDE.md の「ログ」）。AI は呼ばない
-        // 開ける日付の範囲（業務ルール）は DiaryService が決める。ここでは、範囲の外を「未来」と「登録日より前」に振り分けるだけ
-        var range = diaryService.availableRange(userId);
-        if (range.isFuture(date)) {
-            log.warn("Diary date is in the future: userId={}, date={}", userId, date);
-            throw new InvalidDiaryDateException(date);
-        }
-        if (!range.contains(date)) {
-            log.warn("Diary date not available: userId={}, date={}", userId, date);
-            throw new DiaryNotFoundException(date);
-        }
+        requireAvailableDate(userId, date);
         var posts = postService.findPostsByDate(userId, date);
         if (posts.isEmpty()) {
             log.warn("No posts to generate diary: userId={}, date={}", userId, date);
@@ -69,6 +60,23 @@ public class DiaryGenerationService {
                     date,
                     e.getClass().getSimpleName());
             return diaryService.saveDiary(userId, date, generated);
+        }
+    }
+
+    /**
+     * 業務ルール「日記を開ける日付（登録日から今日まで）」のガード。範囲そのものは {@link DiaryService#availableRange} が決め、ここでは範囲の外を
+     * 未来の日付（{@link InvalidDiaryDateException}。メッセージを付けてホームへ戻す）と登録日より前（{@link DiaryNotFoundException}。404）に
+     * 振り分けるだけにする。
+     */
+    private void requireAvailableDate(Long userId, LocalDate date) {
+        var range = diaryService.availableRange(userId);
+        if (range.isFuture(date)) {
+            log.warn("Diary date is in the future: userId={}, date={}", userId, date);
+            throw new InvalidDiaryDateException(date);
+        }
+        if (!range.contains(date)) {
+            log.warn("Diary date not available: userId={}, date={}", userId, date);
+            throw new DiaryNotFoundException(date);
         }
     }
 }
