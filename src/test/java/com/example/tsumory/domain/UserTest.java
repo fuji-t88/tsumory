@@ -16,8 +16,7 @@ class UserTest {
 
     private static final Instant CREATED_AT = Instant.parse("2026-09-30T15:00:00Z");
 
-    /** BCrypt のハッシュの形の値（{@code TestFixtures#hanako} と同じ）。 */
-    private static final String HASH = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+    private static final String HASH = TestFixtures.PASSWORD_HASH;
 
     @Test
     void 必須の値がnullなら作れない() {

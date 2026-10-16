@@ -26,6 +26,9 @@ public final class TestFixtures {
     /** {@link #NOW} の日付。 */
     public static final LocalDate TODAY = LocalDate.of(2026, 10, 8);
 
+    /** BCrypt のハッシュの形の値。{@link #hanako} のパスワードとして使う（平文は持たない）。{@code User} は、この形でないと作れない。 */
+    public static final String PASSWORD_HASH = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+
     /** 利用者「花子」の登録日時。2026-10-01 0:00（日本時間）ちょうど。UTC ではまだ 9/30。 */
     public static final String REGISTERED_AT = "2026-10-01T00:00:00";
 
@@ -81,9 +84,9 @@ public final class TestFixtures {
         return Clock.fixed(jst(jstDateTime), JST);
     }
 
-    /** 利用者「花子」。登録日は {@link #REGISTERED_AT}。パスワードは BCrypt のハッシュ値の形にしてある（平文は持たない）。 */
+    /** 利用者「花子」。登録日は {@link #REGISTERED_AT}。パスワードは {@link #PASSWORD_HASH}。 */
     public static User hanako() {
-        return new User("hanako", "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy", jst(REGISTERED_AT));
+        return new User("hanako", PASSWORD_HASH, jst(REGISTERED_AT));
     }
 
     /** {@code postedAt}（日本時間）に投稿したつぶやき。カテゴリは初期値の「その他」。 */

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
+import com.example.tsumory.domain.TestFixtures;
 import com.example.tsumory.domain.User;
 import com.example.tsumory.repository.UserRepository;
 import java.time.Instant;
@@ -20,7 +21,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 class CustomUserDetailsServiceTest {
 
     // User は BCrypt のハッシュの形でないと作れない
-    private static final String HASH = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+    private static final String HASH = TestFixtures.PASSWORD_HASH;
 
     @Mock
     private UserRepository userRepository;
