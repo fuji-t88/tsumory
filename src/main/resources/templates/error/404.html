@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ページが見つかりません - Tsumory</title>
+    <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<!--/* エラー画面のヘッダーはサービス名だけ（ユーザー名・ログアウトは出さない） */-->
+<header class="border-bottom mb-3">
+    <div class="container app-container py-2">
+        <a th:href="@{/}" class="navbar-brand fw-bold">Tsumory</a>
+    </div>
+</header>
+<main class="container app-container py-5 text-center">
+    <p class="display-6 text-secondary mb-2">404</p>
+    <h1 class="h3 mb-3">ページが見つかりません</h1>
+    <p class="text-secondary mb-4">つぶやきが削除されたか、URL が間違っている可能性があります。</p>
+    <a th:href="@{/}" class="btn btn-primary">今日のつぶやきへ戻る</a>
+</main>
+</body>
+</html>

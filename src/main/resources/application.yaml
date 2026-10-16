@@ -12,6 +12,13 @@ spring:
   web:
     locale: ja_JP
     locale-resolver: fixed
+    # エラー画面（templates/error/404.html・500.html・error.html）とエラー応答に、内部情報を出さない。
+    # どれも Spring Boot の既定値と同じだが、既定が変わっても漏れないよう明示する（CLAUDE.md の禁止事項「エラー表示」）
+    error:
+      include-stacktrace: never
+      include-exception: false
+      include-message: never
+      include-binding-errors: never
   jpa:
     properties:
       hibernate:

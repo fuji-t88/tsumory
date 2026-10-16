@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>エラー - Tsumory</title>
+    <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<!--/* 404（error/404.html）・500（error/500.html）以外のエラーの受け皿（405・400・403 など）。
+       これがないと Spring Boot の英語の既定の画面（Whitelabel Error Page）になる。
+       status は Spring Boot のエラー処理（BasicErrorController）がモデルに入れる。内部情報（例外・メッセージ）は出さない */-->
+<header class="border-bottom mb-3">
+    <div class="container app-container py-2">
+        <a th:href="@{/}" class="navbar-brand fw-bold">Tsumory</a>
+    </div>
+</header>
+<main class="container app-container py-5 text-center">
+    <p th:if="${status}" class="display-6 text-secondary mb-2" th:text="${status}">405</p>
+    <h1 class="h3 mb-3">ページを表示できませんでした</h1>
+    <p class="text-secondary mb-4">URL が間違っているか、この画面からはできない操作です。</p>
+    <!--/* ログの requestId と同じ値。RequestLoggingFilter がリクエスト属性に入れる */-->
+    <div th:if="${requestId}" class="mb-4">
+        <p class="small text-secondary mb-1">お問い合わせの際は、次のエラー ID をお伝えください</p>
+        <code class="user-select-all" th:text="${requestId}">00000000-0000-0000-0000-000000000000</code>
+    </div>
+    <a th:href="@{/}" class="btn btn-primary">今日のつぶやきへ戻る</a>
+</main>
+</body>
+</html>
