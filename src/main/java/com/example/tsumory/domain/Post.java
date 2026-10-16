@@ -13,6 +13,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -28,6 +29,20 @@ public class Post {
      * （{@code InputLimitsAdvice} が渡す）がこの値を使う。変えるときは、DB の列（{@code VARCHAR(100)}）もマイグレーションで変える。
      */
     public static final int CONTENT_MAX_LENGTH = 100;
+
+    /**
+     * 本文に入れられない「見えない文字」1 文字を表す正規表現の文字クラス。改行（CR・LF。別の決まりで拒否する）以外の制御文字（Cc）、
+     * 書式文字（Cf。ゼロ幅スペース、文字の向きを変える制御文字、タグ文字など）、行・段落の区切り（Zl・Zp）。
+     *
+     * <p>画面では無害に見える本文に、日記のプロンプトへの指示を隠せないようにするため（タグ文字で ASCII を見えない形に書く手口など）。
+     * ゼロ幅接合子（U+200D）は絵文字をつなぐ（👨‍👩‍👧 など）ので許す。全角スペース・異体字セレクタは別の種類なので対象外。
+     */
+    public static final String INVISIBLE_CHAR_CLASS = "[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}&&[^\\r\\n\\u200D]]";
+
+    /** フォームの {@code @Pattern} 用：{@link #INVISIBLE_CHAR_CLASS} の文字を 1 つも含まない（改行の有無は別の {@code @Pattern} で見る）。 */
+    public static final String NO_INVISIBLE_CHARS_REGEX = "(?:(?!" + INVISIBLE_CHAR_CLASS + ")[\\s\\S])*";
+
+    private static final Pattern INVISIBLE_CHAR = Pattern.compile(INVISIBLE_CHAR_CLASS);
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -55,7 +70,7 @@ public class Post {
     @Column(nullable = false)
     private boolean categorySetByUser = false;
 
-    /** @throws IllegalArgumentException 本文が空・{@link #CONTENT_MAX_LENGTH} 文字を超える・改行を含むとき */
+    /** @throws IllegalArgumentException 本文が空・{@link #CONTENT_MAX_LENGTH} 文字を超える・改行や見えない文字（{@link #INVISIBLE_CHAR_CLASS}）を含むとき */
     public Post(User user, String content, Instant now) {
         this.user = user;
         this.content = requireValidContent(content);
@@ -66,7 +81,7 @@ public class Post {
     /**
      * 本文と更新時刻を変える。投稿時刻とカテゴリは変えない（判定し直すまでは前のカテゴリのまま）。
      *
-     * @throws IllegalArgumentException 本文が空・{@link #CONTENT_MAX_LENGTH} 文字を超える・改行を含むとき
+     * @throws IllegalArgumentException 本文が空・{@link #CONTENT_MAX_LENGTH} 文字を超える・改行や見えない文字（{@link #INVISIBLE_CHAR_CLASS}）を含むとき
      */
     public void edit(String content, Instant now) {
         this.content = requireValidContent(content);
@@ -92,7 +107,7 @@ public class Post {
     }
 
     /**
-     * 本文の決まり（空でない、{@link #CONTENT_MAX_LENGTH} 文字以内、改行なし）を守る。フォーム（{@code PostForm}・{@code PostEditForm}）でも
+     * 本文の決まり（空でない、{@link #CONTENT_MAX_LENGTH} 文字以内、見えない文字なし、改行なし）を守る。フォーム（{@code PostForm}・{@code PostEditForm}）でも
      * 確かめているが、フォームを通らない経路（テストデータ、将来の API など）でも、保存の時点の DB のエラー（500）ではなく、作る時点で気づけるようにする。
      * 文字数はフォームの {@code @Size} と同じく {@link String#length()} で数える。本文の値はメッセージに入れない（ログや画面に出ることがあるため）。
      */
@@ -102,6 +117,9 @@ public class Post {
         }
         if (content.length() > CONTENT_MAX_LENGTH) {
             throw new IllegalArgumentException("Post content must be at most " + CONTENT_MAX_LENGTH + " characters");
+        }
+        if (INVISIBLE_CHAR.matcher(content).find()) {
+            throw new IllegalArgumentException("Post content must not contain control or invisible characters");
         }
         return requireSingleLine(content);
     }

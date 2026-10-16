@@ -135,6 +135,16 @@ public final class TestFixtures {
                 .toList();
     }
 
+    /**
+     * ASCII の文字列を、画面に表示されないタグ文字（U+E0000 + 文字コード）に置き換える。画面では見えないまま AI には読める指示を、
+     * 本文に隠す手口（ASCII smuggling）を再現する。
+     */
+    public static String hiddenAscii(String ascii) {
+        var hidden = new StringBuilder();
+        ascii.chars().forEach(c -> hidden.appendCodePoint(0xE0000 + c));
+        return hidden.toString();
+    }
+
     /** {@code count} 件の日記。日付は {@code firstDate} から 1 日ずつ（古い順に並ぶ）。どれもその日の 21:30 に書いた。 */
     public static List<Diary> diaries(User user, int count, LocalDate firstDate) {
         return IntStream.range(0, count)
