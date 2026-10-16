@@ -36,7 +36,7 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 | # | 重要度 | 観点 | 指摘 | 場所 | 状態 |
 |---|---|---|---|---|---|
-| 1 | 高 | エラーハンドリング | 404 のエラー画面（`error/404.html`）がない。404・405・400 は Spring Boot の英語の画面（Whitelabel Error Page）になる | `templates/error/` | 未対応 |
+| 1 | 高 | エラーハンドリング | 404 のエラー画面（`error/404.html`）がない。404・405・400 は Spring Boot の英語の画面（Whitelabel Error Page）になる | `templates/error/` | 対応済み |
 | 2 | 中 | エラーハンドリング | 投稿・編集フォームに、仕様の「送信中の表示と二重送信の防止」がない。分類を待つ数秒の間に連打すると、同じつぶやきが何件もできる | `templates/home.html` | 未対応 |
 | 3 | 中 | エラーハンドリング | `GET /diary` のキーワードを form のクラスと `@Valid` ではなく、`@RequestParam` と手書きの長さチェックで受けている | `DiaryController#diaryList` | 未対応 |
 | 4 | 中 | 可読性・保守性 | 投稿の上限の判定が、service と controller の 2 か所にある | `PostController#populateHomeModel` | 未対応 |
@@ -47,7 +47,7 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 | 9 | 低 | 可読性・保守性 | controller の引数の名前と順番がメソッドごとにそろっていない | `PostController`・`DiaryController` | 未対応 |
 | 10 | 低 | 可読性・保守性 | コメントが古い、または作業メモが残っている | `AnthropicConfig`・`fragments/header.html` | 未対応 |
 
-高の指摘が 1 件ある（指摘 1）。認証・認可、CSRF、XSS、他人のデータの絞り込み、オープンリダイレクト、ログの扱いは観点どおり（末尾の「確認したが問題がなかった点」）。
+高の指摘が 1 件ある（指摘 1。対応済み）。認証・認可、CSRF、XSS、他人のデータの絞り込み、オープンリダイレクト、ログの扱いは観点どおり（末尾の「確認したが問題がなかった点」）。
 
 ## 可読性・保守性
 
@@ -117,7 +117,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 1. 404 のエラー画面がない（高）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `5d59569`）：仕様の文言で `templates/error/404.html` を作り、404・500 以外（405・400・403 など）の最後の受け皿として `templates/error.html` を足した（仕様への追記はコミット `37f08cd`）。`application.yaml` に `spring.web.error.include-*`（スタックトレース・例外・メッセージ・入力エラーを応答に含めない）を明示した。Boot 4 では `server.error.*` が非推奨（レベル error）なので `spring.web.error.*` を使った。テストは `ErrorPageTest` に 3 件足した（404 の画面の文言、状態コードごとの画面の選び分け、汎用の画面が内部情報を出さないこと）。実際のサーバーでも、404・405・403（CSRF トークンなし）・500 で Whitelabel の画面が出ず、例外のメッセージも画面に出ないことを、一時的なテストで確かめた（確かめたあと消した）
 
 - 場所：`src/main/resources/templates/error/`（`500.html` だけがある。`404.html` は git の履歴にも一度もない）
 - 何が起きるか：404・405・400 のとき、Spring Boot が既定で出す英語の画面（「Whitelabel Error Page」「This application has no explicit mapping for /error …」）になる。ヘッダーも「今日のつぶやきへ戻る」ボタンもないので、利用者は戻り方が分からない。実際のサーバーで、ログインした状態で次の応答を確かめた
