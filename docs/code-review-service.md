@@ -41,7 +41,7 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 | 6 | 低 | 可読性・保守性 | ログメッセージの言語が 1 か所だけ日本語 | `PostService#create` | 対応済み |
 | 7 | 低 | エラーハンドリング | キーワードもカテゴリもなしで `search` を呼ぶと、黙って 0 件を返す | `SearchService#search` | 対応済み |
 | 8 | 低 | 可読性・保守性 | 「他人のつぶやきなら見つからない扱い」の取得処理が 2 か所に重複 | `PostService#updateCategory`・`#findEditablePost` | 対応済み |
-| 9 | 低 | 可読性・保守性 | 本番のコードから呼ばれていないメソッドがある | `PostService#findTodayPosts` | 保留 |
+| 9 | 低 | 可読性・保守性 | 本番のコードから呼ばれていないメソッドがある | `PostService#findTodayPosts` | 対応済み |
 | 10 | 低 | 可読性・保守性 | つぶやきはリポジトリ、日記はサービスを経由していて、取り方がそろっていない | `SearchService` | 対応済み |
 | 11 | 中 | 可読性・保守性 | 業務ルール「日記を開ける日付は登録日から今日まで」の判定が 3 か所にある（日記の表示・生成・日記一覧のカレンダー） | `DiaryService`・`DiaryGenerationService`・`DiaryListService` | 対応済み |
 
@@ -110,8 +110,9 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 9. 本番のコードから呼ばれていないメソッド（低）
 
-- 状態：保留
+- 状態：対応済み（2026-10-16 に保留から変更）
   - 判断メモ（2026-10-15）：書籍の原稿のコード（`findTodayPosts` を `findPostsByDate` に委譲する形）として残すと決めた。動作には影響しない
+  - ✓ 対応済み（2026-10-16、コミット `904b300`・`65ffb7e`）：ユーザーの判断で、原稿のコードとして残すより、使われていないコードを消すことを優先した。先に `findTodayPosts` だけを確かめていたテスト 2 件を消し（365 件から 363 件。今日のつぶやきを日本時間で取ることは `today_*`・`findPosts_*` のテストが確かめている）、次のコミットでメソッドを消した（テストは変えずに 363 件すべて通った）。phase1-spec.md の「5. 処理の詳細」にある `findTodayPosts`・`generateToday` は、フェーズ 1 の設計の記録として残す（フェーズ 2 で `generateForDate` に置き換えた。phase2-spec.md が正）
 
 - 場所：`PostService#findTodayPosts`。遡り生成で `DiaryGenerationService#generateForDate` が `findPostsByDate` を直接呼ぶようになり、本番のコードからは呼ばれていない（テストからだけ使われている）
 - 補足：書籍の原稿のコードとして残すと決めたもの
