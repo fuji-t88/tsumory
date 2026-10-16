@@ -2,7 +2,6 @@ package com.example.tsumory.service;
 
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.errors.AnthropicException;
-import com.anthropic.errors.AnthropicServiceException;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
@@ -24,8 +23,6 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class ClaudeService implements DiaryWriter {
-
-    private static final long NANOS_PER_MILLI = 1_000_000;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy年M月d日（E）", Locale.JAPANESE);
 
@@ -85,22 +82,17 @@ public class ClaudeService implements DiaryWriter {
         } catch (AnthropicException e) {
             // ネットワーク障害・レート制限・タイムアウト（120 秒）など、外部 API が応答しない状態。
             // 原因を調べられるよう、スタックトレース付きの ERROR で出す（CLAUDE.md の「ログ」）
-            var elapsedMs = (System.nanoTime() - startedAt) / NANOS_PER_MILLI;
-            if (e instanceof AnthropicServiceException se) {
-                log.error(
-                        "claude api call failed: date={}, elapsedMs={}, status={}, requestId={}",
-                        date,
-                        elapsedMs,
-                        se.statusCode(),
-                        se.headers().values("request-id").stream().findFirst().orElse("none"),
-                        e);
-            } else {
-                log.error("claude api call failed: date={}, elapsedMs={}", date, elapsedMs, e);
-            }
+            log.error(
+                    "claude api call failed: date={}, elapsedMs={}, status={}, requestId={}",
+                    date,
+                    ClaudeApiSupport.elapsedMs(startedAt),
+                    ClaudeApiSupport.statusCode(e),
+                    ClaudeApiSupport.requestId(e),
+                    e);
             throw new DiaryGenerationException("Failed to generate diary via Claude", e);
         }
 
-        var elapsedMs = (System.nanoTime() - startedAt) / NANOS_PER_MILLI;
+        var elapsedMs = ClaudeApiSupport.elapsedMs(startedAt);
         var usage = response.usage();
         var stopReason = response.stopReason().map(StopReason::asString).orElse("none");
         if (response.stopReason().filter(StopReason.REFUSAL::equals).isPresent()) {
@@ -162,7 +154,10 @@ public class ClaudeService implements DiaryWriter {
      */
     String buildUserMessage(LocalDate date, List<Post> posts) {
         var bullets = posts.stream()
-                .map(p -> "- [%s] %s".formatted(displayName(p.getCategory()), escape(toOneLine(p.getContent()))))
+                .map(p -> "- [%s] %s"
+                        .formatted(
+                                displayName(p.getCategory()),
+                                ClaudeApiSupport.escapeForPrompt(toOneLine(p.getContent()))))
                 .collect(Collectors.joining("\n"));
         return """
                 %sのつぶやき:
@@ -179,9 +174,5 @@ public class ClaudeService implements DiaryWriter {
 
     private static String toOneLine(String text) {
         return text.replaceAll("\\R", " ");
-    }
-
-    private static String escape(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 }

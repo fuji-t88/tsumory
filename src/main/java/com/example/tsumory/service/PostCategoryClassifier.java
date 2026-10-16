@@ -3,7 +3,6 @@ package com.example.tsumory.service;
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.core.RequestOptions;
 import com.anthropic.errors.AnthropicException;
-import com.anthropic.errors.AnthropicServiceException;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
@@ -28,8 +27,6 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class PostCategoryClassifier {
-
-    private static final long NANOS_PER_MILLI = 1_000_000;
 
     private static final String SYSTEM_PROMPT = """
             あなたは、ユーザーが 1 日の中でふと残したひとことのつぶやきを、次のカテゴリのいずれか 1 つに分類するアシスタントです。
@@ -82,21 +79,16 @@ public class PostCategoryClassifier {
                             RequestOptions.builder().timeout(settings.timeout()).build());
         } catch (AnthropicException e) {
             // ネットワーク障害・レート制限・タイムアウトなど。受けるのは SDK の例外だけにし、バグ（RuntimeException 全般）は隠さずに投げる
-            var elapsedMs = (System.nanoTime() - startedAt) / NANOS_PER_MILLI;
-            if (e instanceof AnthropicServiceException se) {
-                log.error(
-                        "claude classification call failed: elapsedMs={}, status={}, requestId={}",
-                        elapsedMs,
-                        se.statusCode(),
-                        se.headers().values("request-id").stream().findFirst().orElse("none"),
-                        e);
-            } else {
-                log.error("claude classification call failed: elapsedMs={}", elapsedMs, e);
-            }
+            log.error(
+                    "claude classification call failed: elapsedMs={}, status={}, requestId={}",
+                    ClaudeApiSupport.elapsedMs(startedAt),
+                    ClaudeApiSupport.statusCode(e),
+                    ClaudeApiSupport.requestId(e),
+                    e);
             return Optional.empty();
         }
 
-        var elapsedMs = (System.nanoTime() - startedAt) / NANOS_PER_MILLI;
+        var elapsedMs = ClaudeApiSupport.elapsedMs(startedAt);
         var usage = response.usage();
         var stopReason = response.stopReason().map(StopReason::asString).orElse("none");
         if (response.stopReason().filter(StopReason.END_TURN::equals).isEmpty()) {
@@ -136,7 +128,7 @@ public class PostCategoryClassifier {
     }
 
     static String buildUserMessage(String content) {
-        return "<post>%s</post>".formatted(escape(content));
+        return "<post>%s</post>".formatted(ClaudeApiSupport.escapeForPrompt(content));
     }
 
     /** 前後の空白・改行を取り除き、大文字にしてからカテゴリ ID として読む。読めなければ空。 */
@@ -151,9 +143,5 @@ public class PostCategoryClassifier {
             // カテゴリ ID でない応答（「WORK です」・表示名・空など）。呼び出し元で WARN を出す
             return Optional.empty();
         }
-    }
-
-    private static String escape(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 }
