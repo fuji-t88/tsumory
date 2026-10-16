@@ -27,6 +27,31 @@ class PostTest {
     }
 
     @Test
+    void 必須の値がnullなら作れない() {
+        // 保存の時点の DB のエラー（500）ではなく、作る時点で気づける
+        var user = TestFixtures.hanako();
+
+        assertThatThrownBy(() -> new Post(null, TestFixtures.LUNCH, POSTED_AT))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("user");
+        assertThatThrownBy(() -> new Post(user, null, POSTED_AT))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("content");
+        assertThatThrownBy(() -> new Post(user, TestFixtures.LUNCH, null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("now");
+    }
+
+    @Test
+    void 時刻がnullなら直せず元の本文のまま() {
+        var post = newPost();
+
+        assertThatThrownBy(() -> post.edit(TestFixtures.STUDY, null)).isInstanceOf(NullPointerException.class);
+        assertThat(post.getContent()).isEqualTo(TestFixtures.LUNCH);
+        assertThat(post.getUpdatedAt()).isEqualTo(POSTED_AT);
+    }
+
+    @Test
     void 空や空白だけの本文では作れない() {
         var user = TestFixtures.hanako();
         for (var content : new String[] {"", "   ", "　"}) {

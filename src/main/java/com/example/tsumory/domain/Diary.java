@@ -12,6 +12,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -40,15 +41,23 @@ public class Diary {
     @Column(nullable = false)
     private Instant generatedAt;
 
+    /** @throws NullPointerException 値が {@code null} のとき */
     public Diary(User user, LocalDate diaryDate, String content, Instant now) {
-        this.user = user;
-        this.diaryDate = diaryDate;
-        this.content = content;
-        this.generatedAt = now;
+        this.user = Objects.requireNonNull(user, "user");
+        this.diaryDate = Objects.requireNonNull(diaryDate, "diaryDate");
+        this.content = Objects.requireNonNull(content, "content");
+        this.generatedAt = Objects.requireNonNull(now, "now");
     }
 
-    /** 再生成した本文に置き換え、生成時刻を更新する。 */
+    /**
+     * 再生成した本文に置き換え、生成時刻を更新する。
+     *
+     * @throws NullPointerException 値が {@code null} のとき
+     */
     public void updateContent(String content, Instant now) {
+        // 先に両方を確かめる（本文だけ書き換わった状態で止まらないように）
+        Objects.requireNonNull(content, "content");
+        Objects.requireNonNull(now, "now");
         this.content = content;
         this.generatedAt = now;
     }

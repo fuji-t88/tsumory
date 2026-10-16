@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -30,9 +31,10 @@ public class User {
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
+    /** @throws NullPointerException 値が {@code null} のとき */
     public User(String username, String passwordHash, Instant now) {
-        this.username = username;
-        this.passwordHash = passwordHash;
-        this.createdAt = now;
+        this.username = Objects.requireNonNull(username, "username");
+        this.passwordHash = Objects.requireNonNull(passwordHash, "passwordHash");
+        this.createdAt = Objects.requireNonNull(now, "now");
     }
 }

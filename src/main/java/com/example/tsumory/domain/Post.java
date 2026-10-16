@@ -70,20 +70,25 @@ public class Post {
     @Column(nullable = false)
     private boolean categorySetByUser = false;
 
-    /** @throws IllegalArgumentException 本文が空・{@link #CONTENT_MAX_LENGTH} 文字を超える・改行や見えない文字（{@link #INVISIBLE_CHAR_CLASS}）を含むとき */
+    /**
+     * @throws NullPointerException 値が {@code null} のとき
+     * @throws IllegalArgumentException 本文が空・{@link #CONTENT_MAX_LENGTH} 文字を超える・改行や見えない文字（{@link #INVISIBLE_CHAR_CLASS}）を含むとき
+     */
     public Post(User user, String content, Instant now) {
-        this.user = user;
+        this.user = Objects.requireNonNull(user, "user");
         this.content = requireValidContent(content);
-        this.postedAt = now;
+        this.postedAt = Objects.requireNonNull(now, "now");
         this.updatedAt = now;
     }
 
     /**
      * 本文と更新時刻を変える。投稿時刻とカテゴリは変えない（判定し直すまでは前のカテゴリのまま）。
      *
+     * @throws NullPointerException 値が {@code null} のとき
      * @throws IllegalArgumentException 本文が空・{@link #CONTENT_MAX_LENGTH} 文字を超える・改行や見えない文字（{@link #INVISIBLE_CHAR_CLASS}）を含むとき
      */
     public void edit(String content, Instant now) {
+        Objects.requireNonNull(now, "now");
         this.content = requireValidContent(content);
         this.updatedAt = now;
     }
@@ -112,7 +117,7 @@ public class Post {
      * 文字数はフォームの {@code @Size} と同じく {@link String#length()} で数える。本文の値はメッセージに入れない（ログや画面に出ることがあるため）。
      */
     private static String requireValidContent(String content) {
-        if (content.isBlank()) {
+        if (Objects.requireNonNull(content, "content").isBlank()) {
             throw new IllegalArgumentException("Post content must not be blank");
         }
         if (content.length() > CONTENT_MAX_LENGTH) {
