@@ -149,7 +149,7 @@ erDiagram
 | 今日のつぶやき | `/` | `templates/home.html` | つぶやく・一覧を見る。編集モードで直す・消す |
 | 日記表示 | `/diary/{date}` | `templates/diary.html` | その日の日記を読む・書く・作り直す |
 
-エラー画面（`templates/error/404.html`、`500.html`）は画面数に数えない。
+エラー画面（`templates/error/404.html`、`500.html`、`templates/error.html`）は画面数に数えない。
 
 ### 画面遷移
 
@@ -291,12 +291,13 @@ erDiagram
 - Claude API の呼び出しに **120 秒**のタイムアウトを設定する（SDK の既定 10 分は長すぎるため）
 - タイムアウトしたら `DiaryGenerationException` として扱い、リトライはしない（「6. AI 連携」）
 
-### エラー画面（`templates/error/404.html`、`500.html`）
+### エラー画面（`templates/error/404.html`、`500.html`、`templates/error.html`）
 
 - ヘッダーはサービス名だけ（ユーザー名・ログアウトは出さない）
 - 404：「404」「ページが見つかりません」「つぶやきが削除されたか、URL が間違っている可能性があります。」「今日のつぶやきへ戻る」ボタン。一昨日より前の日記、URL の値が不正な場合（`/posts/abc/edit` など）も同じ。他人のつぶやき・一昨日より前のつぶやきは 404 にせず、`/` に戻してメッセージを出す（「5. 処理の詳細」）
 - 500：「問題が発生しました」「時間をおいて、もう一度お試しください。」「今日のつぶやきへ戻る」ボタン。スタックトレースや SQL などの内部情報は出さない
   - リクエスト ID を「お問い合わせの際は、次のエラー ID をお伝えください」の下に出す（ログの `requestId` と同じ値。CLAUDE.md の「リクエストの追跡」）。ユーザーから連絡を受けたとき、この ID でログを絞り込めるようにするため。ID がないとき（フィルターを通らなかったリクエスト）はこの部分を出さない
+- そのほか（404・500 以外。405・400・403 など）：`templates/error.html` で受ける（Spring Boot の英語の既定の画面を出さないための、最後の受け皿）。状態コード、「ページを表示できませんでした」「URL が間違っているか、この画面からはできない操作です。」「今日のつぶやきへ戻る」ボタン。リクエスト ID は 500 と同じく、あれば出す
 
 ### 入力チェック（投稿・編集共通）
 
@@ -464,6 +465,7 @@ erDiagram
 | URL の値が不正（`/posts/abc/edit` など）、日記表示の `{date}` が不正・今日と昨日以外 | 404。`templates/error/404.html` |
 | `ResourceNotFoundException`（他人のつぶやき、削除済み、一昨日より前のつぶやきの編集・削除） | `/` へリダイレクトし、フラッシュメッセージ「つぶやきが見つかりませんでした」 |
 | 想定外の例外 | 500。`templates/error/500.html`（内部情報は出さない） |
+| そのほかのエラー（405・400・403 など。POST だけの URL をブラウザで開いた、CSRF トークンがない など） | その状態コードのまま。`templates/error.html`（内部情報は出さない） |
 | 入力エラー | 同じ画面を再表示してフィールドの下にメッセージ |
 
 ## 9. 設定（`application.yaml`）
@@ -473,6 +475,13 @@ spring:
   # 開発時はプロジェクト直下の .env を読む（なければ無視する）。CLAUDE.md の「開発環境」を参照
   config:
     import: optional:file:.env[.properties]
+  # エラー画面とエラー応答に内部情報を出さない（既定値と同じだが明示する。「8. エラー処理」）
+  web:
+    error:
+      include-stacktrace: never
+      include-exception: false
+      include-message: never
+      include-binding-errors: never
   jpa:
     open-in-view: false
     hibernate:
