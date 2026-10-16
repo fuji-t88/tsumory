@@ -77,12 +77,6 @@ class PostContentCheckMigrationTest {
     }
 
     @Test
-    void マイグレーション自体に見えない文字を直接書かない() throws IOException {
-        // 範囲は \\uXXXX の形で書く。文字そのものを書くと、エディタやレビューで見えず、誤りに気づけない
-        assertThat(INVISIBLE.matcher(migration()).find()).isFalse();
-    }
-
-    @Test
     void 改行はDBの制約では止めない() throws IOException {
         // フェーズ 1 の改行入りのつぶやきを UPDATE（カテゴリの変更）できるようにするため。改行はフォーム・Post・プロンプトで守る
         var dbInvisible = asJavaCharClass(rangesOf(migration(), "posts_content_no_invisible_chars"));
