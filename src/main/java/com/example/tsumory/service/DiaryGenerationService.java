@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,8 @@ public class DiaryGenerationService {
      * </ul>
      *
      * <p>AI の呼び出しが失敗したら {@link DiaryGenerationException} をそのまま投げ、日記は変えない。
+     *
+     * <p>同じ日の日記を同時に生成して保存がぶつかったときは、先に保存された日記の上書きとして保存し直す（後から保存した方の本文が残る）。
      */
     // Claude API 呼び出しが長秒数になるため、
     // 外側でトランザクションを保持しない。
@@ -54,6 +57,18 @@ public class DiaryGenerationService {
             throw new NoPostsException();
         }
         var generated = diaryWriter.write(date, posts);
-        return diaryService.saveDiary(userId, date, generated);
+        try {
+            return diaryService.saveDiary(userId, date, generated);
+        } catch (DataIntegrityViolationException e) {
+            // 別のタブなどから同じ日の日記を同時に生成し、AI の応答を待つ間に先に INSERT された（一意制約の違反）。
+            // saveDiary のトランザクションはロールバック済みなので、もう一度呼べば既存の日記の上書きになる。
+            // 2 回目も失敗したら、一意制約以外の原因なのでそのまま投げる（500）
+            log.warn(
+                    "Diary save conflicted, retrying as update: userId={}, date={}, exception={}",
+                    userId,
+                    date,
+                    e.getClass().getSimpleName());
+            return diaryService.saveDiary(userId, date, generated);
+        }
     }
 }

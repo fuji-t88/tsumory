@@ -15,6 +15,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -72,6 +74,35 @@ class DiaryGenerationServiceTest {
         when(diaryService.saveDiary(USER_ID, PAST, DIARY_CONTENT)).thenReturn(diary);
 
         assertThat(service.generateForDate(USER_ID, PAST)).isSameAs(diary);
+    }
+
+    @Test
+    void generateForDate_saveConflictsWithConcurrentGeneration_retriesAsUpdateWithoutCallingAiAgain() {
+        // 別のタブから同じ日の日記が先に INSERT され、1 回目の保存が一意制約の違反になる
+        var diary = diary(user, PAST, DIARY_CONTENT, NOW);
+        when(postService.findPostsByDate(USER_ID, PAST)).thenReturn(mockPosts(3));
+        when(diaryWriter.write(any(), any())).thenReturn(DIARY_CONTENT);
+        when(diaryService.saveDiary(USER_ID, PAST, DIARY_CONTENT))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"))
+                .thenReturn(diary);
+
+        assertThat(service.generateForDate(USER_ID, PAST)).isSameAs(diary);
+
+        verify(diaryWriter, times(1)).write(any(), any());
+        verify(diaryService, times(2)).saveDiary(USER_ID, PAST, DIARY_CONTENT);
+    }
+
+    @Test
+    void generateForDate_saveFailsAgainOnRetry_throws() {
+        // 2 回目も失敗するなら一意制約以外の原因。隠さずに投げる（500）
+        when(postService.findPostsByDate(USER_ID, PAST)).thenReturn(mockPosts(3));
+        when(diaryWriter.write(any(), any())).thenReturn(DIARY_CONTENT);
+        when(diaryService.saveDiary(USER_ID, PAST, DIARY_CONTENT))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        assertThatThrownBy(() -> service.generateForDate(USER_ID, PAST))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        verify(diaryService, times(2)).saveDiary(USER_ID, PAST, DIARY_CONTENT);
     }
 
     @Test
