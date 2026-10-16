@@ -37,7 +37,7 @@ public class PostService {
         return LocalDate.ofInstant(clock.instant(), ZONE);
     }
 
-    /** 編集・削除、日記の表示と生成を受け付ける日付（今日と昨日）なら {@code true}。 */
+    /** つぶやきの編集・削除を受け付ける日付（今日と昨日）なら {@code true}。日記を開ける日付は {@link DiaryService#isAvailableDate} で別に判定する。 */
     public boolean isEditableDate(LocalDate date) {
         var today = today();
         return date.equals(today) || date.equals(today.minusDays(1));
