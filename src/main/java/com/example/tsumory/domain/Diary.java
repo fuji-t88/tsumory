@@ -12,6 +12,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -43,25 +44,25 @@ public class Diary {
 
     /**
      * @throws NullPointerException 値が {@code null} のとき
-     * @throws IllegalArgumentException 本文が空・空白だけのとき
+     * @throws IllegalArgumentException 本文が空・空白だけのとき、または生成時刻がその日の始まりより前のとき
      */
     public Diary(User user, LocalDate diaryDate, String content, Instant now) {
         this.user = Objects.requireNonNull(user, "user");
         this.diaryDate = Objects.requireNonNull(diaryDate, "diaryDate");
         this.content = requireNotBlank(content);
-        this.generatedAt = Objects.requireNonNull(now, "now");
+        this.generatedAt = requireNotBeforeDiaryDate(diaryDate, now);
     }
 
     /**
      * 再生成した本文に置き換え、生成時刻を更新する。
      *
      * @throws NullPointerException 値が {@code null} のとき
-     * @throws IllegalArgumentException 本文が空・空白だけのとき（前の日記のまま）
+     * @throws IllegalArgumentException 本文が空・空白だけのとき、または生成時刻がその日の始まりより前のとき（前の日記のまま）
      */
     public void updateContent(String content, Instant now) {
         // 先に両方を確かめる（本文だけ書き換わった状態で止まらないように）
         requireNotBlank(content);
-        Objects.requireNonNull(now, "now");
+        requireNotBeforeDiaryDate(diaryDate, now);
         this.content = content;
         this.generatedAt = now;
     }
@@ -76,5 +77,21 @@ public class Diary {
             throw new IllegalArgumentException("Diary content must not be blank");
         }
         return content;
+    }
+
+    /**
+     * 生成時刻はその日の始まり以降にする（その日が来る前に、その日の日記は書けない）。仕様が変わっても変わらない内部一貫性の制約なので、
+     * エンティティで守る。業務ルールの「未来の日付の日記は書けない」は、仕様が変われば動きうるので service で守る。
+     *
+     * <p>日記の日付は日本時間だが、エンティティはタイムゾーンを持たない（{@code Clock} を持たない）。そこで、世界でいちばん早くその日になる
+     * オフセット（{@link ZoneOffset#MAX}、UTC+18:00）での始まりと比べる。どのタイムゾーンで見ても正しいデータを誤って弾かないかわりに、
+     * 日本時間で見て 9 時間ぶんの矛盾（前日の 15 時から 0 時まで）は見逃す。
+     */
+    private static Instant requireNotBeforeDiaryDate(LocalDate diaryDate, Instant generatedAt) {
+        Objects.requireNonNull(generatedAt, "now");
+        if (generatedAt.isBefore(diaryDate.atStartOfDay(ZoneOffset.MAX).toInstant())) {
+            throw new IllegalArgumentException("Diary cannot be generated before its date starts");
+        }
+        return generatedAt;
     }
 }
