@@ -72,7 +72,7 @@ public class PostCategoryClassifier {
         var startedAt = System.nanoTime();
         Message response;
         try {
-            // 投稿・編集の応答が分類を待つので、分類だけ短いタイムアウトにする（クライアント全体は日記の生成に合わせて 120 秒）
+            // 分類だけ短いタイムアウトにする（phase2-spec.md の「7. AI 連携（カテゴリ分類） > 呼び出し」）
             response = client.messages()
                     .create(
                             params,

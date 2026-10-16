@@ -51,8 +51,6 @@ public class DiaryController {
     private final PostService postService;
     private final Clock clock;
 
-    // クラスに @RequestMapping("/diary") があるため、
-    // メソッド側のパスはすべて相対で書く
     /**
      * 日記の一覧（{@code GET /diary}）。キーワードがあれば本文で絞り込み、新しい順に {@link #DIARY_LIST_PAGE_SIZE} 件ずつ出す。
      *
@@ -135,7 +133,7 @@ public class DiaryController {
             flash.addFlashAttribute("message", NO_POSTS_MESSAGE);
             return "redirect:/";
         } catch (DiaryGenerationException e) {
-            // 原稿にはないが、Claude API の失敗で 500 にならないよう、フェーズ 1 と同じくメッセージを出して戻す
+            // 500 にせず、メッセージを付けてこの日の画面に戻す（phase2-spec.md の「6. 処理の詳細 > 日記生成・再生成」）
             flash.addFlashAttribute("message", GENERATION_FAILED_MESSAGE);
         }
         return "redirect:/diary/" + date;

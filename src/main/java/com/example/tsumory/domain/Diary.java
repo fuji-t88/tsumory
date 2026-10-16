@@ -67,11 +67,7 @@ public class Diary {
         this.generatedAt = now;
     }
 
-    /**
-     * 日記の本文は空・空白だけにしない（「日記あり」なのに何も書かれていない画面にしない。前の日記を空で上書きしない）。
-     * 空の応答は {@code ClaudeService} でも止めているが、{@code DiaryWriter} を差し替えたときなどに備えてここでも守る。
-     * 日記は AI の出力なので、つぶやきのような改行・見えない文字の禁止は入れない（段落の改行は許す。画面に出すだけで、プロンプトに戻らない）。
-     */
+    /** 日記の本文を空・空白だけにしない。つぶやきと違い、改行と見えない文字は禁止しない（どちらも理由は phase1-spec.md の「3. ドメインモデル」）。 */
     private static String requireNotBlank(String content) {
         if (Objects.requireNonNull(content, "content").isBlank()) {
             throw new IllegalArgumentException("Diary content must not be blank");
@@ -80,12 +76,8 @@ public class Diary {
     }
 
     /**
-     * 生成時刻はその日の始まり以降にする（その日が来る前に、その日の日記は書けない）。仕様が変わっても変わらない内部一貫性の制約なので、
-     * エンティティで守る。業務ルールの「未来の日付の日記は書けない」は、仕様が変われば動きうるので service で守る。
-     *
-     * <p>日記の日付は日本時間だが、エンティティはタイムゾーンを持たない（{@code Clock} を持たない）。そこで、世界でいちばん早くその日になる
-     * オフセット（{@link ZoneOffset#MAX}、UTC+18:00）での始まりと比べる。どのタイムゾーンで見ても正しいデータを誤って弾かないかわりに、
-     * 日本時間で見て 9 時間ぶんの矛盾（前日の 15 時から 0 時まで）は見逃す。
+     * 生成時刻はその日の始まり以降にする。タイムゾーンを持たずに判定するため、世界でいちばん早くその日になるオフセット（{@link ZoneOffset#MAX}、
+     * UTC+18:00）での始まりと比べる。エンティティで守る理由と、見逃す範囲は phase1-spec.md の「3. ドメインモデル」。
      */
     private static Instant requireNotBeforeDiaryDate(LocalDate diaryDate, Instant generatedAt) {
         Objects.requireNonNull(generatedAt, "now");

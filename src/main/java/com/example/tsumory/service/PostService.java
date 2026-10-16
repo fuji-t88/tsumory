@@ -97,7 +97,7 @@ public class PostService {
      * 今日のつぶやきとして投稿する。保存の前に AI でカテゴリを判定し、判定できたときだけ入れる（できなければ初期値の OTHER）。
      * 今日のつぶやきが {@link #DAILY_POST_LIMIT} 件に達していれば {@link DailyPostLimitExceededException}。
      *
-     * <p>Claude API の応答を待つ間に DB 接続を握らないよう、このメソッドはトランザクションの外で動かし、DB を読む・保存するところだけを短いトランザクションにする。
+     * <p>Claude API はトランザクションの外で呼び、DB を読む・保存するところだけを短いトランザクションにする（CLAUDE.md の「Spring・Lombok」）。
      *
      * @return 保存したつぶやき（判定したカテゴリが入っている）
      */
@@ -106,9 +106,8 @@ public class PostService {
         var content = rawContent.strip();
         var now = clock.instant();
         var today = LocalDate.ofInstant(now, clock.getZone());
-        // 上限に達しているなら、Claude API を呼ぶ前に断る（料金をかけないため）。
-        // 読むだけでも短いトランザクションで囲む。このメソッドの中（トランザクションの外）で直接 DB を読むと、その接続をメソッドが
-        // 終わるまで（Claude API の応答を待つ間も）握り続けるため
+        // 上限に達しているなら、Claude API を呼ぶ前に断る（料金をかけないため）。読むだけでも短いトランザクションで囲む（CLAUDE.md の
+        // 「Spring・Lombok」）
         transactionTemplate.executeWithoutResult(status -> checkPostLimit(userId, today));
         var post = new Post(userRepository.getReferenceById(userId), content, now);
         categoryClassifier.classify(content).ifPresent(post::assignCategory);
@@ -132,7 +131,7 @@ public class PostService {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void edit(Long userId, Long postId, String content, PostCategory category) {
         var stripped = content.strip();
-        // create と同じく、Claude API を待つ間に DB 接続を握らないよう、読むだけでも短いトランザクションで囲む
+        // create と同じく、読むだけでも短いトランザクションで囲む
         var current = transactionTemplate.execute(status -> findEditablePost(userId, postId));
         var contentChanged = !stripped.equals(current.getContent());
         // 今のカテゴリと違う値が送られたら、ユーザーが手で直したとみなす
@@ -178,6 +177,10 @@ public class PostService {
         log.info("Post category set by user: userId={}, postId={}", userId, postId);
     }
 
+    /**
+     * 自分の今日か昨日のつぶやきを削除する。それ以外（他人のもの、削除済み、一昨日より前）は {@link ResourceNotFoundException}。
+     * 他人のつぶやきと存在しないつぶやきは区別しない（CLAUDE.md の禁止事項「他人のデータ（IDOR）」）。
+     */
     @Transactional
     public void delete(Long userId, Long postId) {
         postRepository.delete(findEditablePost(userId, postId));

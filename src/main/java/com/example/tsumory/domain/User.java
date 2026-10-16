@@ -24,7 +24,7 @@ public class User {
 
     /**
      * BCrypt のハッシュの形（{@code $2a$}・{@code $2b$}・{@code $2y$} + コスト 2 桁 + {@code $} + ソルトとハッシュの 53 文字。全体で 60 文字）。
-     * 平文のパスワードを {@code passwordHash} に入れさせないため（CLAUDE.md の禁止事項「パスワード」）。
+     * 平文のパスワードを入れさせない（phase1-spec.md の「3. ドメインモデル」）。
      */
     private static final Pattern BCRYPT_HASH = Pattern.compile("\\$2[aby]\\$\\d{2}\\$[./A-Za-z0-9]{53}");
 
@@ -52,7 +52,6 @@ public class User {
         this.createdAt = Objects.requireNonNull(now, "now");
     }
 
-    // 保存の時点の DB のエラーではなく、作る時点で気づけるようにする。値はメッセージに入れない
     private static String requireValidUsername(String username) {
         if (Objects.requireNonNull(username, "username").isBlank()) {
             throw new IllegalArgumentException("Username must not be blank");
@@ -63,7 +62,6 @@ public class User {
         return username;
     }
 
-    // ハッシュ化し忘れた平文のパスワードを保存させない。値はメッセージに入れない（平文のパスワードがログに出ないように）
     private static String requireBcryptHash(String passwordHash) {
         if (!BCRYPT_HASH
                 .matcher(Objects.requireNonNull(passwordHash, "passwordHash"))

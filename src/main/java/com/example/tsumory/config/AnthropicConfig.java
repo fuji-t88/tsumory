@@ -7,15 +7,17 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-// Claude API のクライアント。ClaudeService（日記）と PostCategoryClassifier（カテゴリ分類）が共有する。
-// タイムアウトはここで日記に合わせて長くし、分類は呼び出しごとに短いタイムアウトで上書きする（RequestOptions）
+/**
+ * Claude API のクライアント。ClaudeService（日記）と PostCategoryClassifier（カテゴリ分類）が共有する。タイムアウトはここで日記に合わせ、
+ * 分類は呼び出しごとに短いタイムアウトで上書きする（phase2-spec.md の「7. AI 連携（カテゴリ分類） > 呼び出し」）。
+ */
 @Configuration
 @EnableConfigurationProperties(ClaudeProperties.class)
 public class AnthropicConfig {
 
     /**
-     * API キーは環境変数 ANTHROPIC_API_KEY から Spring の Environment 経由で読む（SDK の fromEnv() は System.getenv() を直接読み、
-     * .env などを見ないため使わない）。キーがなければ起動しない。失敗してもリトライしない（仕様 6 章）。
+     * API キーは Spring の Environment 経由で読み、キーがなければ起動しない（CLAUDE.md の「AI（Claude API）」）。失敗してもリトライしない
+     * （phase1-spec.md の「6. AI 連携 > 呼び出し」）。
      */
     @Bean(destroyMethod = "close")
     public AnthropicClient anthropicClient(@Value("${ANTHROPIC_API_KEY}") String apiKey, ClaudeProperties properties) {

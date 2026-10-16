@@ -32,10 +32,8 @@ public class Post {
 
     /**
      * 本文に入れられない「見えない文字」1 文字を表す正規表現の文字クラス。改行（CR・LF。別の決まりで拒否する）以外の制御文字（Cc）、
-     * 書式文字（Cf。ゼロ幅スペース、文字の向きを変える制御文字、タグ文字など）、行・段落の区切り（Zl・Zp）。
-     *
-     * <p>画面では無害に見える本文に、日記のプロンプトへの指示を隠せないようにするため（タグ文字で ASCII を見えない形に書く手口など）。
-     * ゼロ幅接合子（U+200D）は絵文字をつなぐ（👨\u200D👩\u200D👧 など）ので許す。全角スペース・異体字セレクタは別の種類なので対象外。
+     * 書式文字（Cf）、行・段落の区切り（Zl・Zp）。ただし、絵文字をつなぐゼロ幅接合子（U+200D）は許す。決まりと理由は phase2-spec.md の
+     * 「5. 画面 > 入力チェック（変更。投稿・編集共通）」。
      */
     public static final String INVISIBLE_CHAR_CLASS = "[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}&&[^\\r\\n\\u200D]]";
 
@@ -61,12 +59,12 @@ public class Post {
     @Column(nullable = false)
     private Instant updatedAt;
 
-    // DB の既定値は INSERT で列を省いたときだけ効く。JPA は値を明示して INSERT するので、初期値で OTHER を持たせる
+    // 既定値の OTHER は DB に任せず、ここで持たせる（phase2-spec.md の「4. ドメインモデル」）
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = PostCategory.NAME_MAX_LENGTH)
     private PostCategory category = PostCategory.OTHER;
 
-    /** ユーザーが手でカテゴリを直したら true。true のあいだは AI の判定で上書きしない（判断は service が行う）。 */
+    /** ユーザーが手でカテゴリを直したら true（phase2-spec.md の「3. データベース > `posts`（追加する列）」）。 */
     @Column(nullable = false)
     private boolean categorySetByUser = false;
 
@@ -94,9 +92,9 @@ public class Post {
     }
 
     /**
-     * カテゴリを割り当てる。AI の判定を反映するときと、ユーザーが手で直すときの両方で使う。更新時刻は変えない（カテゴリを直しても「編集済み」にしない）。
-     *
-     * <p>誰が呼んだかは区別しない。手で直したカテゴリを AI に上書きさせないのは、呼び出す service の役目（{@link #isCategorySetByUser()} を見る）。
+     * カテゴリを割り当てる。AI の判定を反映するときと、ユーザーが手で直すときの両方で使い、更新時刻は変えない。誰が呼んだかは区別しないので、
+     * 手で直したカテゴリを AI に上書きさせないのは、呼び出す service が {@link #isCategorySetByUser()} を見て守る（phase2-spec.md の
+     * 「4. ドメインモデル」）。
      */
     public void assignCategory(PostCategory category) {
         this.category = Objects.requireNonNull(category, "category");
@@ -112,9 +110,8 @@ public class Post {
     }
 
     /**
-     * 本文の決まり（空でない、{@link #CONTENT_MAX_LENGTH} 文字以内、見えない文字なし、改行なし）を守る。フォーム（{@code PostForm}・{@code PostEditForm}）でも
-     * 確かめているが、フォームを通らない経路（テストデータ、将来の API など）でも、保存の時点の DB のエラー（500）ではなく、作る時点で気づけるようにする。
-     * 文字数はフォームの {@code @Size} と同じく {@link String#length()} で数える。本文の値はメッセージに入れない（ログや画面に出ることがあるため）。
+     * 本文の決まり（空でない、{@link #CONTENT_MAX_LENGTH} 文字以内、見えない文字なし、改行なし）を守る。文字数はフォームの {@code @Size} と同じく
+     * {@link String#length()} で数える。エンティティでも守る理由は phase1-spec.md の「3. ドメインモデル」。
      */
     private static String requireValidContent(String content) {
         if (Objects.requireNonNull(content, "content").isBlank()) {
@@ -129,12 +126,7 @@ public class Post {
         return requireSingleLine(content);
     }
 
-    /**
-     * 本文に改行を入れさせない。日記のプロンプトでは 1 行に 1 つぶやきを並べるので、改行で偽の行を紛れ込ませられないようにする。
-     *
-     * <p>フォーム（{@code PostForm}・{@code PostEditForm}）でも拒否しているが、フォームを通らない経路や、将来チェックが外れたときに備えてここでも守る。
-     * 本文の値はメッセージに入れない（ログや画面に出ることがあるため）。
-     */
+    /** 本文に改行を入れさせない（理由は phase2-spec.md の「5. 画面 > 入力チェック（変更。投稿・編集共通）」）。 */
     private static String requireSingleLine(String content) {
         if (content.indexOf('\n') >= 0 || content.indexOf('\r') >= 0) {
             throw new IllegalArgumentException("Post content must not contain line breaks");

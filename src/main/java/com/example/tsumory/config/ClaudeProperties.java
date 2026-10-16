@@ -30,7 +30,7 @@ public record ClaudeProperties(
     /**
      * つぶやきのカテゴリ分類の設定（application.yaml の anthropic.classification.*）。
      *
-     * <p>{@code timeout} は分類の呼び出しだけに使う（投稿・編集の応答が分類を待つので、クライアント全体の {@code anthropic.timeout} より短くする）。
+     * <p>{@code timeout} は分類の呼び出しだけに使う（phase2-spec.md の「7. AI 連携（カテゴリ分類） > 呼び出し」）。
      */
     public record Classification(
             @NotBlank String model,

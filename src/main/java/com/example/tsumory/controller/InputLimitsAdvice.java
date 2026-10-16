@@ -6,8 +6,8 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
 
 /**
- * 入力の上限（文字数）を、すべての画面のテンプレートに渡す。画面の {@code maxlength} を数字で書かず、form・エンティティと同じ定数から出すため
- * （上限を変えたとき、画面とサーバーの判定がずれないように）。
+ * 入力の上限（文字数）を、すべての画面のテンプレートに渡す。画面の {@code maxlength} も form・エンティティと同じ定数から出す（CLAUDE.md の
+ * 「入力の検証（多層防御）」）。
  */
 @ControllerAdvice
 public class InputLimitsAdvice {

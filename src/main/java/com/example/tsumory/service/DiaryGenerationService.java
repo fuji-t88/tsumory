@@ -34,10 +34,8 @@ public class DiaryGenerationService {
      *
      * <p>同じ日の日記を同時に生成して保存がぶつかったときは、先に保存された日記の上書きとして保存し直す（後から保存した方の本文が残る）。
      */
-    // Claude API 呼び出しが長秒数になるため、
-    // 外側でトランザクションを保持しない。
-    // findPostsByDate / saveDiary はそれぞれ
-    // 独立したトランザクションを張る。
+    // Claude API の応答を待つ間はトランザクションを張らない。DB を読む・保存するところ（availableRange・findPostsByDate・saveDiary）は、
+    // 呼び出す service がそれぞれ短いトランザクションで行う（CLAUDE.md の「Spring・Lombok」）
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Diary generateForDate(Long userId, LocalDate date) {
         // 業務上の失敗は WARN で残す（CLAUDE.md の「ログ」）。AI は呼ばない

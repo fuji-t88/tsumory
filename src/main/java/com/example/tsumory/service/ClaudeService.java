@@ -145,13 +145,12 @@ public class ClaudeService implements DiaryWriter {
     }
 
     /**
-     * つぶやきを投稿順のまま、1 行ずつ {@code - [仕事] 本文} の形で埋め込む。
+     * つぶやきを投稿順のまま、1 行ずつ {@code - [仕事] 本文} の形で {@code <posts>} の中に埋め込む。本文の {@code <}・{@code >}・{@code &} は
+     * エスケープし、改行は空白に置き換え、見えない文字は取り除く（プロンプトインジェクションの守り。phase2-spec.md の
+     * 「7. AI 連携（カテゴリ分類） > 日記のプロンプト（変更）」）。
      *
-     * <p>プロンプトインジェクションを防ぐため、全体を {@code <posts>} で囲み、本文の {@code <}・{@code >}・{@code &} はエスケープする。
-     * 本文の改行は空白に置き換える。フェーズ 1 で保存された改行入りのつぶやきが、偽のつぶやきの行を紛れ込ませないようにするため
-     * （新しい投稿・編集はフォームと {@link Post} が改行を拒否するが、DB から読んだつぶやきはその守りを通らない）。
-     * 同じ理由で、見えない文字（{@link Post#INVISIBLE_CHAR_CLASS}。画面に出ないまま指示を隠せる）も取り除く。
-     * テストから呼べるよう、private にしない。
+     * <p>改行と見えない文字は入口（フォームと {@link Post}）でも拒否しているが、その守りより前に保存されたつぶやきが DB から来るので、ここでも
+     * 取り除く。テストから呼べるよう、private にしない。
      */
     String buildUserMessage(LocalDate date, List<Post> posts) {
         var bullets = posts.stream()
@@ -168,7 +167,7 @@ public class ClaudeService implements DiaryWriter {
                 """.formatted(date.format(DATE_FORMAT), bullets);
     }
 
-    // 万一カテゴリが未設定のつぶやきが紛れ込んでも、プロンプトを組み立てられるようにする（通常は初期値の OTHER が入っている）
+    // カテゴリが null でも組み立てる（phase2-spec.md の「7. AI 連携（カテゴリ分類） > 日記のプロンプト（変更）」）
     private String displayName(PostCategory category) {
         return category == null ? "未分類" : category.getDisplayName();
     }

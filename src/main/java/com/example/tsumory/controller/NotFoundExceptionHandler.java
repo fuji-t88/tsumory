@@ -10,7 +10,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 /**
  * URL の値を変換できないとき（{@code /posts/abc/edit}、{@code /diary/2026-13-01} など）を、400 ではなく 404 にする。
  *
- * <p>仕様書の 8 章で、URL の間違いは「ページが見つかりません」として扱うため。応答は {@code sendError} で返し、
+ * <p>URL の間違いは「ページが見つかりません」として扱う（phase1-spec.md の「8. エラー処理」）。応答は {@code sendError} で返し、
  * {@code DiaryNotFoundException} などと同じエラー画面に任せる。
  */
 @ControllerAdvice
