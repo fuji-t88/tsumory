@@ -47,6 +47,10 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    // SourceInvisibleCharsTest・DocReferenceTest は docs と CLAUDE.md を読む。入力に入れないと、文書だけを直したときに
+    // テストが「最新」として飛ばされる
+    inputs.dir("docs").withPropertyName("docs").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file("CLAUDE.md").withPropertyName("claudeMd").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 spotless {
