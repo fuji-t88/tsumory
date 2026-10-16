@@ -37,15 +37,15 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 | # | 重要度 | 観点 | 指摘 | 場所 | 状態 |
 |---|---|---|---|---|---|
 | 1 | 高 | エラーハンドリング | 404 のエラー画面（`error/404.html`）がない。404・405・400 は Spring Boot の英語の画面（Whitelabel Error Page）になる | `templates/error/` | 対応済み |
-| 2 | 中 | エラーハンドリング | 投稿・編集フォームに、仕様の「送信中の表示と二重送信の防止」がない。分類を待つ数秒の間に連打すると、同じつぶやきが何件もできる | `templates/home.html` | 未対応 |
-| 3 | 中 | エラーハンドリング | `GET /diary` のキーワードを form のクラスと `@Valid` ではなく、`@RequestParam` と手書きの長さチェックで受けている | `DiaryController#diaryList` | 未対応 |
-| 4 | 中 | 可読性・保守性 | 投稿の上限の判定が、service と controller の 2 か所にある | `PostController#populateHomeModel` | 未対応 |
-| 5 | 低 | セキュリティ | 今日のつぶやき画面に、インラインのイベントハンドラ（`onchange`・`onsubmit`）がある | `templates/home.html` | 未対応 |
-| 6 | 低 | 可読性・保守性 | 本文・キーワードの文字数（100・50）が、form・テンプレート・エンティティ・controller に数字で散らばっている | `PostForm`・`PostEditForm`・`SearchForm`・`DiaryController`・`Post`・テンプレート | 未対応 |
+| 2 | 中 | エラーハンドリング | 投稿・編集フォームに、仕様の「送信中の表示と二重送信の防止」がない。分類を待つ数秒の間に連打すると、同じつぶやきが何件もできる | `templates/home.html` | 対応済み |
+| 3 | 中 | エラーハンドリング | `GET /diary` のキーワードを form のクラスと `@Valid` ではなく、`@RequestParam` と手書きの長さチェックで受けている | `DiaryController#diaryList` | 対応済み |
+| 4 | 中 | 可読性・保守性 | 投稿の上限の判定が、service と controller の 2 か所にある | `PostController#populateHomeModel` | 対応済み |
+| 5 | 低 | セキュリティ | 今日のつぶやき画面に、インラインのイベントハンドラ（`onchange`・`onsubmit`）がある | `templates/home.html` | 対応済み |
+| 6 | 低 | 可読性・保守性 | 本文・キーワードの文字数（100・50）が、form・テンプレート・エンティティ・controller に数字で散らばっている | `PostForm`・`PostEditForm`・`SearchForm`・`DiaryController`・`Post`・テンプレート | 対応済み |
 | 7 | 低 | 可読性・保守性 | 画面のメッセージで、ドメイン用語や動作の言葉がそろっていない（「投稿」と「つぶやき」、生成なのに「表示できません」） | `PostController`・`DiaryController` | 保留 |
-| 8 | 低 | 可読性・保守性 | `Post` が自分で守っている入力の決まりが、改行の禁止だけ（空・100 文字はフォームと DB だけ） | `Post` | 未対応 |
-| 9 | 低 | 可読性・保守性 | controller の引数の名前と順番がメソッドごとにそろっていない | `PostController`・`DiaryController` | 未対応 |
-| 10 | 低 | 可読性・保守性 | コメントが古い、または作業メモが残っている | `AnthropicConfig`・`fragments/header.html` | 未対応 |
+| 8 | 低 | 可読性・保守性 | `Post` が自分で守っている入力の決まりが、改行の禁止だけ（空・100 文字はフォームと DB だけ） | `Post` | 対応済み |
+| 9 | 低 | 可読性・保守性 | controller の引数の名前と順番がメソッドごとにそろっていない | `PostController`・`DiaryController` | 対応済み |
+| 10 | 低 | 可読性・保守性 | コメントが古い、または作業メモが残っている | `AnthropicConfig`・`fragments/header.html` | 対応済み |
 
 高の指摘が 1 件ある（指摘 1。対応済み）。認証・認可、CSRF、XSS、他人のデータの絞り込み、オープンリダイレクト、ログの扱いは観点どおり（末尾の「確認したが問題がなかった点」）。
 
@@ -53,7 +53,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 4. 投稿の上限の判定が 2 か所にある（中）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `17a3d0d`）：`PostService#isPostLimitReached(userId, date)` を足し、controller の `posts.size() >= DAILY_POST_LIMIT` と、投稿を断る `checkPostLimit` の両方がこれを使うようにした。テストは `PostServiceTest` に境界（15 件で false、16 件で true）を足し、`PostControllerTest` はこのメソッドをモックする形に直した
 
 - 場所：`PostController#populateHomeModel` の `posts.size() >= PostService.DAILY_POST_LIMIT`。service 側は `PostService#checkPostLimit` の `countPosts(...) >= DAILY_POST_LIMIT`
 - 何が起きるか：今はどちらも「今日のつぶやきの件数が 16 件以上」で同じ結果になる。しかし、上限の決まりを変える（たとえば削除したつぶやきも数える、ユーザーごとに上限を変える）と、画面のフォームを無効にする判定と、実際に投稿を断る判定がずれる。フォームは使えるのに投稿すると断られる、またはその逆になる
@@ -62,7 +63,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 6. 文字数が数字で散らばっている（低）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `91e693a`）：`Post.CONTENT_MAX_LENGTH`（100）と `SearchForm.KEYWORD_MAX_LENGTH`（50）を足し、`@Size(max = ...)`・`@Column(length = ...)` で使うようにした。文言は `{max} 文字以内で入力してください` にして、数字を書かない。テンプレートの `maxlength` は、新しい `controller/InputLimitsAdvice`（`@ControllerAdvice`）が全画面に渡す値を `th:maxlength` で使う。DB の `VARCHAR(100)` はマイグレーションでしか変えられないので、定数の Javadoc に書いた。テストは、ホームと日記一覧の `maxlength` が定数と同じことを足した
 
 - 場所
   - つぶやきの 100 文字：`PostForm`・`PostEditForm` の `@Size(max = 100)` と文言「100 文字以内」、`Post` の `@Column(length = 100)`、`home.html` の `maxlength="100"`（2 か所）、DB の `VARCHAR(100)`
@@ -84,7 +86,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 8. `Post` が守る入力の決まりが改行だけ（低）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `a5ea63e`）：`Post` のコンストラクタと `edit` で、空（空白だけを含む）と `CONTENT_MAX_LENGTH` 超えも `IllegalArgumentException` にした（文字数はフォームの `@Size` と同じく `String#length()` で数える）。テストは `PostTest` に 3 件足した。あわせて、service が `strip()` で全角スペースも取り除くので、全角スペースだけの本文をフォームが止めていること（止めないと `Post` の検査で 500 になる）を `PostControllerTest` で確かめた
 
 - 場所：`Post` のコンストラクタと `edit`（`requireSingleLine`）
 - 何が起きるか：改行の禁止はフォームと `Post` の両方で守っている（多層防御）が、空の本文と 100 文字の上限はフォーム（と DB の列の長さ）だけ。フォームを通らない経路（テストデータ、将来の API など）で 101 文字の本文が来ると、`Post` は作れてしまい、保存のときに DB のエラー（500）になる
@@ -92,7 +95,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 9. controller の引数の名前と順番がそろっていない（低）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `ae3a196`）：`PostController` の `bindingResult`・`redirectAttributes` を、原稿の形の `binding`・`flash` にそろえた（`DiaryController`・`SearchController` はもともとこの名前）。引数の順番は変えていない（`create` は原稿の形のまま。Spring MVC は `BindingResult` を検証する引数の直後に置く決まりだけで、ほかの順番は自由なので、名前だけをそろえた）
 
 - 場所：`PostController#create` は書籍の原稿に合わせて `(postForm, binding, principal, model, flash)`、ほかのメソッドは `(principal, id, form, bindingResult, model, redirectAttributes)`。`DiaryController` でも `flash` と `redirectAttributes` が混ざっている
 - 何が起きるか：動作には影響しない。読むときに同じものが違う名前で出てくる
@@ -101,7 +105,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 10. コメントが古い、または作業メモが残っている（低）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `4b3783d`）：`AnthropicConfig` のコメントを「`ClaudeService`（日記）と `PostCategoryClassifier`（カテゴリ分類）が共有する。分類は呼び出しごとに短いタイムアウトで上書きする」に直した。`header.html` の作業メモは役割（日記一覧への近道）に書き換えた。あわせて、ブラウザに送られる HTML のコメント（`<!-- -->`）を全テンプレートから探し、`header.html`・`500.html` のものは Thymeleaf のコメント（`<!--/* */-->`）に、マークアップを読めば分かるだけのもの（`home.html`・`diary-list.html` の 4 か所）は消した。テストは、ホーム・日記一覧・500 の画面の HTML に `<!--` が出ないことを足した
 
 - 場所
   - `AnthropicConfig` の「Claude API のクライアント。ClaudeService が使う」
@@ -137,7 +142,8 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 2. 投稿・編集フォームに送信中の表示と二重送信の防止がない（中）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-16、コミット `b213c29`）：指摘 5 で作った `static/js/form-submit.js` を使い、投稿フォームと編集フォームに `js-submit-once` を付けた。送信したらボタンを無効にして「つぶやいています…」（編集は「保存しています…」）にスピナー付きで変え、2 回目以降の `submit` を止める。ブラウザの「戻る」（`pageshow` の `persisted`）では、サーバーが描いた状態（上限で無効など）に戻す。テストは `PostControllerTest` に、2 つのフォームに印と文言が付き、スクリプトを読み込むことを足した。スクリプトの動き（連打しても 1 件だけ投稿される）は自動テストしていないので、ブラウザで手で確かめる（phase1-spec.md の「10. テスト」の方針どおり）
 
 - 場所：`templates/home.html` の投稿フォーム（`POST /posts`）と編集フォーム（`POST /posts/{id}/edit`）
 - 何が起きるか：投稿と編集は、保存の前に Claude API でカテゴリを分類するので、応答まで数秒（最大で分類のタイムアウトの 10 秒）かかる。その間もボタンは押せるので、反応がないと思って連打すると、同じつぶやきが押した回数だけ保存される（Claude API の料金もその分かかる）。投稿の上限（16 件）にも早く達する
@@ -146,8 +152,9 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 3. `GET /diary` のキーワードを form のクラスで受けていない（中）
 
-- 状態：未対応
+- 状態：対応済み
   - 判断メモ（2026-10-16）：`@RequestParam` で受けるのは書籍の原稿のコード（`diaryList`）に合わせたもの（コミット `485527e`）。長さのチェックは、原稿にないので足した。直すなら、原稿との違いとして扱う
+  - ✓ 対応済み（2026-10-16、コミット `4c0f561`）：`form/DiaryListForm(keyword)` を足し、`@Valid` と `BindingResult` で受けるようにした。上限は `SearchForm.KEYWORD_MAX_LENGTH`（指摘 6）を使い、文言も `{max} 文字以内で入力してください` で検索画面とそろえた。前後の空白は record のコンパクトコンストラクタで取り除いてから検証する（前と同じく、空白を除いた文字数で数える）。controller の手書きの長さチェックと `KEYWORD_TOO_LONG_MESSAGE` はなくし、テンプレートは `#fields.hasErrors` で出す。書籍の原稿（`@RequestParam`）との違いとして扱う。CLAUDE.md のパッケージの表の `form` にも `DiaryListForm` を足した（コミット `c4ce049`）。テストは `DiaryControllerTest` に、前後の空白を除くと 50 文字なら検索することを足した
 
 - 場所：`DiaryController#diaryList`
 - 何が起きるか：キーワードを `@RequestParam String keyword` で受け、長さ（50 文字）を controller の `if` で確かめている。CLAUDE.md の禁止事項「入力の受け取り」は「必ず `form/` のクラスで受け、Bean Validation を通す（`@Valid`）」としている。今は長さの上限を確かめているので実害はないが、検索画面（`SearchForm`）と決まりが 2 か所に分かれ（指摘 6）、文言も別に持っている。キーワードの決まりを足す（たとえば記号だけを禁止する）と、片方だけに入る
@@ -158,8 +165,9 @@ CLAUDE.md の「コードレビューの観点」（可読性・保守性、エ�
 
 ### 5. インラインのイベントハンドラがある（低）
 
-- 状態：未対応
+- 状態：対応済み
   - 判断メモ（2026-10-16）：`onchange="this.form.submit()"`（カテゴリのセレクトボックス）は書籍の原稿に合わせたもの（コミット `1c89b5b`）。`onsubmit`（「日記を生成」）はフェーズ 1 からある
+  - ✓ 対応済み（2026-10-16、コミット `236b2e7`。仕様の修正はコミット `2c5544d`）：`static/js/form-submit.js` を作り、カテゴリのセレクトボックスは `js-auto-submit`（`change` で送信）、「日記を生成」は `js-submit-once` と `data-loading="genLoading"`（ボタンを無効にして案内を出す）に置き換えた。`onchange` は書籍の原稿の形で、仕様書（phase1-spec.md の「今日の日記」、phase2-spec.md の「今日のつぶやき（変更）」）にもインラインで書くとあったので、先に仕様を直した（原稿との違いとして扱う）。テストは `PostControllerTest` に、ホームの HTML に `on〜=` の属性がなく、スクリプトを読み込むことを足した
 
 - 場所：`templates/home.html` の 64 行目（`onchange`）と 125 行目（`onsubmit`）
 - 何が起きるか：どちらも固定の文字列で、ユーザーの入力は入っていないので、今は XSS にはならない。しかし、インラインのスクリプトがあると、将来 Content-Security-Policy（CSP）で `unsafe-inline` を禁止して XSS の被害を抑える対策が入れられない。仕様（phase2-spec.md の「今日のつぶやき（変更）」）も「スクリプトは `static/js/` に置き、インラインの `<script>` は書かない」としていて、日記表示（`diary.html`）は `diary-generate.js` に分けている
