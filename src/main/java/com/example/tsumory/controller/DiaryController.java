@@ -36,7 +36,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 public class DiaryController {
 
     static final String NO_POSTS_MESSAGE = "つぶやきがないため日記を生成できません";
-    static final String FUTURE_DATE_MESSAGE = "未来の日付の日記は表示できません";
+    static final String FUTURE_DATE_MESSAGE = "未来の日付の日記は生成できません";
 
     /** 日記の一覧（{@code GET /diary}）で 1 ページに出す件数。 */
     static final int DIARY_LIST_PAGE_SIZE = 10;

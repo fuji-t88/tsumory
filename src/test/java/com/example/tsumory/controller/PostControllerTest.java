@@ -458,7 +458,7 @@ class PostControllerTest {
                         .with(user(PRINCIPAL))
                         .with(csrf()))
                 .andExpect(redirectedUrl("/"))
-                .andExpect(flash().attribute("message", "今日の投稿は 16 件に達しました"));
+                .andExpect(flash().attribute("message", "今日のつぶやきは 16 件に達しました"));
     }
 
     @Test

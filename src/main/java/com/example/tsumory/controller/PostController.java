@@ -31,7 +31,7 @@ public class PostController {
     static final String POST_NOT_FOUND_MESSAGE = "つぶやきが見つかりませんでした";
 
     /** 今日のつぶやきが上限に達しているのに投稿されたとき（別のタブから送った場合など）のメッセージ。 */
-    private static final String DAILY_LIMIT_MESSAGE = "今日の投稿は " + PostService.DAILY_POST_LIMIT + " 件に達しました";
+    private static final String DAILY_LIMIT_MESSAGE = "今日のつぶやきは " + PostService.DAILY_POST_LIMIT + " 件に達しました";
 
     private final PostService postService;
     private final DiaryService diaryService;

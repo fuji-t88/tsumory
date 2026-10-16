@@ -411,7 +411,7 @@ class DiaryControllerTest {
 
         mockMvc.perform(post("/diary/2026-10-08/generate").with(user(PRINCIPAL)).with(csrf()))
                 .andExpect(redirectedUrl("/"))
-                .andExpect(flash().attribute("message", "未来の日付の日記は表示できません"));
+                .andExpect(flash().attribute("message", "未来の日付の日記は生成できません"));
     }
 
     @Test
