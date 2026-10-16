@@ -68,6 +68,16 @@ class DiaryTest {
     }
 
     @Test
+    void 本文がnullなら書き直せず前の日記のまま() {
+        var diary = newDiary();
+
+        assertThatThrownBy(() -> diary.updateContent(null, REGENERATED_AT))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("content");
+        assertUnchanged(diary);
+    }
+
+    @Test
     void 時刻がnullなら書き直せず前の日記のまま() {
         var diary = newDiary();
 

@@ -133,6 +133,52 @@ class PostTest {
     }
 
     @Test
+    void 文字数はフォームと同じくStringのlengthで数える() {
+        // サロゲートペアの絵文字は、見た目は 1 文字でも length() では 2。フォームの @Size と数え方をそろえ、フォームを通った本文が
+        // ここで弾かれないようにする
+        var emoji = "😀";
+
+        assertThat(new Post(user, emoji.repeat(Post.CONTENT_MAX_LENGTH / 2), POSTED_AT).getContent())
+                .hasSize(Post.CONTENT_MAX_LENGTH);
+        assertThatThrownBy(() -> new Post(user, emoji.repeat(Post.CONTENT_MAX_LENGTH / 2 + 1), POSTED_AT))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(TOO_LONG);
+    }
+
+    @Test
+    void 編集すると本文と更新時刻が変わり投稿時刻は変わらない() {
+        var post = newPost();
+
+        post.edit(TestFixtures.STUDY, EDITED_AT);
+
+        assertThat(post.getContent()).isEqualTo(TestFixtures.STUDY);
+        assertThat(post.getUpdatedAt()).isEqualTo(EDITED_AT);
+        assertThat(post.getPostedAt()).isEqualTo(POSTED_AT);
+        assertThat(post.isEdited()).isTrue();
+    }
+
+    @Test
+    void 投稿と同じ時刻に直しても編集済みにはならない() {
+        // 「編集済み」は、更新時刻が投稿時刻より後のときだけ
+        var post = newPost();
+
+        post.edit(TestFixtures.STUDY, POSTED_AT);
+
+        assertThat(post.getContent()).isEqualTo(TestFixtures.STUDY);
+        assertThat(post.isEdited()).isFalse();
+    }
+
+    @Test
+    void 本文がnullなら直せず元の本文のまま() {
+        var post = newPost();
+
+        assertThatThrownBy(() -> post.edit(null, EDITED_AT))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("content");
+        assertUnchanged(post);
+    }
+
+    @Test
     void 時刻がnullなら直せず元の本文のまま() {
         var post = newPost();
 
