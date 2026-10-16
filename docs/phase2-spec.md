@@ -329,7 +329,7 @@ erDiagram
 5. controller（`DiaryController#generateDiaryForDate`）は結果を 4 つに分けて扱う
    - 成功：メッセージなしで `/diary/{date}` へ
    - `NoPostsException`：「つぶやきがないため日記を生成できません」を付けて `/`（ホーム）へ
-   - `InvalidDiaryDateException`：「未来の日付の日記は表示できません」を付けて `/`（ホーム）へ（画面からは送れず、URL を書き換えたときだけ起きる）
+   - `InvalidDiaryDateException`：「未来の日付の日記は生成できません」を付けて `/`（ホーム）へ（画面からは送れず、URL を書き換えたときだけ起きる）
    - `DiaryGenerationException`：「日記の生成に失敗しました。時間をおいて再度お試しください」を付けて `/diary/{date}` へ（前の日記はそのまま残る。Claude API の失敗で 500 にしないため）
 6. 失敗したらリトライせず、日記は変えない（前の日記を残す）
 
@@ -382,7 +382,7 @@ erDiagram
 
 1. `PostService#create` は、今日のつぶやきの件数（`countPosts`。「今日」の範囲はフェーズ 1 のまま）が上限以上なら `DailyPostLimitExceededException` を投げる。**カテゴリの分類より前に**確かめる（上限を超えた投稿で Claude API を呼ばないため）
 2. 分類を待つ間に別のタブなどから投稿されていることがあるので、保存のトランザクションの中でもう一度確かめ、上限以上なら保存せずに同じ例外を投げる
-3. controller（`PostController#create`）は例外を受け、「今日の投稿は 16 件に達しました」を付けて `/` へリダイレクトする。入力した本文は残さない
+3. controller（`PostController#create`）は例外を受け、「今日のつぶやきは 16 件に達しました」を付けて `/` へリダイレクトする。入力した本文は残さない
 4. 画面では、上限に達したら投稿フォームを無効にする（「5. 画面 > 今日のつぶやき」）。例外になるのは、上限に達する前に開いた画面から送った場合など
 
 - 数えるのは、今あるつぶやきの件数。削除すれば、その分また投稿できる
@@ -442,9 +442,9 @@ AI の判定が外れたときに、ユーザーがセレクトボックスで�
 | 状況 | メッセージ |
 |---|---|
 | 日記を生成しようとした日のつぶやきが 0 件（`NoPostsException`） | 「つぶやきがないため日記を生成できません」（`message`、`alert-warning`。ホームに出す。フェーズ 1 と同じ） |
-| 今日より後の日付の日記を生成しようとした（`InvalidDiaryDateException`） | 「未来の日付の日記は表示できません」（`message`、`alert-warning`。ホームに出す） |
+| 今日より後の日付の日記を生成しようとした（`InvalidDiaryDateException`） | 「未来の日付の日記は生成できません」（`message`、`alert-warning`。ホームに出す） |
 | 検索キーワードが 51 文字以上 | 「50 文字以内で入力してください」（入力欄の下に赤字） |
-| 今日のつぶやきが上限（16 件）に達しているのに投稿した（`DailyPostLimitExceededException`） | 「今日の投稿は 16 件に達しました」（`message`、`alert-warning`。今日のつぶやき画面に出す） |
+| 今日のつぶやきが上限（16 件）に達しているのに投稿した（`DailyPostLimitExceededException`） | 「今日のつぶやきは 16 件に達しました」（`message`、`alert-warning`。今日のつぶやき画面に出す） |
 
 ## 7. AI 連携（カテゴリ分類）
 
