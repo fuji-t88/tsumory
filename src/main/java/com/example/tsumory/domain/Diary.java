@@ -41,11 +41,14 @@ public class Diary {
     @Column(nullable = false)
     private Instant generatedAt;
 
-    /** @throws NullPointerException 値が {@code null} のとき */
+    /**
+     * @throws NullPointerException 値が {@code null} のとき
+     * @throws IllegalArgumentException 本文が空・空白だけのとき
+     */
     public Diary(User user, LocalDate diaryDate, String content, Instant now) {
         this.user = Objects.requireNonNull(user, "user");
         this.diaryDate = Objects.requireNonNull(diaryDate, "diaryDate");
-        this.content = Objects.requireNonNull(content, "content");
+        this.content = requireNotBlank(content);
         this.generatedAt = Objects.requireNonNull(now, "now");
     }
 
@@ -53,12 +56,25 @@ public class Diary {
      * 再生成した本文に置き換え、生成時刻を更新する。
      *
      * @throws NullPointerException 値が {@code null} のとき
+     * @throws IllegalArgumentException 本文が空・空白だけのとき（前の日記のまま）
      */
     public void updateContent(String content, Instant now) {
         // 先に両方を確かめる（本文だけ書き換わった状態で止まらないように）
-        Objects.requireNonNull(content, "content");
+        requireNotBlank(content);
         Objects.requireNonNull(now, "now");
         this.content = content;
         this.generatedAt = now;
+    }
+
+    /**
+     * 日記の本文は空・空白だけにしない（「日記あり」なのに何も書かれていない画面にしない。前の日記を空で上書きしない）。
+     * 空の応答は {@code ClaudeService} でも止めているが、{@code DiaryWriter} を差し替えたときなどに備えてここでも守る。
+     * 日記は AI の出力なので、つぶやきのような改行・見えない文字の禁止は入れない（段落の改行は許す。画面に出すだけで、プロンプトに戻らない）。
+     */
+    private static String requireNotBlank(String content) {
+        if (Objects.requireNonNull(content, "content").isBlank()) {
+            throw new IllegalArgumentException("Diary content must not be blank");
+        }
+        return content;
     }
 }

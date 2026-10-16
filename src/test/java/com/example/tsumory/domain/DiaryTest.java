@@ -47,6 +47,35 @@ class DiaryTest {
     }
 
     @Test
+    void 空や空白だけの本文では作れない() {
+        // 「日記あり」なのに何も書かれていない画面にしない
+        var user = TestFixtures.hanako();
+        for (var content : new String[] {"", "  \n\n ", "　"}) {
+            assertThatThrownBy(() -> new Diary(user, TestFixtures.TODAY, content, GENERATED_AT))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    @Test
+    void 空の本文では書き直せず前の日記のまま() {
+        // 前の日記を空で上書きして消さない
+        var diary = newDiary();
+
+        assertThatThrownBy(() -> diary.updateContent(" ", REGENERATED_AT)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(diary.getContent()).isEqualTo(TestFixtures.DIARY_CONTENT);
+        assertThat(diary.getGeneratedAt()).isEqualTo(GENERATED_AT);
+    }
+
+    @Test
+    void 段落の改行を含む本文は使える() {
+        // 日記は AI の出力。つぶやきと違い、改行は禁止しない
+        var content = "朝は寝坊した。\n\n昼はカレーを食べた。";
+
+        assertThat(new Diary(TestFixtures.hanako(), TestFixtures.TODAY, content, GENERATED_AT).getContent())
+                .isEqualTo(content);
+    }
+
+    @Test
     void 書き直すと本文と生成時刻が変わり日付は変わらない() {
         var diary = newDiary();
 
