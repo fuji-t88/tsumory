@@ -70,6 +70,7 @@
 - イメージを小さくするため、Java のランタイムは JDK 全体ではなく、jlink でアプリが使うモジュールだけを入れて Alpine の上で動かす
   - 依存を足して起動時に `ClassNotFoundException`（`java.*`・`jdk.*` のクラス）が出たら、`Dockerfile` の `--add-modules` にそのモジュールを足す。要るモジュールは、展開した jar に `jdeps --print-module-deps` を当てて調べる
   - `jdk.crypto.ec`（Claude API との TLS）と `jdk.localedata`（日本語の曜日）は jdeps では見つからないので、消さない
+- `Dockerfile` に `RUN --mount=type=cache` を書かない。Railway はキャッシュの mount に独自の形の ID（`id=s/<サービス ID>-…`）を求め、普通の書き方では Dockerfile の検証で止まる（2026-10-19 に Railway のビルドが「The Dockerfile failed validation」で失敗した）。依存はソースより先に取ってくるので、レイヤーキャッシュで足りる
 - `.dockerignore` は、ビルドに要るファイルだけを通す書き方にする（`.env` などが気づかないうちにイメージに入らないように）。ビルドに要るファイルを足したら、ここにも足す
 - 実行時に環境変数で渡すもの（イメージには入れない）
   - `ANTHROPIC_API_KEY`
