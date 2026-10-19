@@ -1,19 +1,23 @@
-# 開発用。本番では使わないこと（認証情報を平文で置いている）。
+# ローカル用。本番（Railway）では使わない（Railway は Dockerfile だけを使い、DB はマネージドサービス）。
+# 値は .env で上書きできる（変数の一覧は .env.example）。.env に書かなければ初期値で動く。
 services:
   db:
     image: 'postgres:18'
     environment:
-      - 'POSTGRES_DB=tsumory'
-      - 'POSTGRES_USER=tsumory'
-      - 'POSTGRES_PASSWORD=secret'
-      - 'TZ=Asia/Tokyo'
+      # この 3 つは、ボリュームが空のとき（初回）だけ使われる。あとから変えても DB の名前・ユーザー・パスワードは変わらない
+      POSTGRES_DB: ${POSTGRES_DB:-tsumory}
+      POSTGRES_USER: ${POSTGRES_USER:-tsumory}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      TZ: Asia/Tokyo
     ports:
-      - '5432:5432'
+      # このマシンからだけつなげる（初期値のパスワードの DB を、同じネットワークのほかの端末に見せない）
+      - '127.0.0.1:5432:5432'
     volumes:
       # PostgreSQL 18 以降のイメージは /var/lib/postgresql/<major>/docker にデータを置くため親ディレクトリをマウントする
       - 'postgres-data:/var/lib/postgresql'
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U tsumory -d tsumory']
+      # $$ はコンテナの中の環境変数（上の POSTGRES_USER・POSTGRES_DB）を読む書き方
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -22,7 +26,7 @@ services:
     image: 'adminer:5'
     environment:
       # ログイン画面のサーバー欄の初期値
-      - 'ADMINER_DEFAULT_SERVER=db'
+      ADMINER_DEFAULT_SERVER: db
     ports:
       - '127.0.0.1:8081:8080'
     depends_on:
@@ -31,6 +35,31 @@ services:
     labels:
       # Spring Boot の Docker Compose 連携の接続先検出から除外する
       org.springframework.boot.ignore: true
+
+  # deploy プロファイルのときだけ起動する（docker compose --profile deploy up --build）。
+  # bootRun（Spring Boot の Docker Compose 連携）は profiles のないサービスだけを起動するので、開発時は db と adminer だけが立ち、
+  # bootRun のアプリと 8080 を取り合わない
+  app:
+    profiles: ['deploy']
+    build: .
+    ports:
+      - '127.0.0.1:8080:8080'
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-tsumory}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-tsumory}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      # シークレットなので初期値を持たせない
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # ログイン画面はログインなしで開ける（Actuator は入れていない）。wget はイメージの Alpine に入っている
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://localhost:8080/login']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
 volumes:
   postgres-data:
