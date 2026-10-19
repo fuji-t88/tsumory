@@ -5,7 +5,9 @@ import com.anthropic.errors.AnthropicException;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
+import com.anthropic.models.messages.RefusalStopDetails;
 import com.anthropic.models.messages.StopReason;
+import com.anthropic.models.messages.TextBlock;
 import com.example.tsumory.config.ClaudeProperties;
 import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
@@ -101,9 +103,7 @@ public class ClaudeService implements DiaryWriter {
                     date,
                     elapsedMs,
                     response.id(),
-                    response.stopDetails()
-                            .flatMap(details -> details.category())
-                            .orElse(null));
+                    response.stopDetails().flatMap(RefusalStopDetails::category).orElse(null));
             throw new DiaryGenerationException("Claude refused to generate the diary");
         }
         if (response.stopReason().filter(StopReason.END_TURN::equals).isEmpty()) {
@@ -119,7 +119,7 @@ public class ClaudeService implements DiaryWriter {
 
         var body = response.content().stream()
                 .flatMap(block -> block.text().stream())
-                .map(text -> text.text())
+                .map(TextBlock::text)
                 .collect(Collectors.joining())
                 .strip();
         if (body.isBlank()) {

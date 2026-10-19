@@ -7,6 +7,7 @@ import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.StopReason;
+import com.anthropic.models.messages.TextBlock;
 import com.example.tsumory.config.ClaudeProperties;
 import com.example.tsumory.domain.PostCategory;
 import java.util.Locale;
@@ -104,7 +105,7 @@ public class PostCategoryClassifier {
 
         var raw = response.content().stream()
                 .flatMap(block -> block.text().stream())
-                .map(text -> text.text())
+                .map(TextBlock::text)
                 .collect(Collectors.joining());
         var category = parse(raw);
         if (category.isEmpty()) {
