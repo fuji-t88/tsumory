@@ -103,7 +103,7 @@ public class DiaryListService {
         }
         var weeks = new ArrayList<DiaryCalendarWeek>();
         for (var i = 0; i < cells.size(); i += DAYS_PER_WEEK) {
-            weeks.add(new DiaryCalendarWeek(List.copyOf(cells.subList(i, i + DAYS_PER_WEEK))));
+            weeks.add(new DiaryCalendarWeek(cells.subList(i, i + DAYS_PER_WEEK)));
         }
         return weeks;
     }

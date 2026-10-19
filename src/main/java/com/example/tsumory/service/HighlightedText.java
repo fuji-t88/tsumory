@@ -41,7 +41,7 @@ public record HighlightedText(List<Segment> segments) {
         if (plainStart < text.length()) {
             segments.add(new Segment(text.substring(plainStart), false));
         }
-        return new HighlightedText(List.copyOf(segments));
+        return new HighlightedText(segments);
     }
 
     /** {@code text} の中で最初に {@code keyword} に一致する位置。英字の大文字・小文字は区別しない。なければ -1。 */
