@@ -412,7 +412,7 @@ erDiagram
   - `max-tokens`：1 以上
   - `effort`：`low`・`medium`・`high`・`xhigh`・`max` のどれか
   - `timeout`：必須（`120s` のように書く）
-- 開発と本番で値を変えたいときは、プロファイル別の `application-{profile}.yaml` や環境変数（`ANTHROPIC_MODEL` など）で上書きする
+- 開発と本番で値を変えたいときは、環境変数（`ANTHROPIC_MODEL` など）で上書きする。プロファイル別の `application-{profile}.yaml` は作らない（設定はコードから分けて実行環境から渡し、同じイメージをどの環境にもそのまま置けるようにするため。渡し方は CLAUDE.md の「本番のコンテナ」）
 
 - **失敗してもリトライしない**。1 回呼んで失敗したら、エラーをユーザーに表示して終わる。やり直すかどうかはユーザーがもう一度ボタン（「日記を書く」「作り直す」）を押して決める
 - `stop_reason` が `refusal`、または `end_turn` 以外なら `DiaryGenerationException` を投げる（拒否と失敗は分けない）
