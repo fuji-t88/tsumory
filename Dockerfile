@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- ビルド：jar を作り、Spring Boot のレイヤーごとに展開する ----
-FROM eclipse-temurin:21.0.12.1_1-jdk-alpine-3.24 AS build
+FROM eclipse-temurin:21.0.12.1_1-jdk-alpine-3.24 AS builder
 WORKDIR /workspace
 # CI があると compileJava の前の spotlessApply が走らない（CLAUDE.md の「コーディング規約 > 全般」）
 ENV CI=true
@@ -45,10 +45,10 @@ ENV JAVA_HOME=/opt/java \
 RUN addgroup -S app && adduser -S -G app -H app
 WORKDIR /app
 # 変わりにくい順に重ねる。アプリを直しただけなら、最後のレイヤーだけが入れ替わる
-COPY --from=build /workspace/extracted/dependencies/ ./
-COPY --from=build /workspace/extracted/spring-boot-loader/ ./
-COPY --from=build /workspace/extracted/snapshot-dependencies/ ./
-COPY --from=build /workspace/extracted/application/ ./
+COPY --from=builder /workspace/extracted/dependencies/ ./
+COPY --from=builder /workspace/extracted/spring-boot-loader/ ./
+COPY --from=builder /workspace/extracted/snapshot-dependencies/ ./
+COPY --from=builder /workspace/extracted/application/ ./
 
 USER app
 EXPOSE 8080
