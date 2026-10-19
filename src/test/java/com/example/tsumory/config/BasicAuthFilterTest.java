@@ -9,6 +9,7 @@ import java.util.Base64;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.security.autoconfigure.web.servlet.SecurityFilterProperties;
 import org.springframework.core.annotation.Order;
@@ -114,6 +115,17 @@ class BasicAuthFilterTest {
                 .hasMessageNotContaining(USERNAME);
         assertThatThrownBy(() -> new BasicAuthFilter("", PASSWORD))
                 .isInstanceOf(IllegalStateException.class)
+                .hasMessageNotContaining(PASSWORD);
+    }
+
+    @ParameterizedTest
+    @CsvSource(
+            delimiter = '|',
+            value = {"'   '|open-sesame", "guest|'   '", "'   '|'   '", "'\t'|open-sesame"})
+    void 空白だけのユーザー名かパスワードでは作れない(String username, String password) {
+        assertThatThrownBy(() -> new BasicAuthFilter(username, password))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageNotContaining(USERNAME)
                 .hasMessageNotContaining(PASSWORD);
     }
 

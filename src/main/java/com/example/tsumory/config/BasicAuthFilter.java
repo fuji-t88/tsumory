@@ -37,7 +37,7 @@ public class BasicAuthFilter extends OncePerRequestFilter {
     /**
      * ユーザー名とパスワードの両方があれば有効、どちらもなければ無効にする。
      *
-     * @throws IllegalStateException 片方だけが設定されているとき
+     * @throws IllegalStateException 片方だけが設定されているとき、または空白だけの値が設定されているとき
      */
     public BasicAuthFilter(
             @Value("${BASIC_AUTH_USERNAME:}") String username, @Value("${BASIC_AUTH_PASSWORD:}") String password) {
@@ -45,6 +45,9 @@ public class BasicAuthFilter extends OncePerRequestFilter {
         var hasPassword = !password.isEmpty();
         if (hasUsername != hasPassword) {
             throw new IllegalStateException("BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD must be set together");
+        }
+        if (hasUsername && (username.isBlank() || password.isBlank())) {
+            throw new IllegalStateException("BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD must not be blank");
         }
         this.enabled = hasUsername;
         this.username = username.getBytes(UTF_8);
