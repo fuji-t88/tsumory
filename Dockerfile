@@ -8,6 +8,8 @@ ENV CI=true
 
 COPY gradlew settings.gradle.kts build.gradle.kts ./
 COPY gradle gradle
+# Git に gradlew が実行権限なしで入っている。Railway は Git のとおりに取り出すので、ここで付ける
+RUN chmod +x gradlew
 # ソースより先に依存を取ってくる。ソースだけを直したときは、このレイヤーのキャッシュが効く。
 # RUN --mount=type=cache は使わない（Railway は独自の形の ID を求め、この書き方では Dockerfile の検証で止まる）
 RUN ./gradlew --no-daemon dependencies > /dev/null
