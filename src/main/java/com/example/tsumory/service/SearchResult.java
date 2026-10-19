@@ -11,6 +11,10 @@ import java.util.List;
  */
 public record SearchResult(List<SearchHit> hits, boolean postsTruncated, boolean diariesTruncated) {
 
+    public SearchResult {
+        hits = List.copyOf(hits);
+    }
+
     public boolean truncated() {
         return postsTruncated || diariesTruncated;
     }

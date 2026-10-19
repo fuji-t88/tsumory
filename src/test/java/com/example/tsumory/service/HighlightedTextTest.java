@@ -1,8 +1,11 @@
 package com.example.tsumory.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.tsumory.service.HighlightedText.Segment;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class HighlightedTextTest {
@@ -30,5 +33,23 @@ class HighlightedTextTest {
         // 強調のための HTML は作らない。本文の < > はテンプレートの th:text がエスケープする
         assertThat(HighlightedText.of("<b>カレー</b>", "カレー").segments())
                 .containsExactly(new Segment("<b>", false), new Segment("カレー", true), new Segment("</b>", false));
+    }
+
+    @Test
+    void 渡したリストを後から変えても区切りは変わらない() {
+        var segment = new Segment("カレー", true);
+        var segments = new ArrayList<>(List.of(segment));
+
+        var highlighted = new HighlightedText(segments);
+        segments.clear();
+
+        assertThat(highlighted.segments()).containsExactly(segment);
+    }
+
+    @Test
+    void 区切りのリストは書き換えられない() {
+        var highlighted = new HighlightedText(new ArrayList<>(List.of(new Segment("カレー", true))));
+
+        assertThatThrownBy(() -> highlighted.segments().clear()).isInstanceOf(UnsupportedOperationException.class);
     }
 }

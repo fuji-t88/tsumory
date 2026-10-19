@@ -14,6 +14,10 @@ public record HighlightedText(List<Segment> segments) {
     /** 本文の一部。{@code match} はキーワードに一致した部分なら {@code true}。 */
     public record Segment(String text, boolean match) {}
 
+    public HighlightedText {
+        segments = List.copyOf(segments);
+    }
+
     /** {@code text} の中の {@code keyword} に一致する部分をすべて区切る。英字の大文字・小文字は区別しない。キーワードが空なら全体を 1 つにする。 */
     static HighlightedText of(String text, String keyword) {
         if (keyword == null || keyword.isEmpty()) {
