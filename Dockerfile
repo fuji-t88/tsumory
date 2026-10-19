@@ -8,13 +8,14 @@ ENV CI=true
 
 COPY gradlew settings.gradle.kts build.gradle.kts ./
 COPY gradle gradle
-# ソースより先に依存を取ってくる。ソースだけを直したときは、このレイヤーのキャッシュが効く
-RUN --mount=type=cache,target=/root/.gradle ./gradlew --no-daemon dependencies > /dev/null
+# ソースより先に依存を取ってくる。ソースだけを直したときは、このレイヤーのキャッシュが効く。
+# RUN --mount=type=cache は使わない（Railway は独自の形の ID を求め、この書き方では Dockerfile の検証で止まる）
+RUN ./gradlew --no-daemon dependencies > /dev/null
 
 COPY src/main src/main
 # テストはイメージのビルドでは流さない（./gradlew build で流す）。
 # jar の名前は build.gradle.kts の version で変わるので、app.jar にそろえてから展開する（-plain.jar は起動できない jar）
-RUN --mount=type=cache,target=/root/.gradle ./gradlew --no-daemon bootJar \
+RUN ./gradlew --no-daemon bootJar \
     && cp "$(ls build/libs/*.jar | grep -v -- '-plain\.jar$')" app.jar \
     && java -Djarmode=tools -jar app.jar extract --layers --destination extracted
 
