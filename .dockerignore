@@ -1,0 +1,7 @@
+# ビルドに要るものだけを通す。.env（API キー）などが、気づかないうちにイメージに入らないようにする
+*
+!gradlew
+!gradle/
+!settings.gradle.kts
+!build.gradle.kts
+!src/main/
