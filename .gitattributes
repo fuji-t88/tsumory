@@ -1,3 +1,5 @@
-/gradlew text eol=lf
+# 改行は LF に固定する。Windows の core.autocrlf に左右されず、Dockerfile・compose.yaml・gradlew を
+# Linux のコンテナでもそのまま読めるようにする
+* text=auto eol=lf
 *.bat text eol=crlf
 *.jar binary
