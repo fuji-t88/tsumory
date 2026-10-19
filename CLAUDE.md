@@ -60,12 +60,28 @@
 - `./gradlew build` — ビルドとテスト
 - `./gradlew test` — テストのみ
 - `./gradlew spotlessApply` — 整形
+- `docker build -t tsumory .` — 本番用のイメージを作る（「本番のコンテナ」）
+
+## 本番のコンテナ
+
+- イメージはプロジェクト直下の `Dockerfile` で作る。ビルドの中でテストは流さないので、先に `./gradlew build` を通す
+- イメージを小さくするため、Java のランタイムは JDK 全体ではなく、jlink でアプリが使うモジュールだけを入れて Alpine の上で動かす
+  - 依存を足して起動時に `ClassNotFoundException`（`java.*`・`jdk.*` のクラス）が出たら、`Dockerfile` の `--add-modules` にそのモジュールを足す。要るモジュールは、展開した jar に `jdeps --print-module-deps` を当てて調べる
+  - `jdk.crypto.ec`（Claude API との TLS）と `jdk.localedata`（日本語の曜日）は jdeps では見つからないので、消さない
+- `.dockerignore` は、ビルドに要るファイルだけを通す書き方にする（`.env` などが気づかないうちにイメージに入らないように）。ビルドに要るファイルを足したら、ここにも足す
+- 実行時に環境変数で渡すもの（イメージには入れない）
+  - `ANTHROPIC_API_KEY`
+  - `SPRING_DATASOURCE_URL`・`SPRING_DATASOURCE_USERNAME`・`SPRING_DATASOURCE_PASSWORD`（開発では Docker Compose 連携が自動で設定する値。`spring-boot-docker-compose` は jar に入らない）
+- SQL とバインドパラメータのログ（`application.yaml` の `org.hibernate.SQL`・`org.hibernate.orm.jdbc.bind`）は、イメージの環境変数で `INFO` にして出さない（禁止事項の「ログ」）。この 2 つの環境変数を外さない
+- コンテナは非 root のユーザー `app` で動かす。タイムゾーンは `TZ=Asia/Tokyo`（ログの時刻を日本時間にする。「今日」は `Clock` が決めるので、これには左右されない）
 
 ## ディレクトリ構成
 
 ```
 tsumory/
 ├── compose.yaml                  # 開発用コンテナ（db, adminer）
+├── Dockerfile                    # 本番用のイメージ（「本番のコンテナ」）
+├── .dockerignore
 ├── db/
 │   └── dev-seed.sql              # 動作確認用のテストデータ（手で流す。Flyway のマイグレーションではない）
 ├── build.gradle.kts
