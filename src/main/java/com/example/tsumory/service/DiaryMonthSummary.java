@@ -18,4 +18,10 @@ public record DiaryMonthSummary(
         List<DiaryCalendarWeek> weeks,
         long diaryCount,
         YearMonth previousMonth,
-        YearMonth nextMonth) {}
+        YearMonth nextMonth) {
+
+    public DiaryMonthSummary {
+        days = List.copyOf(days);
+        weeks = List.copyOf(weeks);
+    }
+}
