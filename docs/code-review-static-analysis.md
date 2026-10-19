@@ -13,16 +13,17 @@
 
 ## 数字
 
-| ツール | `5e6d65e`（解析した時点） | `f67b199`（指摘 1 の対応後） |
-|---|---|---|
-| `javac -Xlint:all` | 0 | 測っていない |
-| Error Prone（`UnicodeInCode` を除く） | 6 | 測っていない |
-| Error Prone の `UnicodeInCode` | 97（javac の警告の上限 100 件で切れた数。実際はもっと多い） | 測っていない |
-| SpotBugs | 15 | 11（`DiaryMonthSummary` の 4 件が消えた） |
-| PMD（main） | 22 | 測っていない |
-| PMD（test） | 303（うち `MethodNamingConventions` が 302） | 測っていない |
-| `spotlessCheck` | 違反なし | 違反なし（`./gradlew build` で確認） |
-| テストの件数 | 363（すべて成功） | 365（すべて成功。指摘 1 のテストを 2 件足した） |
+| ツール | `5e6d65e`（解析した時点） | `f67b199`（指摘 1 の対応後） | `bfbb454`（指摘 5 の対応後） |
+|---|---|---|---|
+| `javac -Xlint:all` | 0 | 測っていない | 測っていない |
+| Error Prone（`UnicodeInCode` を除く） | 6 | 測っていない | 測っていない |
+| Error Prone の `UnicodeInCode` | 97（javac の警告の上限 100 件で切れた数。実際はもっと多い） | 測っていない | 測っていない |
+| SpotBugs | 15 | 11（`DiaryMonthSummary` の 4 件が消えた） | 5（`DiaryCalendarWeek`・`HighlightedText`・`SearchResult` の 6 件が消えた。残りはすべて「指摘にしなかったもの」） |
+| PMD（main） | 22 | 測っていない | 測っていない |
+| PMD（test） | 303（うち `MethodNamingConventions` が 302） | 測っていない | 測っていない |
+| `spotlessCheck` | 違反なし | 違反なし（`./gradlew build` で確認） | 違反なし（`./gradlew build` で確認） |
+| テストの件数 | 363（すべて成功） | 365（すべて成功。指摘 1 のテストを 2 件足した） | 371（すべて成功。指摘 5 のテストを 6 件足した） |
+| 呼び出し側で `List.copyOf` してから record に渡している場所 | 2（`DiaryListService#calendarWeeks`・`HighlightedText#of`） | 2 | 0（record のコンストラクタで写すので外した） |
 
 ## まとめ
 
@@ -32,7 +33,7 @@
 | 2 | 低 | 可読性・保守性 | `DiaryWriter#write` の JavaDoc に要約の 1 文がない | `DiaryWriter` | 未対応 |
 | 3 | 低 | 可読性・保守性 | メソッド参照で書けるラムダがある | `ClaudeService`・`PostCategoryClassifier` | 未対応 |
 | 4 | 低 | 可読性・保守性 | `name.equals("CLAUDE")` を、文字列の定数を先にした形で書いていない | `DocReferenceTest` | 未対応 |
-| 5 | 低 | 可読性・保守性 | リストを持つほかの record（`DiaryCalendarWeek`・`HighlightedText`・`SearchResult`）は、書き換えられないリストを渡すことを呼び出し側に任せている | `DiaryCalendarWeek`・`HighlightedText`・`SearchResult` | 未対応 |
+| 5 | 低 | 可読性・保守性 | リストを持つほかの record（`DiaryCalendarWeek`・`HighlightedText`・`SearchResult`）は、書き換えられないリストを渡すことを呼び出し側に任せている | `DiaryCalendarWeek`・`HighlightedText`・`SearchResult` | 対応済み |
 
 ## 可読性・保守性
 
@@ -71,11 +72,13 @@
 
 ### 5. リストを持つほかの record も、コンストラクタで写していない（低）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-19、コミット `05c5898`）：`DiaryCalendarWeek`・`HighlightedText`・`SearchResult` にコンパクトコンストラクタを足し、リストを `List.copyOf` で写すようにした。リストを持つ表示用の record は、これで 4 つとも同じ守り方になった。テストは 3 クラスに 2 件ずつ、計 6 件（渡したリストを後から変えても変わらない、リストは書き換えられない）。`DiaryCalendarWeekTest`・`SearchResultTest` は新しく作り、`HighlightedText` は既存の `HighlightedTextTest` に足した。本体を直す前に 6 件とも失敗することを確かめた
+  - 前後のコミット：テストを足す前に、`HighlightedTextTest` の英語のテスト名を日本語に直した（テストの整理、`0a0b9a6`。CLAUDE.md の「テスト」の「そのテストクラスを直すときに、日本語に直す」）。対応のあと、呼び出し側に残った `List.copyOf`（`DiaryListService#calendarWeeks`・`HighlightedText#of`）を外した（リファクタリング、`bfbb454`。テストは 371 件のまま）
 - 見つけたもの：SpotBugs の `EI_EXPOSE_REP`・`EI_EXPOSE_REP2`（指摘 1 の対応後に残った 11 件のうち 6 件）
 - 場所：`DiaryCalendarWeek`・`HighlightedText`・`SearchResult`
 - 何が起きるか：今の呼び出し側は、どれも書き換えられないリストを渡している（`DiaryCalendarWeek` は `List.copyOf`、`HighlightedText#of` は `List.copyOf`、`SearchService` は `Stream#toList`）。守りが呼び出し側にあるので、新しい呼び出し側が `ArrayList` を渡すと指摘 1 と同じことになる
-- 直し方の案：指摘 1 と同じく、コンパクトコンストラクタで `List.copyOf` する。指摘 1 は「weeks の修正」として依頼された範囲だけを直したので、ここは別に扱う
+- 直し方の案：指摘 1 と同じく、コンパクトコンストラクタで `List.copyOf` する。指摘 1 は「weeks の修正」として依頼された範囲だけを直したので、ここは別に扱った
 
 ## 指摘にしなかったもの（2026-10-19）
 
