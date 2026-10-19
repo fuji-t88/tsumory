@@ -40,8 +40,8 @@
 
 ## 開発環境
 
-- `./gradlew bootRun` で起動すると、Spring Boot の Docker Compose 連携で `compose.yaml` のコンテナも自動で起動する（Docker Desktop の起動が必要）
-  - `db`: PostgreSQL。`localhost:5432`、DB 名・ユーザー名 `tsumory`、パスワード `secret`
+- `./gradlew bootRun` で起動すると、Spring Boot の Docker Compose 連携で `compose.yaml` のコンテナ（`db`・`adminer`）も自動で起動する（Docker Desktop の起動が必要）。`app` は起動しない（「compose の構成」）
+  - `db`: PostgreSQL。`localhost:5432`（このマシンからだけつなげる）、DB 名・ユーザー名 `tsumory`、パスワード `secret`（`.env` で上書きしなければこの初期値）
   - `adminer`: DB 管理画面。http://localhost:8081 （サーバー欄は `db`）
 - アプリは http://localhost:8080
 - DB の接続情報は Docker Compose 連携が自動で設定するので、`application.yaml` には書かない
@@ -61,9 +61,11 @@
 - `./gradlew test` — テストのみ
 - `./gradlew spotlessApply` — 整形
 - `docker build -t tsumory .` — 本番用のイメージを作る（「本番のコンテナ」）
+- `docker compose --profile deploy up --build` — アプリもコンテナで動かす（本番相当の構成を手元で確かめる。「compose の構成」）
 
 ## 本番のコンテナ
 
+- 本番は Railway。Railway は `Dockerfile` だけを使ってアプリをビルドし、PostgreSQL は Railway のマネージドサービスを使う。`compose.yaml` は本番では使わない（Adminer も本番には入らない）
 - イメージはプロジェクト直下の `Dockerfile` で作る。ビルドの中でテストは流さないので、先に `./gradlew build` を通す
 - イメージを小さくするため、Java のランタイムは JDK 全体ではなく、jlink でアプリが使うモジュールだけを入れて Alpine の上で動かす
   - 依存を足して起動時に `ClassNotFoundException`（`java.*`・`jdk.*` のクラス）が出たら、`Dockerfile` の `--add-modules` にそのモジュールを足す。要るモジュールは、展開した jar に `jdeps --print-module-deps` を当てて調べる
@@ -75,11 +77,27 @@
 - SQL とバインドパラメータのログ（`application.yaml` の `org.hibernate.SQL`・`org.hibernate.orm.jdbc.bind`）は、イメージの環境変数で `INFO` にして出さない（禁止事項の「ログ」）。この 2 つの環境変数を外さない
 - コンテナは非 root のユーザー `app` で動かす。タイムゾーンは `TZ=Asia/Tokyo`（ログの時刻を日本時間にする。「今日」は `Clock` が決めるので、これには左右されない）
 
+### compose の構成
+
+- `compose.yaml` は 1 つだけ。ローカルで使う構成で、本番（Railway）では使わない
+  - 既定は開発用（`db`・`adminer`）。`deploy` プロファイルを付けると、`app`（`Dockerfile` からビルドしたアプリ）も起動する本番相当の構成になる
+  - `app` には `profiles: ['deploy']` を付ける。外さない。`bootRun`（Spring Boot の Docker Compose 連携）は profiles のないサービスだけを起動するので、付けないと `bootRun` のアプリとは別に `app` のコンテナまで起動し、ビルドが走ってポート 8080 を取り合う
+- DB の接続情報と API キーは `${VAR:-初期値}` で書き、`.env` で上書きできるようにする。使う変数の一覧は `.env.example`（値は書かずにコミットする）。変数を足したら `.env.example` にも足す
+  - DB 名・ユーザー名・パスワードの初期値は `tsumory`・`tsumory`・`secret`。`.env` に書かなくても開発で動く。アプリの接続先（`SPRING_DATASOURCE_*`）も同じ変数から組み立て、DB とずれないようにする
+  - `ANTHROPIC_API_KEY` は初期値を持たせない（`${ANTHROPIC_API_KEY}`）。シークレットに初期値を書かない
+  - `.env` は、`docker compose`（値の差し込み）と開発時の Spring Boot（`spring.config.import`）の両方が読む。シェルの環境変数は `.env` より優先される
+  - `POSTGRES_DB`・`POSTGRES_USER`・`POSTGRES_PASSWORD` は、DB のボリュームが空のとき（初回）だけ使われる。あとから値を変えても DB は変わらず、アプリだけが新しい値でつなごうとして失敗する
+- `db`・`adminer`・`app` のポートは `127.0.0.1` にだけ公開する（初期値のパスワードの DB を、同じネットワークのほかの端末に見せない）
+- `deploy` プロファイルのアプリも、開発と同じボリューム（`postgres-data`）を使う。止めるときに `docker compose down -v` を使うと開発のデータが消える
+- `app` のヘルスチェックはログイン画面（`/login`）を見る（Actuator は入れていない）
+- 経緯（2026-10-19）：はじめは、本番でも compose を使う前提で、開発用の `compose.yaml` と本番用の `compose.prod.yaml` に分けていた（本番ではパスワードと API キーを必須にし、初期値の `secret` で動かないようにするため）。本番は Railway で `Dockerfile` だけを使い、compose はローカルでしか使わないと分かり、前提が変わったので 1 つのファイルにまとめた。本番で compose を使うことになったら、パスワードの初期値の扱いを見直す
+
 ## ディレクトリ構成
 
 ```
 tsumory/
-├── compose.yaml                  # 開発用コンテナ（db, adminer）
+├── compose.yaml                  # ローカル用コンテナ（db, adminer。deploy プロファイルで app も）。「compose の構成」
+├── .env.example                  # .env のひな形（値は書かない）
 ├── Dockerfile                    # 本番用のイメージ（「本番のコンテナ」）
 ├── .dockerignore
 ├── db/
