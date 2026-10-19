@@ -41,7 +41,7 @@ class DocReferenceTest {
     private record Heading(int level, String text) {}
 
     private static Path docOf(String name) {
-        return name.equals("CLAUDE") ? Path.of("CLAUDE.md") : Path.of("docs", name + ".md");
+        return "CLAUDE".equals(name) ? Path.of("CLAUDE.md") : Path.of("docs", name + ".md");
     }
 
     private static List<Heading> headingsOf(Path doc) throws IOException {
