@@ -13,26 +13,26 @@
 
 ## 数字
 
-| ツール | `5e6d65e`（解析した時点） | `f67b199`（指摘 1 の対応後） | `bfbb454`（指摘 5 の対応後） |
-|---|---|---|---|
-| `javac -Xlint:all` | 0 | 測っていない | 測っていない |
-| Error Prone（`UnicodeInCode` を除く） | 6 | 測っていない | 測っていない |
-| Error Prone の `UnicodeInCode` | 97（javac の警告の上限 100 件で切れた数。実際はもっと多い） | 測っていない | 測っていない |
-| SpotBugs | 15 | 11（`DiaryMonthSummary` の 4 件が消えた） | 5（`DiaryCalendarWeek`・`HighlightedText`・`SearchResult` の 6 件が消えた。残りはすべて「指摘にしなかったもの」） |
-| PMD（main） | 22 | 測っていない | 測っていない |
-| PMD（test） | 303（うち `MethodNamingConventions` が 302） | 測っていない | 測っていない |
-| `spotlessCheck` | 違反なし | 違反なし（`./gradlew build` で確認） | 違反なし（`./gradlew build` で確認） |
-| テストの件数 | 363（すべて成功） | 365（すべて成功。指摘 1 のテストを 2 件足した） | 371（すべて成功。指摘 5 のテストを 6 件足した） |
-| 呼び出し側で `List.copyOf` してから record に渡している場所 | 2（`DiaryListService#calendarWeeks`・`HighlightedText#of`） | 2 | 0（record のコンストラクタで写すので外した） |
+| ツール | `5e6d65e`（解析した時点） | `f67b199`（指摘 1 の対応後） | `bfbb454`（指摘 5 の対応後） | `0d6d241`（指摘 2〜4 の対応後） |
+|---|---|---|---|---|
+| `javac -Xlint:all` | 0 | 測っていない | 測っていない | 測っていない（同じ init スクリプトで流したが、Error Prone の警告に混ざって数えていない） |
+| Error Prone（`UnicodeInCode` を除く） | 6 | 測っていない | 測っていない | 5（`MissingSummary` の 1 件が消えた。残りはすべて「指摘にしなかったもの」） |
+| Error Prone の `UnicodeInCode` | 97（javac の警告の上限 100 件で切れた数。実際はもっと多い） | 測っていない | 測っていない | 測っていない（2 回目から外した） |
+| SpotBugs | 15 | 11（`DiaryMonthSummary` の 4 件が消えた） | 5（`DiaryCalendarWeek`・`HighlightedText`・`SearchResult` の 6 件が消えた。残りはすべて「指摘にしなかったもの」） | 5 |
+| PMD（main） | 22 | 測っていない | 測っていない | 19（`LambdaCanBeMethodReference` の 3 件が消えた。残りはすべて「指摘にしなかったもの」） |
+| PMD（test） | 303（うち `MethodNamingConventions` が 302） | 測っていない | 測っていない | 310（すべて `MethodNamingConventions`。`LiteralsFirstInComparisons` の 1 件が消え、日本語のテスト名が 8 件増えた） |
+| `spotlessCheck` | 違反なし | 違反なし（`./gradlew build` で確認） | 違反なし（`./gradlew build` で確認） | 違反なし（`./gradlew build` で確認） |
+| テストの件数 | 363（すべて成功） | 365（すべて成功。指摘 1 のテストを 2 件足した） | 371（すべて成功。指摘 5 のテストを 6 件足した） | 371（すべて成功） |
+| 呼び出し側で `List.copyOf` してから record に渡している場所 | 2（`DiaryListService#calendarWeeks`・`HighlightedText#of`） | 2 | 0（record のコンストラクタで写すので外した） | 0 |
 
 ## まとめ
 
 | # | 重要度 | 観点 | 指摘 | 場所 | 状態 |
 |---|---|---|---|---|---|
 | 1 | 中 | 可読性・保守性 | 日記一覧の週のリストを、書き換えられる `ArrayList` のまま controller に渡している | `DiaryListService#calendarWeeks`・`DiaryMonthSummary` | 対応済み |
-| 2 | 低 | 可読性・保守性 | `DiaryWriter#write` の JavaDoc に要約の 1 文がない | `DiaryWriter` | 未対応 |
-| 3 | 低 | 可読性・保守性 | メソッド参照で書けるラムダがある | `ClaudeService`・`PostCategoryClassifier` | 未対応 |
-| 4 | 低 | 可読性・保守性 | `name.equals("CLAUDE")` を、文字列の定数を先にした形で書いていない | `DocReferenceTest` | 未対応 |
+| 2 | 低 | 可読性・保守性 | `DiaryWriter#write` の JavaDoc に要約の 1 文がない | `DiaryWriter` | 対応済み |
+| 3 | 低 | 可読性・保守性 | メソッド参照で書けるラムダがある | `ClaudeService`・`PostCategoryClassifier` | 対応済み |
+| 4 | 低 | 可読性・保守性 | `name.equals("CLAUDE")` を、文字列の定数を先にした形で書いていない | `DocReferenceTest` | 対応済み |
 | 5 | 低 | 可読性・保守性 | リストを持つほかの record（`DiaryCalendarWeek`・`HighlightedText`・`SearchResult`）は、書き換えられないリストを渡すことを呼び出し側に任せている | `DiaryCalendarWeek`・`HighlightedText`・`SearchResult` | 対応済み |
 
 ## 可読性・保守性
@@ -49,7 +49,8 @@
 
 ### 2. `DiaryWriter#write` の JavaDoc に要約がない（低）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-19、コミット `6f8fa47`）：JavaDoc の先頭に「その日のつぶやきから、日記の本文を書く。」を足した。コメントだけの変更で、テストは 371 件のまま
 - 見つけたもの：Error Prone の `MissingSummary`
 - 場所：`DiaryWriter.java:11`
 - 何が起きるか：`@param`・`@return`・`@throws` だけで、メソッドが何をするかの 1 文がない。JavaDoc の一覧で説明が空になる
@@ -57,14 +58,16 @@
 
 ### 3. メソッド参照で書けるラムダ（低）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-19、コミット `33ce515`）：3 か所を `RefusalStopDetails::category`・`TextBlock::text` にした（`stopDetails()` の型は SDK の jar で確かめた）。リファクタリングのコミットで、テストは 371 件のまま変えずに通った
 - 見つけたもの：PMD の `LambdaCanBeMethodReference`
 - 場所：`ClaudeService.java:105`（`details -> details.category()`）、`ClaudeService.java:122`（`text -> text.text()`）、`PostCategoryClassifier.java:107`
 - 直し方の案：`StopDetails::category`・`TextBlock::text` のようにメソッド参照にする。振る舞いは変わらないので、リファクタリングのコミットにする
 
 ### 4. 文字列の定数を先にした比較（低）
 
-- 状態：未対応
+- 状態：対応済み
+  - ✓ 対応済み（2026-10-19、コミット `0d6d241`）：`"CLAUDE".equals(name)` にした。テストの整理（確かめる中身は変えない）のコミットで、テストは 371 件のまま
 - 見つけたもの：PMD の `LiteralsFirstInComparisons`
 - 場所：`DocReferenceTest.java:44`
 - 何が起きるか：`name` は文書の参照から取り出した値で `null` にならないので、今は問題がない。直す効果は小さい
