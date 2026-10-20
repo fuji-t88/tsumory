@@ -25,7 +25,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Slf4j
 @Component
 @Order(SecurityFilterProperties.DEFAULT_FILTER_ORDER - 1)
-public class BasicAuthFilter extends OncePerRequestFilter {
+public class GatewayAuthFilter extends OncePerRequestFilter {
 
     static final String CHALLENGE = "Basic realm=\"Tsumory\", charset=\"UTF-8\"";
     private static final String SCHEME = "Basic ";
@@ -39,7 +39,7 @@ public class BasicAuthFilter extends OncePerRequestFilter {
      *
      * @throws IllegalStateException 片方だけが設定されているとき、または空白だけの値が設定されているとき
      */
-    public BasicAuthFilter(
+    public GatewayAuthFilter(
             @Value("${BASIC_AUTH_USERNAME:}") String username, @Value("${BASIC_AUTH_PASSWORD:}") String password) {
         var hasUsername = !username.isEmpty();
         var hasPassword = !password.isEmpty();

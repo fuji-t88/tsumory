@@ -16,7 +16,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
-class BasicAuthFilterTest {
+class GatewayAuthFilterTest {
 
     private static final String USERNAME = "guest";
     private static final String PASSWORD = "open-sesame";
@@ -27,7 +27,7 @@ class BasicAuthFilterTest {
 
     @Test
     void 環境変数がなければ資格情報なしで通す() throws Exception {
-        var filter = new BasicAuthFilter("", "");
+        var filter = new GatewayAuthFilter("", "");
 
         filter.doFilter(new MockHttpServletRequest("GET", "/login"), response, chain);
 
@@ -37,7 +37,7 @@ class BasicAuthFilterTest {
 
     @Test
     void 有効なとき資格情報がなければ401と認証の求めを返して先に進まない() throws Exception {
-        var filter = new BasicAuthFilter(USERNAME, PASSWORD);
+        var filter = new GatewayAuthFilter(USERNAME, PASSWORD);
 
         filter.doFilter(new MockHttpServletRequest("GET", "/login"), response, chain);
 
@@ -49,7 +49,7 @@ class BasicAuthFilterTest {
 
     @Test
     void ログイン画面だけでなく静的リソースも守る() throws Exception {
-        var filter = new BasicAuthFilter(USERNAME, PASSWORD);
+        var filter = new GatewayAuthFilter(USERNAME, PASSWORD);
 
         filter.doFilter(new MockHttpServletRequest("GET", "/webjars/bootstrap/css/bootstrap.min.css"), response, chain);
 
@@ -59,7 +59,7 @@ class BasicAuthFilterTest {
 
     @Test
     void 正しいユーザー名とパスワードなら通す() throws Exception {
-        var filter = new BasicAuthFilter(USERNAME, PASSWORD);
+        var filter = new GatewayAuthFilter(USERNAME, PASSWORD);
 
         filter.doFilter(requestWith(basic(USERNAME + ":" + PASSWORD)), response, chain);
 
@@ -69,7 +69,7 @@ class BasicAuthFilterTest {
 
     @Test
     void 認証方式の名前は大文字と小文字を区別しない() throws Exception {
-        var filter = new BasicAuthFilter(USERNAME, PASSWORD);
+        var filter = new GatewayAuthFilter(USERNAME, PASSWORD);
 
         filter.doFilter(requestWith(basic(USERNAME + ":" + PASSWORD).replace("Basic", "basic")), response, chain);
 
@@ -80,7 +80,7 @@ class BasicAuthFilterTest {
     @ValueSource(
             strings = {"guest:wrong", "other:open-sesame", "guest:", ":open-sesame", "guest:open-sesame-", "guest"})
     void ユーザー名かパスワードが違えば401で先に進まない(String credentials) throws Exception {
-        var filter = new BasicAuthFilter(USERNAME, PASSWORD);
+        var filter = new GatewayAuthFilter(USERNAME, PASSWORD);
 
         filter.doFilter(requestWith(basic(credentials)), response, chain);
 
@@ -91,7 +91,7 @@ class BasicAuthFilterTest {
     @ParameterizedTest
     @ValueSource(strings = {"Bearer abc", "Basic", "Basic not-base64!!", "Basicguest:open-sesame"})
     void Basicでない認証方式やBase64として読めない値は401で先に進まない(String header) throws Exception {
-        var filter = new BasicAuthFilter(USERNAME, PASSWORD);
+        var filter = new GatewayAuthFilter(USERNAME, PASSWORD);
 
         filter.doFilter(requestWith(header), response, chain);
 
@@ -101,7 +101,7 @@ class BasicAuthFilterTest {
 
     @Test
     void コロンを含むパスワードと日本語のパスワードもUTF8で正しく比べる() throws Exception {
-        var filter = new BasicAuthFilter("ゲスト", "ひらけ:ごま");
+        var filter = new GatewayAuthFilter("ゲスト", "ひらけ:ごま");
 
         filter.doFilter(requestWith(basic("ゲスト:ひらけ:ごま")), response, chain);
 
@@ -110,10 +110,10 @@ class BasicAuthFilterTest {
 
     @Test
     void ユーザー名とパスワードの片方だけでは作れない() {
-        assertThatThrownBy(() -> new BasicAuthFilter(USERNAME, ""))
+        assertThatThrownBy(() -> new GatewayAuthFilter(USERNAME, ""))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageNotContaining(USERNAME);
-        assertThatThrownBy(() -> new BasicAuthFilter("", PASSWORD))
+        assertThatThrownBy(() -> new GatewayAuthFilter("", PASSWORD))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageNotContaining(PASSWORD);
     }
@@ -123,7 +123,7 @@ class BasicAuthFilterTest {
             delimiter = '|',
             value = {"'   '|open-sesame", "guest|'   '", "'   '|'   '", "'\t'|open-sesame"})
     void 空白だけのユーザー名かパスワードでは作れない(String username, String password) {
-        assertThatThrownBy(() -> new BasicAuthFilter(username, password))
+        assertThatThrownBy(() -> new GatewayAuthFilter(username, password))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageNotContaining(USERNAME)
                 .hasMessageNotContaining(PASSWORD);
@@ -131,7 +131,7 @@ class BasicAuthFilterTest {
 
     @Test
     void SpringSecurityのフィルターより前に動く() {
-        var order = BasicAuthFilter.class.getAnnotation(Order.class).value();
+        var order = GatewayAuthFilter.class.getAnnotation(Order.class).value();
 
         assertThat(order).isLessThan(SecurityFilterProperties.DEFAULT_FILTER_ORDER);
     }
