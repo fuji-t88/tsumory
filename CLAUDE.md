@@ -62,6 +62,7 @@
 - `./gradlew spotlessApply` — 整形
 - `docker build -t tsumory .` — 本番用のイメージを作る（「本番のコンテナ」）
 - `docker compose --profile deploy up --build` — アプリもコンテナで動かす（本番相当の構成を手元で確かめる。「compose の構成」）
+- 本番へのデプロイは手で行わない。`main` に push すると、GitHub Actions がテストを流し、通れば Railway にデプロイする（「CI/CD」）
 
 ## 本番のコンテナ
 
@@ -96,6 +97,20 @@
 - `app` のヘルスチェックはログイン画面（`/login`）を見る（Actuator は入れていない）
 - 経緯（2026-10-19）：はじめは、本番でも compose を使う前提で、開発用の `compose.yaml` と本番用の `compose.prod.yaml` に分けていた（本番ではパスワードと API キーを必須にし、初期値の `secret` で動かないようにするため）。本番は Railway で `Dockerfile` だけを使い、compose はローカルでしか使わないと分かり、前提が変わったので 1 つのファイルにまとめた。本番で compose を使うことになったら、パスワードの初期値の扱いを見直す
 
+### CI/CD
+
+- GitHub Actions の `.github/workflows/ci.yml`。`main` への push と pull request で `./gradlew build`（整形の確認とテスト）を流し、`main` への push でテストが通ったときだけ Railway にデプロイする
+  - ワークフローの `env` に `CI: true` を書き、整形は直さず `spotlessCheck` で落とす（「コーディング規約 > 全般」）。GitHub Actions も `CI=true` を設定するが、それに頼らず明示する。`CI` がないと `compileJava` の前に `spotlessApply` が走り、崩れた整形を黙って直してから確かめるので、関門にならない。この `env` を消さない。push する前に手元で `./gradlew build` を通す
+    - 2026-10-20 に、CI と同じ条件のクローンでわざと整形を崩して `CI=true ./gradlew build` を流し、`spotlessJavaCheck` で失敗し、ファイルが直されずに残ることを確かめた
+  - 失敗したときは、テストの結果（`build/reports/tests/test/`）を Actions の Artifacts に 7 日残す
+- テストは DB にも Claude API にもつながないので、CI には PostgreSQL も API キーも `.env` も置かない（2026-10-20 に、`.env` のないクローンで `CI=true ./gradlew build` が 394 件とも通ることを確かめた）。テストに DB（Testcontainers）や秘密情報が要るようになったら、ワークフローも直す
+- デプロイは Railway CLI の `railway up --ci`。ソースを Railway に送り、Railway が `Dockerfile` でビルドする（「本番のコンテナ」）。ビルドが失敗すれば、ジョブも失敗する
+  - CLI はバージョンを固定して `npx` で動かす。上げるときは、出てから 2 週間以上たったものにする
+  - トークンは GitHub の Environment `production` の Secret `RAILWAY_TOKEN`（Railway のプロジェクトトークン。production 環境に限る）。ワークフローやコードに書かない
+  - Railway のサービスは GitHub のリポジトリとつながない（Railway の自動デプロイを止める）。つないだままだと、テストの結果を待たずに Railway もデプロイし、1 回の push で 2 回デプロイされる
+  - デプロイは並べて順に流し、途中で止めない（`concurrency` の `cancel-in-progress: false`）
+  - ジョブが確かめるのはビルドまでで、アプリが起動したかは見ない（Basic 認証を有効にしたので、Railway のヘルスチェックを外している）。デプロイの後は公開 URL を開いて確かめる
+
 ## ディレクトリ構成
 
 ```
@@ -103,6 +118,7 @@ tsumory/
 ├── compose.yaml                  # ローカル用コンテナ（db, adminer。deploy プロファイルで app も）。「compose の構成」
 ├── .env.example                  # .env のひな形（値は書かない）
 ├── Dockerfile                    # 本番用のイメージ（「本番のコンテナ」）
+├── .github/workflows/ci.yml      # テストと Railway へのデプロイ（「CI/CD」）
 ├── .dockerignore
 ├── db/
 │   └── dev-seed.sql              # 動作確認用のテストデータ（手で流す。Flyway のマイグレーションではない）
