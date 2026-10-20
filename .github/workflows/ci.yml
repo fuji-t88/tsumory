@@ -1,0 +1,55 @@
+# テストと Railway へのデプロイ（CLAUDE.md の「CI/CD」）
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# GitHub Actions も CI=true を設定するが、spotlessCheck を関門にする前提なので明示する（CLAUDE.md の「CI/CD」）
+env:
+  CI: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v6
+      # Git に gradlew が実行権限なしで入っている（Dockerfile と同じ）
+      - run: chmod +x gradlew
+      # GitHub Actions は CI=true を設定するので、spotlessApply は走らず spotlessCheck で落ちる
+      - run: ./gradlew build
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: build/reports/tests/test/
+          retention-days: 7
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    # 前のデプロイが終わる前に次の push が来ても、並べて順に流す（途中で止めない）
+    concurrency:
+      group: railway-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      # ソースを Railway に送り、Railway が Dockerfile でビルドする。ビルドが失敗すればこのジョブも失敗する
+      - run: npx --yes @railway/cli@5.63.1 up --ci --service "$RAILWAY_SERVICE"
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE: tsumory
