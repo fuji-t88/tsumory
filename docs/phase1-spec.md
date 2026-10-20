@@ -460,7 +460,7 @@ erDiagram
 | パスワード | `BCryptPasswordEncoder` の Bean |
 | ユーザー取得 | `config/CustomUserDetailsService`（`UserDetailsService` を実装）が `users` から読む |
 | CSRF | 有効のまま（CLAUDE.md の禁止事項「CSRF」） |
-| 公開 URL の Basic 認証 | 環境変数 `BASIC_AUTH_USERNAME`・`BASIC_AUTH_PASSWORD` の両方があるときだけ有効（`config/BasicAuthFilter`）。下の「公開 URL の Basic 認証」 |
+| 公開 URL の Basic 認証 | 設定 `app.gateway.username`・`app.gateway.password`（環境変数では `APP_GATEWAY_USERNAME`・`APP_GATEWAY_PASSWORD`）の両方があるときだけ有効（`config/GatewayAuthFilter`）。下の「公開 URL の Basic 認証」 |
 
 - controller ではログイン中のユーザーを `@AuthenticationPrincipal` で受け、service に渡す
 
@@ -468,7 +468,7 @@ erDiagram
 
 本番の公開 URL を、アプリのログインより手前で Basic 認証で守る。知らない人がログイン画面にたどり着けないようにし、ログインのパスワードを総当たりで試されにくくする。
 
-- 有効にする条件：環境変数 `BASIC_AUTH_USERNAME` と `BASIC_AUTH_PASSWORD` の両方があるとき（本番）。どちらもなければ何もしない（開発・テスト）。片方だけなら、設定の誤りとして起動しない（片方を忘れて、守ったつもりで公開しないため）。空白だけの値も、設定の誤りとして起動しない（空白のパスワードで守ったつもりにならないため）
+- 有効にする条件：設定 `app.gateway.username` と `app.gateway.password` の両方があるとき（本番。環境変数 `APP_GATEWAY_USERNAME`・`APP_GATEWAY_PASSWORD` で渡す）。どちらもなければ何もしない（開発・テスト）。片方だけなら、設定の誤りとして起動しない（片方を忘れて、守ったつもりで公開しないため）。空白だけの値も、設定の誤りとして起動しない（空白のパスワードで守ったつもりにならないため）
 - 範囲：すべての URL。ログイン画面・静的リソースも含む（ログイン画面を見せないため）
 - アプリのログインとは別の関門。Basic 認証のユーザーは `users` とは関係なく、通ったあとに今までどおりフォームでログインする。そのため Spring Security の `httpBasic()` は使わず、Spring Security のフィルターより前で確かめる
 - 資格情報がない・違うとき：401 と `WWW-Authenticate: Basic realm="Tsumory", charset="UTF-8"` を返し、本文は「認証が必要です」だけ（エラー画面に回さない）
@@ -516,7 +516,7 @@ anthropic:
 
 - `Clock` の Bean（`Clock.system(ZoneId.of("Asia/Tokyo"))`）を `config/` で定義する
 - API キーの扱いは CLAUDE.md の「AI（Claude API）」に従う
-- 公開 URL の Basic 認証の資格情報（`BASIC_AUTH_USERNAME`・`BASIC_AUTH_PASSWORD`）は `application.yaml` に書かず、本番の環境変数で渡す（「7. セキュリティ > 公開 URL の Basic 認証」）
+- 公開 URL の Basic 認証の資格情報（`APP_GATEWAY_USERNAME`・`APP_GATEWAY_PASSWORD`）は `application.yaml` に書かず、本番の環境変数で渡す（「7. セキュリティ > 公開 URL の Basic 認証」）
 
 ## 10. テスト
 
