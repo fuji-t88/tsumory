@@ -99,7 +99,8 @@
 
 ### CI/CD
 
-- GitHub Actions の `.github/workflows/ci.yml`。`main` への push と pull request で `./gradlew build`（整形の確認とテスト）を流し、`main` への push でテストが通ったときだけ Railway にデプロイする
+- GitHub Actions の `.github/workflows/ci.yml`。`main` への push と pull request で、`./gradlew spotlessCheck`（整形の確認）、`./gradlew test` の順に別のステップで流し、`main` への push で両方が通ったときだけ Railway にデプロイする
+  - ステップを分けるのは、整形とテストのどちらで落ちたかを Actions の画面で見分けられるようにし、整形の確認が先に走ることをワークフローに書いておくため。jar は Railway が `Dockerfile` でビルドするので、CI では作らない（`build` は流さない）
   - ワークフローの `env` に `CI: true` を書き、整形は直さず `spotlessCheck` で落とす（「コーディング規約 > 全般」）。GitHub Actions も `CI=true` を設定するが、それに頼らず明示する。`CI` がないと `compileJava` の前に `spotlessApply` が走り、崩れた整形を黙って直してから確かめるので、関門にならない。この `env` を消さない。push する前に手元で `./gradlew build` を通す
     - 2026-10-20 に、CI と同じ条件のクローンでわざと整形を崩して `CI=true ./gradlew build` を流し、`spotlessJavaCheck` で失敗し、ファイルが直されずに残ることを確かめた
   - 失敗したときは、テストの結果（`build/reports/tests/test/`）を Actions の Artifacts に 7 日残す
