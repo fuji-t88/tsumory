@@ -75,7 +75,7 @@
 - 実行時に環境変数で渡すもの（イメージには入れない）
   - `ANTHROPIC_API_KEY`
   - `SPRING_DATASOURCE_URL`・`SPRING_DATASOURCE_USERNAME`・`SPRING_DATASOURCE_PASSWORD`（開発では Docker Compose 連携が自動で設定する値。`spring-boot-docker-compose` は jar に入らない）
-  - `BASIC_AUTH_USERNAME`・`BASIC_AUTH_PASSWORD`（公開 URL の Basic 認証。両方を渡したときだけ有効、片方だけなら起動しない。phase1-spec.md の「7. セキュリティ > 公開 URL の Basic 認証」）
+  - `APP_GATEWAY_USERNAME`・`APP_GATEWAY_PASSWORD`（設定 `app.gateway.username`・`app.gateway.password`。公開 URL の Basic 認証。両方を渡したときだけ有効、片方だけ・空白だけなら起動しない。phase1-spec.md の「7. セキュリティ > 公開 URL の Basic 認証」）
     - 開発の `.env` には書かない。`.env` はテストでも読まれるので、書くと controller のテストが 401 で落ちる
     - 有効にすると、ログイン画面も 401 になる。Railway の「Healthcheck Path」（`/login`）はデプロイの失敗になるので、Basic 認証を有効にするなら外す
 - SQL とバインドパラメータのログ（`application.yaml` の `org.hibernate.SQL`・`org.hibernate.orm.jdbc.bind`）は、イメージの環境変数で `INFO` にして出さない（禁止事項の「ログ」）。この 2 つの環境変数を外さない
@@ -146,7 +146,7 @@ tsumory/
   | `config` | 設定 | `SecurityConfig` |
   | `config` | `application.yaml` の設定値を受ける record（`@ConfigurationProperties` + `@Validated`） | `ClaudeProperties` |
   | `config` | リクエストごとにリクエスト ID とユーザー ID をログに付け、リクエストの結果を記録する（`OncePerRequestFilter`） | `RequestLoggingFilter` |
-  | `config` | 本番の公開 URL を、アプリのログインより手前で Basic 認証で守る（`OncePerRequestFilter`。環境変数があるときだけ有効） | `BasicAuthFilter` |
+  | `config` | 本番の公開 URL を、アプリのログインより手前で Basic 認証で守る（`OncePerRequestFilter`。環境変数があるときだけ有効） | `GatewayAuthFilter` |
   | `config` | ログイン中のユーザー（`UserDetails` を実装する record。`@AuthenticationPrincipal` で受け、`userId()` を service に渡す） | `CustomUserDetails` |
   | `config` | ログイン時に DB からユーザーを探し、`CustomUserDetails` に詰めて返す（`UserDetailsService` の実装） | `CustomUserDetailsService` |
 
