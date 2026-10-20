@@ -27,8 +27,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       # Git に gradlew が実行権限なしで入っている（Dockerfile と同じ）
       - run: chmod +x gradlew
-      # GitHub Actions は CI=true を設定するので、spotlessApply は走らず spotlessCheck で落ちる
-      - run: ./gradlew build
+      # 整形を先に確かめ、崩れていればテストを流さずに止める（CI=true なので spotlessApply は走らない）
+      - run: ./gradlew spotlessCheck
+      - run: ./gradlew test
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
