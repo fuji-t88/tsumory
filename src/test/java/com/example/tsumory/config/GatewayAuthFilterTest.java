@@ -12,6 +12,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.security.autoconfigure.web.servlet.SecurityFilterProperties;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -127,6 +128,20 @@ class GatewayAuthFilterTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageNotContaining(USERNAME)
                 .hasMessageNotContaining(PASSWORD);
+    }
+
+    @Test
+    void 設定appGatewayのユーザー名とパスワードがあれば有効になる() {
+        new ApplicationContextRunner()
+                .withPropertyValues("app.gateway.username=" + USERNAME, "app.gateway.password=" + PASSWORD)
+                .withUserConfiguration(GatewayAuthFilter.class)
+                .run(context -> {
+                    context.getBean(GatewayAuthFilter.class)
+                            .doFilter(new MockHttpServletRequest("GET", "/login"), response, chain);
+
+                    assertThat(passed).isFalse();
+                    assertThat(response.getStatus()).isEqualTo(401);
+                });
     }
 
     @Test

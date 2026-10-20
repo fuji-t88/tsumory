@@ -40,14 +40,14 @@ public class GatewayAuthFilter extends OncePerRequestFilter {
      * @throws IllegalStateException 片方だけが設定されているとき、または空白だけの値が設定されているとき
      */
     public GatewayAuthFilter(
-            @Value("${BASIC_AUTH_USERNAME:}") String username, @Value("${BASIC_AUTH_PASSWORD:}") String password) {
+            @Value("${app.gateway.username:}") String username, @Value("${app.gateway.password:}") String password) {
         var hasUsername = !username.isEmpty();
         var hasPassword = !password.isEmpty();
         if (hasUsername != hasPassword) {
-            throw new IllegalStateException("BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD must be set together");
+            throw new IllegalStateException("app.gateway.username and app.gateway.password must be set together");
         }
         if (hasUsername && (username.isBlank() || password.isBlank())) {
-            throw new IllegalStateException("BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD must not be blank");
+            throw new IllegalStateException("app.gateway.username and app.gateway.password must not be blank");
         }
         this.enabled = hasUsername;
         this.username = username.getBytes(UTF_8);
