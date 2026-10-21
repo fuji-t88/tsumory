@@ -27,7 +27,8 @@ public class ClockConfig {
                 yield new DatabaseClock(
                         () -> jdbc.queryForObject("SELECT clock_timestamp()", OffsetDateTime.class)
                                 .toInstant(),
-                        Clock.system(ZONE));
+                        System::nanoTime,
+                        ZONE);
             }
             default -> throw new IllegalStateException("app.clock.source must be system or database");
         };

@@ -3,12 +3,12 @@ package com.example.tsumory.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -18,66 +18,72 @@ class DatabaseClockTest {
     private static final Instant T = Instant.parse("2026-05-26T14:59:58Z");
     private static final ZoneId JST = ZoneId.of("Asia/Tokyo");
 
-    private final MutableClock system = new MutableClock(T, JST);
+    private final Nanos nanos = new Nanos();
 
     @Test
-    void システム時刻にDBの時刻との差を足して返す() {
-        var clock = new DatabaseClock(() -> T.plusSeconds(5), system);
+    void DBの時刻を起点に経過時間を足して返す() {
+        var clock = new DatabaseClock(() -> T.plusSeconds(5), nanos, JST);
 
         assertThat(clock.instant()).isEqualTo(T.plusSeconds(5));
 
-        system.advance(Duration.ofSeconds(10));
+        nanos.advance(Duration.ofSeconds(10));
         assertThat(clock.instant()).isEqualTo(T.plusSeconds(15));
     }
 
     @Test
-    void システム時刻が進んでいればDBの時刻まで戻す() {
-        var clock = new DatabaseClock(() -> T.minusSeconds(30), system);
+    void 経過時間は単調な時計だけで測りOSの時計には左右されない() {
+        // OS の時計（壁時計）が NTP の補正などで飛んでも、nanoTime が進んだ分だけ進む
+        var clock = new DatabaseClock(() -> T, nanos, JST);
 
-        assertThat(clock.instant()).isEqualTo(T.minusSeconds(30));
+        nanos.advance(Duration.ofMillis(1500));
+
+        assertThat(clock.instant()).isEqualTo(T.plusMillis(1500));
     }
 
     @Test
     void 問い合わせの往復の時間の半分を見込む() {
-        // 問い合わせに 2 秒かかり、DB はその真ん中（1 秒後）に T+31 秒と答えた。差は 30 秒
+        // 問い合わせに 2 秒かかり、DB はその真ん中（1 秒後）に T と答えた。答えを受け取った時点では T+1 秒
         var clock = new DatabaseClock(
                 () -> {
-                    system.advance(Duration.ofSeconds(2));
-                    return T.plusSeconds(31);
+                    nanos.advance(Duration.ofSeconds(2));
+                    return T;
                 },
-                system);
+                nanos,
+                JST);
 
-        assertThat(clock.instant()).isEqualTo(T.plusSeconds(2).plusSeconds(30));
+        assertThat(clock.instant()).isEqualTo(T.plusSeconds(1));
     }
 
     @Test
     void 日付の変わり目でもインスタンスのシステム時刻によらずDBの時刻の日付になる() {
-        // システム時刻は 5 月 26 日 23:59:58（JST）、DB は 5 月 27 日 00:00:03（JST）
-        var clock = new DatabaseClock(() -> T.plusSeconds(5), system);
+        // インスタンスの時計は 5 月 26 日 23:59:58（JST）でも、DB が 5 月 27 日 00:00:03（JST）ならその日付
+        var clock = new DatabaseClock(() -> T.plusSeconds(5), nanos, JST);
 
         assertThat(LocalDate.now(clock)).hasToString("2026-05-27");
     }
 
     @Test
-    void 測り直すと新しい差を使う() {
-        var answer = new Answer(T.plusSeconds(5));
-        var clock = new DatabaseClock(answer, system);
+    void 測り直すと新しいDBの時刻を起点にする() {
+        var answer = new Answer(T);
+        var clock = new DatabaseClock(answer, nanos, JST);
 
-        answer.set(T.plusSeconds(20));
+        nanos.advance(Duration.ofSeconds(60));
+        answer.set(T.plusSeconds(75));
         clock.sync();
 
-        assertThat(clock.instant()).isEqualTo(T.plusSeconds(20));
+        assertThat(clock.instant()).isEqualTo(T.plusSeconds(75));
     }
 
     @Test
-    void 測り直しに失敗したら前の差を使い続ける() {
-        var answer = new Answer(T.plusSeconds(5));
-        var clock = new DatabaseClock(answer, system);
+    void 測り直しに失敗したら前に測った時刻を起点に進め続ける() {
+        var answer = new Answer(T);
+        var clock = new DatabaseClock(answer, nanos, JST);
 
+        nanos.advance(Duration.ofSeconds(60));
         answer.fail();
         clock.sync();
 
-        assertThat(clock.instant()).isEqualTo(T.plusSeconds(5));
+        assertThat(clock.instant()).isEqualTo(T.plusSeconds(60));
     }
 
     @Test
@@ -85,21 +91,21 @@ class DatabaseClockTest {
         var answer = new Answer(T);
         answer.fail();
 
-        assertThatThrownBy(() -> new DatabaseClock(answer, system))
+        assertThatThrownBy(() -> new DatabaseClock(answer, nanos, JST))
                 .isInstanceOf(DataAccessResourceFailureException.class);
     }
 
     @Test
-    void タイムゾーンはシステム時刻の時計のものを使う() {
-        var clock = new DatabaseClock(() -> T, system);
+    void 渡したタイムゾーンを使う() {
+        var clock = new DatabaseClock(() -> T, nanos, JST);
 
         assertThat(clock.getZone()).isEqualTo(JST);
     }
 
     @Test
-    void タイムゾーンを変えても同じ差を使い測り直しも反映される() {
-        var answer = new Answer(T.plusSeconds(5));
-        var clock = new DatabaseClock(answer, system);
+    void タイムゾーンを変えても同じ時刻を返し測り直しも反映される() {
+        var answer = new Answer(T);
+        var clock = new DatabaseClock(answer, nanos, JST);
         var utc = clock.withZone(ZoneOffset.UTC);
 
         answer.set(T.plusSeconds(20));
@@ -109,34 +115,18 @@ class DatabaseClockTest {
         assertThat(utc.instant()).isEqualTo(T.plusSeconds(20));
     }
 
-    /** 進め方をテストで決められるシステム時刻 */
-    private static final class MutableClock extends Clock {
+    /** 進め方をテストで決められる単調な時計（System.nanoTime の代わり） */
+    private static final class Nanos implements LongSupplier {
 
-        private Instant now;
-        private final ZoneId zone;
-
-        MutableClock(Instant now, ZoneId zone) {
-            this.now = now;
-            this.zone = zone;
-        }
+        private long now = 123_456_789L;
 
         void advance(Duration duration) {
-            now = now.plus(duration);
+            now += duration.toNanos();
         }
 
         @Override
-        public Instant instant() {
+        public long getAsLong() {
             return now;
-        }
-
-        @Override
-        public ZoneId getZone() {
-            return zone;
-        }
-
-        @Override
-        public Clock withZone(ZoneId zone) {
-            return new MutableClock(now, zone);
         }
     }
 
