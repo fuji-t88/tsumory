@@ -80,6 +80,7 @@
     - 開発の `.env` には書かない。`.env` はテストでも読まれるので、書くと controller のテストが 401 で落ちる
     - 有効にすると、ログイン画面も 401 になる。Railway の「Healthcheck Path」（`/login`）はデプロイの失敗になるので、Basic 認証を有効にするなら外す
 - SQL とバインドパラメータのログ（`application.yaml` の `org.hibernate.SQL`・`org.hibernate.orm.jdbc.bind`）は、イメージの環境変数で `INFO` にして出さない（禁止事項の「ログ」）。この 2 つの環境変数を外さない
+- 「今」の基準は、イメージの環境変数 `APP_CLOCK_SOURCE=database` で DB の時刻にする（複数のインスタンスで時計をそろえるため。phase1-spec.md の「5. 処理の詳細 > 現在時刻の基準（本番は DB の時刻）」）。この環境変数を外さない。`deploy` プロファイルの `app` も同じイメージなので DB の時刻になる
 - コンテナは非 root のユーザー `app` で動かす。タイムゾーンは `TZ=Asia/Tokyo`（ログの時刻を日本時間にする。「今日」は `Clock` が決めるので、これには左右されない）
 
 ### compose の構成
@@ -164,6 +165,7 @@ tsumory/
   | `config` | `application.yaml` の設定値を受ける record（`@ConfigurationProperties` + `@Validated`） | `ClaudeProperties` |
   | `config` | リクエストごとにリクエスト ID とユーザー ID をログに付け、リクエストの結果を記録する（`OncePerRequestFilter`） | `RequestLoggingFilter` |
   | `config` | 本番の公開 URL を、アプリのログインより手前で Basic 認証で守る（`OncePerRequestFilter`。環境変数があるときだけ有効） | `GatewayAuthFilter` |
+  | `config` | 本番の「今」を DB の時刻に合わせる時計（`Clock` の実装。`ClockConfig` が設定で切り替える） | `DatabaseClock` |
   | `config` | ログイン中のユーザー（`UserDetails` を実装する record。`@AuthenticationPrincipal` で受け、`userId()` を service に渡す） | `CustomUserDetails` |
   | `config` | ログイン時に DB からユーザーを探し、`CustomUserDetails` に詰めて返す（`UserDetailsService` の実装） | `CustomUserDetailsService` |
 
@@ -219,6 +221,7 @@ tsumory/
 - 現在時刻は、注入した `Clock`（`config/ClockConfig` の Bean。`Asia/Tokyo`）から取得する。`Instant.now()`・`LocalDate.now()`・`LocalDateTime.now()` などを引数なしで直接呼ばない（`clock.instant()`、`LocalDate.now(clock)` と書く）
 - エンティティのように Bean でないオブジェクトには `Clock` を注入しない。サービス層で求めた `Instant` を引数で渡す（例: `new Post(user, content, clock.instant())`、`post.edit(content, clock.instant())`）
 - 理由：テストで `Clock.fixed(...)` を渡せば時刻を固定でき、結果が毎回同じになる。タイムゾーンの基準も `Clock` の 1 か所にまとまり、本番用の `Clock` に差し替えるときもコードを変えずに済む
+- 本番は、同じ `Clock` の Bean を DB の時刻に合わせた時計（`config/DatabaseClock`）に差し替えている（設定 `app.clock.source`。phase1-spec.md の「5. 処理の詳細 > 現在時刻の基準（本番は DB の時刻）」）。service・controller は差し替えを知らないので、時刻を使うコードは今までどおり `Clock` から取る。DB に直接 `now()` を問い合わせて「今」を決める処理を、service や repository に書かない（基準が 2 つになる）
 - エンティティの決まりのために `Clock`（や「今日」）を引数で渡したくなったら、まずその決まりが業務ルールでないかを考え、service に置けないかを検討する（「入力の検証（多層防御）」の制約の置き場所）。業務ルールなら service で守れば、この原則とも衝突しない
 
 ### Spring・Lombok
