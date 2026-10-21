@@ -80,7 +80,7 @@
     - 開発の `.env` には書かない。`.env` はテストでも読まれるので、書くと controller のテストが 401 で落ちる
     - 有効にすると、ログイン画面も 401 になる。Railway の「Healthcheck Path」（`/login`）はデプロイの失敗になるので、Basic 認証を有効にするなら外す
 - SQL とバインドパラメータのログ（`application.yaml` の `org.hibernate.SQL`・`org.hibernate.orm.jdbc.bind`）は、イメージの環境変数で `INFO` にして出さない（禁止事項の「ログ」）。この 2 つの環境変数を外さない
-- 「今」の基準は、イメージの環境変数 `APP_CLOCK_SOURCE=database` で DB の時刻にする（複数のインスタンスで時計をそろえるため。phase1-spec.md の「5. 処理の詳細 > 現在時刻の基準（本番は DB の時刻）」）。この環境変数を外さない。`deploy` プロファイルの `app` も同じイメージなので DB の時刻になる
+- 「今」の基準は、イメージの環境変数 `APP_CLOCK_SOURCE=database` で DB の時刻にする（複数のインスタンスで時計をそろえるため。phase1-spec.md の「5. 処理の詳細 > 現在時刻の基準（本番は DB の時刻）」）。この環境変数を外さない。`deploy` プロファイルの `app` は、`compose.yaml` で `APP_CLOCK_SOURCE: system` に戻す（DB の時刻は本番だけ。「compose の構成」）
 - コンテナは非 root のユーザー `app` で動かす。タイムゾーンは `TZ=Asia/Tokyo`（ログの時刻を日本時間にする。「今日」は `Clock` が決めるので、これには左右されない）
 
 ### compose の構成
@@ -96,6 +96,7 @@
 - `db`・`adminer`・`app` のポートは `127.0.0.1` にだけ公開する（初期値のパスワードの DB を、同じネットワークのほかの端末に見せない）
 - `deploy` プロファイルのアプリも、開発と同じボリューム（`postgres-data`）を使う。止めるときに `docker compose down -v` を使うと開発のデータが消える
 - `app` のヘルスチェックはログイン画面（`/login`）を見る（Actuator は入れていない）
+- `app` の `APP_CLOCK_SOURCE` は `system` にする（イメージの既定は本番用の `database`）。DB の時刻に合わせた時計は本番だけで使う（phase1-spec.md の「5. 処理の詳細 > 現在時刻の基準（本番は DB の時刻）」）
 - 経緯（2026-10-19）：はじめは、本番でも compose を使う前提で、開発用の `compose.yaml` と本番用の `compose.prod.yaml` に分けていた（本番ではパスワードと API キーを必須にし、初期値の `secret` で動かないようにするため）。本番は Railway で `Dockerfile` だけを使い、compose はローカルでしか使わないと分かり、前提が変わったので 1 つのファイルにまとめた。本番で compose を使うことになったら、パスワードの初期値の扱いを見直す
 
 ### CI/CD
