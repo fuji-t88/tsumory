@@ -50,6 +50,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-secret}
       # シークレットなので初期値を持たせない
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      # イメージは本番用に DB の時刻を使う（Dockerfile）。手元ではシステム時刻に戻す（phase1-spec.md の「5. 処理の詳細 > 現在時刻の基準（本番は DB の時刻）」）
+      APP_CLOCK_SOURCE: system
     depends_on:
       db:
         condition: service_healthy
