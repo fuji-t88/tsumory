@@ -43,7 +43,9 @@ ENV JAVA_HOME=/opt/java \
     # application.yaml は開発用に SQL とバインドパラメータ（つぶやき・日記の本文を含む）をログに出す。
     # 本番では出さない（CLAUDE.md の禁止事項「ログ」）
     LOGGING_LEVEL_ORG_HIBERNATE_SQL=INFO \
-    LOGGING_LEVEL_ORG_HIBERNATE_ORM_JDBC_BIND=INFO
+    LOGGING_LEVEL_ORG_HIBERNATE_ORM_JDBC_BIND=INFO \
+    # 複数のインスタンスで時計をそろえるため、「今」は DB の時刻に合わせる（phase1-spec.md の「5. 処理の詳細 > 現在時刻の基準（本番は DB の時刻）」）
+    APP_CLOCK_SOURCE=database
 
 RUN addgroup -S app && adduser -S -G app -H app
 WORKDIR /app
