@@ -9,8 +9,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor;
 
@@ -57,11 +59,42 @@ class ClockConfigTest {
                         .hasMessage("app.clock.source must be system or database"));
     }
 
+    @Test
+    void databaseでDBの時刻を測れなければ起動しない() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(ClockConfig.class)
+                .withBean(JdbcTemplate.class, ClockConfigTest::jdbcTemplateUnreachable)
+                .withPropertyValues("app.clock.source=database")
+                .run(context -> assertThat(context)
+                        .getFailure()
+                        .rootCause()
+                        .isInstanceOf(CannotGetJdbcConnectionException.class));
+    }
+
+    @Test
+    void 閉じると定期の測り直しを止める() {
+        var postProcessor = new AtomicReference<ScheduledAnnotationBeanPostProcessor>();
+
+        runner.withPropertyValues("app.clock.source=database").run(context -> {
+            postProcessor.set(context.getBean(ScheduledAnnotationBeanPostProcessor.class));
+            assertThat(postProcessor.get().getScheduledTasks()).hasSize(1);
+        });
+
+        assertThat(postProcessor.get().getScheduledTasks()).isEmpty();
+    }
+
     // DB の時刻がシステム時刻より 3 時間進んでいる（ずれが測られていることを、テストの実行時刻によらず見分けるため）
     private static JdbcTemplate jdbcTemplateAhead() {
         var jdbc = mock(JdbcTemplate.class);
         when(jdbc.queryForObject(eq("SELECT clock_timestamp()"), eq(OffsetDateTime.class)))
                 .thenAnswer(invocation -> OffsetDateTime.now(Clock.systemUTC()).plus(DB_AHEAD));
+        return jdbc;
+    }
+
+    private static JdbcTemplate jdbcTemplateUnreachable() {
+        var jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForObject(eq("SELECT clock_timestamp()"), eq(OffsetDateTime.class)))
+                .thenThrow(new CannotGetJdbcConnectionException("connection refused"));
         return jdbc;
     }
 }
