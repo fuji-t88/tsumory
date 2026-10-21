@@ -334,6 +334,8 @@ erDiagram
 - 設定 `app.clock.source`（環境変数 `APP_CLOCK_SOURCE`）
   - `system`（既定。開発・テスト）：そのインスタンスのシステム時刻（`Clock.system(ZoneId.of("Asia/Tokyo"))`）
   - `database`（本番）：DB の時刻に合わせた時計（`config/DatabaseClock`）。本番のイメージ（`Dockerfile`）の環境変数で設定する
+  - 本番以外（`bootRun`・テスト・Docker Compose）はシステム時刻。`compose.yaml` の `deploy` プロファイルの `app` は本番と同じイメージを使うので、`compose.yaml` で `system` に戻す
+    - 経緯（2026-10-21）：はじめは、`deploy` プロファイルを本番相当の確かめに使うので、イメージのまま DB の時刻にしていた。レビューの観点（DB 版は本番だけで、Docker Compose を含むそれ以外はシステム時刻）に揃えて、`system` に戻した。手元で DB の時刻を確かめたいときは、`docker compose --profile deploy run -e APP_CLOCK_SOURCE=database app` のように、そのときだけ上書きする
   - それ以外の値は、設定の誤りとして起動しない（綴りの誤りで、黙ってシステム時刻に戻らないため）
 - `DatabaseClock` は、`now()` を呼ぶたびに DB に問い合わせない。DB の時刻（`clock_timestamp()`）とシステム時刻の差を 1 分ごとに測り、システム時刻にその差を足して返す
   - 理由：時刻はリクエストのたびに何度も読む。毎回 DB に問い合わせると、そのたびに接続を借り、外部 API を待つ間（トランザクションを張らないメソッド）にも DB に触れることになる。システム時刻が 1 分で狂う量（ミリ秒より小さい）は、合わせたいずれ（秒単位）よりずっと小さい
