@@ -72,3 +72,9 @@ if (System.getenv("CI") == null) {
         dependsOn(tasks.named("spotlessApply"))
     }
 }
+
+dependencyCheck {
+    nvd {
+        apiKey = System.getenv("NVD_API_KEY")
+    }
+}
