@@ -91,7 +91,7 @@
                         </div>
                         <div class="mb-2">
                             <label for="category" class="visually-hidden">カテゴリ</label>
-                            <select th:field="*{category}" class="form-select form-select-sm w-auto"
+                            <select id="category" th:field="*{category}" class="form-select form-select-sm w-auto"
                                     th:classappend="${#fields.hasErrors('category')} ? 'is-invalid'">
                                 <option th:each="c : ${categories}" th:value="${c.name()}" th:text="${c.displayName}">
                                     プライベート
