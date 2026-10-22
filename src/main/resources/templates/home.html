@@ -61,8 +61,8 @@
                             <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
                                 <span th:replace="~{fragments/category-badge :: badge(${post.category})}"></span>
                                 <form th:action="@{/posts/{id}/category(id=${post.id})}" method="post" class="d-inline">
-                                    <label th:for="|category-${post.id}|" class="visually-hidden">カテゴリ</label>
-                                    <select th:id="|category-${post.id}|" name="category"
+                                    <label for="post-category" th:for="|category-${post.id}|" class="visually-hidden">カテゴリ</label>
+                                    <select id="post-category" th:id="|category-${post.id}|" name="category"
                                             class="form-select form-select-sm d-inline-block w-auto py-0 js-auto-submit">
                                         <option th:each="c : ${categories}" th:value="${c.name()}"
                                                 th:text="${c.displayName}" th:selected="${c == post.category}">

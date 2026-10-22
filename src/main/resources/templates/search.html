@@ -31,9 +31,9 @@
                        th:checked="${selectedCategory == null}">
                 <label class="btn btn-outline-secondary btn-sm rounded-pill" for="category-all">すべて</label>
                 <th:block th:each="c : ${categories}">
-                    <input type="radio" class="btn-check" name="category" th:id="|category-${c.name()}|"
+                    <input type="radio" class="btn-check" name="category" id="category-option" th:id="|category-${c.name()}|"
                            th:value="${c.name()}" th:checked="${c == selectedCategory}">
-                    <label class="btn btn-outline-secondary btn-sm rounded-pill" th:for="|category-${c.name()}|"
+                    <label class="btn btn-outline-secondary btn-sm rounded-pill" for="category-option" th:for="|category-${c.name()}|"
                            th:text="${c.displayName}">仕事</label>
                 </th:block>
             </div>
