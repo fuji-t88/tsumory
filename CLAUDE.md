@@ -127,6 +127,17 @@
   - `build.gradle.kts` の `spotless` の中の palantir-java-format・ktlint の版
 - Dependabot の PR も、ほかの PR と同じく CI（`spotlessCheck`・`test`）が通ってからマージする。マージすると `main` への push になり、デプロイが走る
 
+#### Snyk
+
+- 2 つの入り口で使う
+  - Snyk の GitHub 連携（snyk.io でリポジトリを取り込む）：依存・`Dockerfile`・コードを調べ、Snyk の画面に出す。PR にチェックを付ける
+  - `.github/workflows/snyk.yml`：`main` への push と pull request で `snyk test` を流し、本番の jar に入る依存（`runtimeClasspath`）に high 以上の脆弱性があれば落とす
+- `snyk.yml` は `ci.yml` と分ける。新しく見つかった脆弱性だけで、デプロイを止めないため。落ちたら、直してからマージする
+- 脆弱性を直す PR は Dependabot（security updates）に任せ、Snyk の GitHub 連携の Fix PR は切る（同じ脆弱性に PR が 2 本来ないように）
+- トークンは GitHub の Secret `SNYK_TOKEN`（Snyk の API トークン）。ワークフローやコードに書かない
+  - Dependabot の PR は Actions の Secret を読めないので、`snyk.yml` を流さない（`if: github.actor != 'dependabot[bot]'`）。GitHub 連携の PR チェックで見る
+- CLI はバージョンを固定して `npx` で動かす（Dependabot は見ない）。上げるときは、出てから 2 週間以上たったものにする
+
 ## ディレクトリ構成
 
 ```
@@ -136,6 +147,7 @@ tsumory/
 ├── Dockerfile                    # 本番用のイメージ（「本番のコンテナ」）
 ├── .github/workflows/ci.yml      # テストと Railway へのデプロイ（「CI/CD」）
 ├── .github/dependabot.yml        # 依存のバージョンアップの PR（「CI/CD > Dependabot」）
+├── .github/workflows/snyk.yml    # 依存の脆弱性の検査（「CI/CD > Snyk」）
 ├── .dockerignore
 ├── db/
 │   └── dev-seed.sql              # 動作確認用のテストデータ（手で流す。Flyway のマイグレーションではない）
