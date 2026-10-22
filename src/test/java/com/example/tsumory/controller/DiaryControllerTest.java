@@ -320,6 +320,32 @@ class DiaryControllerTest {
     }
 
     @Test
+    void 日記があれば本文の枠に日記ありの印を付けて1つだけ出す() throws Exception {
+        // diary-generate.js が id で枠を探し、data-has-diary で日記の有無を見る
+        when(diaryService.findByDate(USER_ID, TODAY))
+                .thenReturn(Optional.of(new Diary(user, TODAY, "寝坊した一日。", Instant.parse("2026-10-07T12:30:00Z"))));
+
+        var html = mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html).containsOnlyOnce("id=\"diary-content\"").contains("data-has-diary=\"true\"");
+    }
+
+    @Test
+    void 日記がなければ本文の枠に日記ありの印を付けずに1つだけ出す() throws Exception {
+        stubPosts(TODAY, 1);
+
+        var html = mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html).containsOnlyOnce("id=\"diary-content\"").doesNotContain("data-has-diary");
+    }
+
+    @Test
     void 生成中のローディング表示と二重押下防止のスクリプトを読み込む() throws Exception {
         stubPosts(TODAY, 1);
 
