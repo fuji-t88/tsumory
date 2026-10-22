@@ -189,6 +189,19 @@ class SearchControllerTest {
     }
 
     @Test
+    void カテゴリの選択肢はそれぞれのidでラベルと結び付ける() throws Exception {
+        when(searchService.search(USER_ID, "", PostCategory.WORK))
+                .thenReturn(new SearchResult(List.of(), false, false));
+
+        var html = html("/search?category=WORK");
+
+        assertThat(html)
+                .containsOnlyOnce("id=\"category-WORK\"")
+                .containsPattern("<label [^>]*for=\"category-WORK\"[^>]*>仕事</label>")
+                .doesNotContain("category-option");
+    }
+
+    @Test
     void キーワードとカテゴリの要約は中黒でつなぐ() throws Exception {
         when(searchService.search(USER_ID, "カレー", PostCategory.PRIVATE))
                 .thenReturn(new SearchResult(List.of(), false, false));
