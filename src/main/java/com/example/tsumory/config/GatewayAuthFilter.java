@@ -90,12 +90,13 @@ public class GatewayAuthFilter extends OncePerRequestFilter {
         if (colon < 0) {
             return false;
         }
-        // 短絡させず両方を比べる（どちらが違ったかを処理時間から推測されないように）
+        // 両方を比べてから結果を合わせる（どちらが違ったかを処理時間から推測されないように）。
+        // 比べる処理を return の式の中に移すと、&& が短絡してパスワードを比べなくなる
         var usernameMatches =
                 MessageDigest.isEqual(username, credentials.substring(0, colon).getBytes(UTF_8));
         var passwordMatches =
                 MessageDigest.isEqual(password, credentials.substring(colon + 1).getBytes(UTF_8));
-        return usernameMatches & passwordMatches;
+        return usernameMatches && passwordMatches;
     }
 
     private static void challenge(HttpServletResponse response) throws IOException {
