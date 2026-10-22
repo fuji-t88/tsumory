@@ -107,6 +107,10 @@ tasks.jacocoTestReport {
 sonar {
     properties {
         property("sonar.host.url", "https://sonarcloud.io")
+        // 既定では Java とビルドの設定しか解析しない。テンプレート・SQL・JS・CSS も解析する（.gitignore のファイルは入らない）
+        property("sonar.gradle.scanAll", true)
+        // .gitignore にもあるが、API キーを書くファイルなので重ねて外す
+        property("sonar.exclusions", "**/.env")
         property("sonar.organization", "fuji-t88")
         // 公開の識別子で、秘密情報ではない。名前の「Key」で Gitleaks が API キーと誤検知する
         property("sonar.projectKey", "fuji-t88_tsumory") // gitleaks:allow
