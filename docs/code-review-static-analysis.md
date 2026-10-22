@@ -115,14 +115,14 @@
 
 ### 数字
 
-| 項目 | `8ff67b4`（解析した時点） | `1d3b25b`（指摘 S1 の対応後） | `41e6118`（解析の対象を広げた後） | `c4495ad`（指摘 S2 の対応後） |
-|---|---|---|---|---|
-| 解析したファイル（Java 以外） | 9 | 9 | 30 | 測っていない |
-| 指摘の数 | 10（脆弱性 8・バグ 1・コードの臭い 1） | 5（`githubactions:S7637` の 5 件が消えた。残りはすべて「指摘にしなかったもの」。`21dcd15` の解析で測った） | 17（テンプレート・SQL の 12 件が戻った） | 測っていない（push 後の解析で確かめる。見込みは 15） |
-| 品質ゲート | ERROR（新しいコードのセキュリティ評価が B。基準は A） | ERROR（同じ。残る脆弱性の 3 件（`S6505`・`S6474`・`S8569`）を画面で Accept にするまで変わらない） | ERROR（同じ） | 測っていない |
-| カバレッジ | 88.4% | 88.4% | 88.4% | 測っていない |
-| 重複 | 0.0% | 0.0% | 0.0% | 測っていない |
-| テストの件数 | 408（すべて成功） | 408（すべて成功） | 408（すべて成功） | 409（すべて成功。S2 のテストを 1 件足した） |
+| 項目 | `8ff67b4`（解析した時点） | `1d3b25b`（指摘 S1 の対応後） | `41e6118`（解析の対象を広げた後） | `c4495ad`（指摘 S2 の対応後） | `9d04f90` と除外の設定（指摘 S3・S4 の対応後） |
+|---|---|---|---|---|---|
+| 解析したファイル（Java 以外） | 9 | 9 | 30 | 測っていない | 測っていない |
+| 指摘の数 | 10（脆弱性 8・バグ 1・コードの臭い 1） | 5（`githubactions:S7637` の 5 件が消えた。残りはすべて「指摘にしなかったもの」。`21dcd15` の解析で測った） | 17（テンプレート・SQL の 12 件が戻った） | 測っていない（push 後の解析で確かめる。見込みは 15） | 測っていない（push 後の解析で確かめる。見込みは 0） |
+| 品質ゲート | ERROR（新しいコードのセキュリティ評価が B。基準は A） | ERROR（同じ。残る脆弱性の 3 件（`S6505`・`S6474`・`S8569`）を画面で Accept にするまで変わらない） | ERROR（同じ） | 測っていない | 測っていない（見込みは OK） |
+| カバレッジ | 88.4% | 88.4% | 88.4% | 測っていない | 測っていない |
+| 重複 | 0.0% | 0.0% | 0.0% | 測っていない | 測っていない |
+| テストの件数 | 408（すべて成功） | 408（すべて成功） | 408（すべて成功） | 409（すべて成功。S2 のテストを 1 件足した） | 412（すべて成功。S3 の前にテストを 3 件足した） |
 
 ### まとめ
 
@@ -130,6 +130,8 @@
 |---|---|---|---|---|---|
 | S1 | 中 | セキュリティ | GitHub 以外が作った Actions を、タグ（`@v6`・`@v2`・`@main`）で参照している（`githubactions:S7637`。5 件） | `ci.yml`・`gitleaks.yml`・`trufflehog.yml`・`osv-scanner.yml`・`sonar.yml` | 対応済み |
 | S2 | 中 | 可読性・保守性（アクセシビリティ） | つぶやきを書く欄と直す欄にラベルがなく、編集中は 2 つとも `id="content"` になる（`Web:InputWithoutLabelCheck`。2 件） | `home.html` | 対応済み |
+| S3 | 低 | 可読性・保守性 | 振る舞いは正しいが、解析に誤りと読まれる書き方（`java:S2178`・`javabugs:S2259`・`Web:InputWithoutLabelCheck` 5 件・`Web:S7930`。8 件） | `GatewayAuthFilter`・`PostCategoryClassifier`・`home.html`・`search.html`・`diary.html` | 対応済み |
+| S4 | 低 | 可読性・保守性 | 直さないと決めた指摘を、画面の操作でしか記録できない（7 件） | `build.gradle.kts` | 対応済み |
 
 ### S1. Actions をタグで参照している（中）✓ 対応済み
 
@@ -142,21 +144,37 @@
 - 指摘：`home.html` の、つぶやきを書く欄（投稿のフォーム）と直す欄（編集のフォーム）の `textarea` に、`<label>` も `aria-label` もない。スクリーンリーダーでは何の欄か伝わらない。SonarQube Cloud が指摘したのはラベルだけだが、どちらも `th:field="*{content}"` が `id="content"` を付けるため、編集中（2 つのフォームが同じ画面に出る）は id が重なっていた。id は描いたときに付くので、HTML のまま読む解析では見えない
 - 解消メモ（2026-10-22、`c4495ad`）：2 つの `textarea` に `id="post-content"`・`id="edit-content"` を書き（`th:field` は書いてある id を上書きしない）、`visually-hidden` のラベル（「つぶやき」「つぶやきの本文」）を結び付けた。カテゴリの欄と同じ書き方。テスト `PostControllerTest#投稿と編集の本文の欄はそれぞれ別のidでラベルと結び付ける` を足し、テンプレートの変更を外すと落ちることを確かめた
 
+### S3. 解析に誤りと読まれる書き方（低）✓ 対応済み
+
+- 指摘：下の「指摘にしなかったもの」で、はじめは誤検知・Accept とした 8 件。振る舞いは正しいが、解析には誤りに見える書き方だった
+- 解消メモ（2026-10-22）：指摘の数を減らすため、振る舞い（描いた HTML を含む）を変えないリファクタリングで、解析にも正しいと読める書き方にした。守るテストがなかった 2 か所は、先にテストを足した（CLAUDE.md の「Git」のリファクタリングの手順）
+  - `java:S2178`（`a11c899`）：`&` を `&&` にした。両方の比べた結果は先に変数に入れているので、処理時間は変わらない。比べる処理を式の中に移すと短絡して守りが弱くなることを、行コメントに書いた
+  - `javabugs:S2259`（`60c5a58`）：応答の長さを `parse` の前に求めた。`parse` が `null` を受け付けるので、解析は呼んだ後の `raw` を `null` かもしれないと推し量っていた
+  - `Web:InputWithoutLabelCheck` の `th:field` の 2 件（`8957069`）：`th:field` が描くときに付けるのと同じ id（`q`・`category`）を書いた
+  - `Web:InputWithoutLabelCheck` の `th:id`・`th:for` の 3 件（`943f5a4` でテストを足し、`9d04f90`）：静的な id（`post-category`・`category-option`）と `for` を書き、描くときに `th:id`・`th:for` で置き換える（Thymeleaf のナチュラルテンプレートの書き方）
+  - `Web:S7930`（`41ff0a0` でテストを足し、`759ba9d`）：`id="diary-content"` の枠を 1 つにし、日記があるときだけ `th:attr` で `data-has-diary` を付けた
+  - テストは 409 件から 412 件（足した 3 件）。リファクタリングのコミットの前後で件数は変わらず、すべて成功
+
+### S4. 直さない判断を画面でしか記録できない（低）✓ 対応済み
+
+- 指摘：直さないと決めた指摘を SonarQube Cloud の画面で Accept・False Positive にすると、判断がリポジトリの外にしか残らない。解析し直すたびに、画面の操作が要る
+- 解消メモ（2026-10-22）：`build.gradle.kts` の `sonar.issue.ignore.multicriteria` で、ルールとファイルの組を狭く指定して外した（下の表の「扱い」が「除外」の 7 件）。ルールをまるごと外さず、ファイルも決めているので、ほかの場所で同じルールに当たれば指摘される。理由と見直す条件は下の表に書き、`build.gradle.kts` のコメントからこの節を参照する
+
 ### 指摘にしなかったもの（2026-10-22）
 
-SonarQube Cloud の画面では、誤検知を「False Positive」、指摘は正しいが直さないものを「Accept」にし、コメントにこの節を参照させる。前提が変わったら見直す（CLAUDE.md の「リファクタリングとレビューを深める 4 つの姿勢」の「更新する」）。
+はじめは、SonarQube Cloud の画面で誤検知を「False Positive」、指摘は正しいが直さないものを「Accept」にする予定だった。同じ日に、書き方で消せるものは S3 で直し、残りは S4 で `build.gradle.kts` から外すことにした（「扱い」の列）。前提が変わったら見直す（CLAUDE.md の「リファクタリングとレビューを深める 4 つの姿勢」の「更新する」）。
 
-| ツールの指摘 | 件数 | 画面での扱い | 判断と理由 | 見直す条件 |
+| ツールの指摘 | 件数 | 扱い | 判断と理由 | 見直す条件 |
 |---|---|---|---|---|
-| `java:S2178`（`GatewayAuthFilter#matches` の `&` を `&&` に） | 1 | Accept | 両方の比べた結果（`usernameMatches`・`passwordMatches`）を先に変数に入れているので、`&&` にしても振る舞いも処理時間も変わらない。`&` は「短絡させず両方を比べる」意図を、式の形でも示すために残す。直しても害はないが、直す理由もない | 比べ方を変え、比べる処理を式の中に書くようになったとき（そのときは `&` が守りになる） |
-| `javabugs:S2259`（`PostCategoryClassifier#classify` の `raw.length()` で `NullPointerException`） | 1 | False Positive | `raw` は `Collectors.joining()` の結果で、`null` にならない。呼び出し先の `parse` に `raw == null` の確かめがあるため、解析が「`null` になりうる」と推し量っている | `raw` の作り方を変えたとき |
-| `githubactions:S6505`（`ci.yml` の `npx` がパッケージをその場で入れ、lifecycle スクリプトを動かす） | 1 | Accept | Railway CLI を `npx` で動かすのは CLAUDE.md の「CI/CD」の決まり。版は固定し、出てから 2 週間以上たったものにしている。`package.json` と lockfile を置いてまで入れる手間に見合わない | Railway CLI を Railway の公式 Action などで動かせるようになったとき。版の固定をやめるとき |
-| `Web:InputWithoutLabelCheck`（`th:id`・`th:for`、または `th:field` と `for` でラベルを結び付けた欄。`home.html:63`・`home.html:91`・`search.html:20`・`search.html:34`・`diary.html:72`） | 5 | False Positive | id は Thymeleaf が描いたときに付くので、HTML のまま読む解析には見えない。描いた画面では、どの欄もラベルと結び付いている | なし |
-| `Web:S7930`（`diary.html` の `id="diary-content"` が 2 つ） | 1 | False Positive | 2 つは `th:if="${diary != null}"` と `th:if="${diary == null}"` の中にあり、描いた画面にはどちらか 1 つしか出ない | 2 つの `th:if` の条件を変えたとき |
-| `Web:PageWithoutTitleCheck`（`fragments/header.html`・`fragments/category-badge.html`） | 2 | False Positive | ほかの画面に差し込む部品で、1 つの画面として出すことはない。`<title>` は差し込む側の画面にある | なし |
-| `Web:S9379`（`login.html` のユーザー名の欄の `autofocus`） | 1 | Accept | ログイン画面は入力欄が 2 つだけで、開いたらすぐ入力するのが用途。読む前にフォーカスが飛ぶ問題は起きにくく、なくすと毎回クリックが要る | ログイン画面に説明などの読む内容を足したとき |
-| `secrets:S8215`（`V1__init.sql` の、初期ユーザー `demo` の BCrypt のハッシュ） | 1 | Accept | ハッシュを書くのは CLAUDE.md の禁止事項「パスワード」の決まり（平文は書かない）。本番の `demo` は 2026-10-20 に別のパスワードに変え（phase1-spec.md の「14. 未決事項」）、開発の DB の `demo` も変えてあるので、このハッシュで入れる環境はない。適用済みのマイグレーションは書き換えられない（CLAUDE.md の「コーディング規約 > 全般」） | 新しい環境を `V1` から作り、`demo` のパスワードを変えずに使うとき |
-| `kotlin:S6474`（`verification-metadata.xml` がなく、依存のハッシュを確かめていない）、`text:S8569`（`gradle.lockfile` がなく、依存の版が決まらない） | 2 | Accept | 依存の版は Spring Boot の BOM と `build.gradle.kts` の明記で決まり、脆弱性は Snyk・OSV-Scanner・Dependabot が見る。lockfile を置かないのは CLAUDE.md の「CI/CD > OSV-Scanner」の判断。ハッシュの確認は、依存を変えるたびにメタデータを作り直す手間がかかる | 依存の取得元（Maven Central）を経由した攻撃が現実的になったとき。lockfile を置くと決めたとき |
+| `java:S2178`（`GatewayAuthFilter#matches` の `&` を `&&` に） | 1 | S3 で直した（はじめは Accept） | 両方の比べた結果（`usernameMatches`・`passwordMatches`）を先に変数に入れているので、`&&` にしても振る舞いも処理時間も変わらない。`&` は「短絡させず両方を比べる」意図を、式の形でも示すために残す。直しても害はないが、直す理由もない。→ 指摘の数を減らすため、同じ日に S3 で `&&` にした | 比べ方を変え、比べる処理を式の中に書くようになったとき（そのときは `&` が守りになる） |
+| `javabugs:S2259`（`PostCategoryClassifier#classify` の `raw.length()` で `NullPointerException`） | 1 | S3 で直した（はじめは False Positive） | `raw` は `Collectors.joining()` の結果で、`null` にならない。呼び出し先の `parse` に `raw == null` の確かめがあるため、解析が「`null` になりうる」と推し量っている | `raw` の作り方を変えたとき |
+| `githubactions:S6505`（`ci.yml` の `npx` がパッケージをその場で入れ、lifecycle スクリプトを動かす） | 1 | 除外（はじめは Accept） | Railway CLI を `npx` で動かすのは CLAUDE.md の「CI/CD」の決まり。版は固定し、出てから 2 週間以上たったものにしている。`package.json` と lockfile を置いてまで入れる手間に見合わない | Railway CLI を Railway の公式 Action などで動かせるようになったとき。版の固定をやめるとき |
+| `Web:InputWithoutLabelCheck`（`th:id`・`th:for`、または `th:field` と `for` でラベルを結び付けた欄。`home.html:63`・`home.html:91`・`search.html:20`・`search.html:34`・`diary.html:72`） | 5 | S3 で直した（はじめは False Positive） | id は Thymeleaf が描いたときに付くので、HTML のまま読む解析には見えない。描いた画面では、どの欄もラベルと結び付いている | なし |
+| `Web:S7930`（`diary.html` の `id="diary-content"` が 2 つ） | 1 | S3 で直した（はじめは False Positive） | 2 つは `th:if="${diary != null}"` と `th:if="${diary == null}"` の中にあり、描いた画面にはどちらか 1 つしか出ない | 2 つの `th:if` の条件を変えたとき |
+| `Web:PageWithoutTitleCheck`（`fragments/header.html`・`fragments/category-badge.html`） | 2 | 除外（はじめは False Positive） | ほかの画面に差し込む部品で、1 つの画面として出すことはない。`<title>` は差し込む側の画面にある | なし |
+| `Web:S9379`（`login.html` のユーザー名の欄の `autofocus`） | 1 | 除外（はじめは Accept） | ログイン画面は入力欄が 2 つだけで、開いたらすぐ入力するのが用途。読む前にフォーカスが飛ぶ問題は起きにくく、なくすと毎回クリックが要る | ログイン画面に説明などの読む内容を足したとき |
+| `secrets:S8215`（`V1__init.sql` の、初期ユーザー `demo` の BCrypt のハッシュ） | 1 | 除外（はじめは Accept） | ハッシュを書くのは CLAUDE.md の禁止事項「パスワード」の決まり（平文は書かない）。本番の `demo` は 2026-10-20 に別のパスワードに変え（phase1-spec.md の「14. 未決事項」）、開発の DB の `demo` も変えてあるので、このハッシュで入れる環境はない。適用済みのマイグレーションは書き換えられない（CLAUDE.md の「コーディング規約 > 全般」） | 新しい環境を `V1` から作り、`demo` のパスワードを変えずに使うとき |
+| `kotlin:S6474`（`verification-metadata.xml` がなく、依存のハッシュを確かめていない）、`text:S8569`（`gradle.lockfile` がなく、依存の版が決まらない） | 2 | 除外（はじめは Accept） | 依存の版は Spring Boot の BOM と `build.gradle.kts` の明記で決まり、脆弱性は Snyk・OSV-Scanner・Dependabot が見る。lockfile を置かないのは CLAUDE.md の「CI/CD > OSV-Scanner」の判断。ハッシュの確認は、依存を変えるたびにメタデータを作り直す手間がかかる | 依存の取得元（Maven Central）を経由した攻撃が現実的になったとき。lockfile を置くと決めたとき |
 
 ### よくできている点（SonarQube Cloud）
 

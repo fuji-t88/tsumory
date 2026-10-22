@@ -111,6 +111,22 @@ sonar {
         property("sonar.gradle.scanAll", true)
         // .gitignore にもあるが、API キーを書くファイルなので重ねて外す
         property("sonar.exclusions", "**/.env")
+        // 直さないと決めた指摘を、ルールとファイルの組で外す。理由と見直す条件は
+        // docs/code-review-static-analysis.md の「SonarQube Cloud（2026-10-22）」の「指摘にしなかったもの」
+        val ignored =
+            mapOf(
+                "fragmentTitle" to ("Web:PageWithoutTitleCheck" to "src/main/resources/templates/fragments/**"),
+                "loginAutofocus" to ("Web:S9379" to "src/main/resources/templates/login.html"),
+                "initialUserHash" to ("secrets:S8215" to "src/main/resources/db/migration/V1__init.sql"),
+                "railwayNpx" to ("githubactions:S6505" to ".github/workflows/ci.yml"),
+                "gradleLockfile" to ("text:S8569" to "build.gradle.kts"),
+                "gradleVerification" to ("kotlin:S6474" to "**"),
+            )
+        property("sonar.issue.ignore.multicriteria", ignored.keys.joinToString(","))
+        ignored.forEach { (name, rule) ->
+            property("sonar.issue.ignore.multicriteria.$name.ruleKey", rule.first)
+            property("sonar.issue.ignore.multicriteria.$name.resourceKey", rule.second)
+        }
         property("sonar.organization", "fuji-t88")
         // 公開の識別子で、秘密情報ではない。名前の「Key」で Gitleaks が API キーと誤検知する
         property("sonar.projectKey", "fuji-t88_tsumory") // gitleaks:allow

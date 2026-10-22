@@ -165,6 +165,8 @@
   - CI の解析を使う。SonarQube Cloud の自動解析（Automatic Analysis）は切る（両方が有効だと、CI の解析が失敗する）。自動解析はソースだけを読むので Java の精度が下がり、カバレッジも出せない
   - `env` の `CI: true` を消さない（`ci.yml` と同じ。ないと、解析の前の `compileJava` で `spotlessApply` が走る）
   - `fetch-depth: 0` を消さない（新しいコードの判定と blame に Git の履歴が要る）
+- 直さないと決めた指摘は、画面で Accept・False Positive にせず、`build.gradle.kts` の `sonar.issue.ignore.multicriteria` でルールとファイルの組を指定して外す（判断をリポジトリに残すため）。ルールをまるごと外さない。理由と見直す条件は `docs/code-review-static-analysis.md` に書く
+  - Thymeleaf の `th:field`・`th:id`・`th:for` が描くときに付ける id は、解析には見えない。ラベルと結び付ける欄には、静的な `id`・`for` も書く（`th:field` は書いた id を上書きせず、`th:id`・`th:for` は置き換える）
 - 設定は `build.gradle.kts` の `sonar { properties { ... } }`（`sonar.organization`・`sonar.projectKey`）。SonarQube Cloud の画面の値と合わせる
   - `sonar.projectKey` の行には `// gitleaks:allow` を付けている。公開の識別子だが、Gitleaks の `generic-api-key` が名前の「Key」で誤検知し、コミットを止めるため。除外はこの行だけにし、ルールやフックは緩めない
 - カバレッジは JaCoCo。`jacocoTestReport` が XML を出し、`sonar` がそれを読む。手元では `./gradlew test jacocoTestReport` で `build/reports/jacoco/test/html/` に出る
