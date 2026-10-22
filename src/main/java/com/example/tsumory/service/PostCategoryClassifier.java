@@ -107,6 +107,7 @@ public class PostCategoryClassifier {
                 .flatMap(block -> block.text().stream())
                 .map(TextBlock::text)
                 .collect(Collectors.joining());
+        var responseLength = raw.length();
         var category = parse(raw);
         if (category.isEmpty()) {
             // 応答の中身はログに出さない（つぶやきの内容が含まれることがあるため）。長さだけ出す
@@ -114,7 +115,7 @@ public class PostCategoryClassifier {
                     "claude classification returned unreadable category: elapsedMs={}, messageId={}, responseLength={}",
                     elapsedMs,
                     response.id(),
-                    raw.length());
+                    responseLength);
             return Optional.empty();
         }
         // どのカテゴリになったかは出さない（つぶやきの内容を推測できるため。CLAUDE.md の禁止事項「ログ」）
