@@ -136,6 +136,9 @@
 - 脆弱性を直す PR は Dependabot（security updates）に任せ、Snyk の GitHub 連携の Fix PR は切る（同じ脆弱性に PR が 2 本来ないように）
 - トークンは GitHub の Secret `SNYK_TOKEN`（Snyk の API トークン）。ワークフローやコードに書かない
   - Dependabot の PR は Actions の Secret を読めないので、`snyk.yml` を流さない（`if: github.actor != 'dependabot[bot]'`）。GitHub 連携の PR チェックで見る
+- Snyk が見つけた脆弱性は、Spring Boot が決める版に入っていることが多い。Spring Boot のパッチ版がまだ出ていなければ、`build.gradle.kts` の `extra["<名前>.version"]`（Spring Boot の `spring-boot-dependencies` の property 名）で、直った版に上書きする。上げ先は直る最小の版にする
+  - Spring Boot を上げたら、上書きした版が Spring Boot の決める版より古くなっていないかを確かめ、追いついたものは消す（上書きが残ると、古い版に固定される）
+  - 2026-10-22：Spring Boot 4.1.1 に対して `tomcat`・`jackson-bom`（Jackson 3）・`jackson-2-bom`（Anthropic SDK が使う Jackson 2）・`postgresql` を上書きした
 - `snyk/actions` は `@master` にせず、リリースのコミット SHA で固定する（Snyk 側の変更がそのまま動かないように）。上げるときは、出てから 2 週間以上たったものにする
   - アクションが使う Docker イメージ（`snyk/snyk:gradle-9-jdk21`）は、アクションの中でタグで指定されていて固定できない。Snyk の CLI の版は、こちらでは決められない
 
