@@ -24,7 +24,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       # Git に gradlew が実行権限なしで入っている（Dockerfile と同じ）
       - run: chmod +x gradlew
       # 整形を先に確かめ、崩れていればテストを流さずに止める（CI=true なので spotlessApply は走らない）

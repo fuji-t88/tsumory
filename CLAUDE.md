@@ -113,6 +113,8 @@
   - Railway のサービスは GitHub のリポジトリとつながない（Railway の自動デプロイを止める）。つないだままだと、テストの結果を待たずに Railway もデプロイし、1 回の push で 2 回デプロイされる
   - デプロイは並べて順に流し、途中で止めない（`concurrency` の `cancel-in-progress: false`）
   - ジョブが確かめるのはビルドまでで、アプリが起動したかは見ない（Basic 認証を有効にしたので、Railway のヘルスチェックを外している）。デプロイの後は公開 URL を開いて確かめる
+- ワークフローで使う Actions のうち、GitHub 以外が作ったもの（`gradle/actions`・`gitleaks/gitleaks-action` など）は、タグではなくリリースのコミット SHA で固定し、版を行末のコメントに書く（`@<SHA> # v6.4.0`）。タグは付け替えられるので、サプライチェーン攻撃に弱い。GitHub の `actions/*` はタグのままでよい（SonarQube Cloud の `githubactions:S7637` もこの線引き）
+  - 上げるときは、出てから 2 週間以上たったものにする。Dependabot（`github-actions`）は SHA とコメントの版を合わせて上げる
 
 #### Dependabot
 

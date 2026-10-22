@@ -30,7 +30,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       # Git に gradlew が実行権限なしで入っている（ci.yml と同じ）
       - run: chmod +x gradlew
       # 品質ゲートの結果は待たない（sonar.qualitygate.wait を付けない）ので、ゲートが Failed でもジョブは落ちない
