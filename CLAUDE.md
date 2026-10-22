@@ -114,6 +114,19 @@
   - デプロイは並べて順に流し、途中で止めない（`concurrency` の `cancel-in-progress: false`）
   - ジョブが確かめるのはビルドまでで、アプリが起動したかは見ない（Basic 認証を有効にしたので、Railway のヘルスチェックを外している）。デプロイの後は公開 URL を開いて確かめる
 
+#### Dependabot
+
+- 設定は `.github/dependabot.yml`。Gradle の依存とプラグイン、GitHub Actions、`Dockerfile` のベースイメージ、`compose.yaml` のイメージのバージョンアップの PR を、毎週月曜に作る
+- 脆弱性の通知（Dependabot alerts）と、修正の PR（Dependabot security updates）は、ファイルではなく GitHub のリポジトリの設定（Settings > Advanced Security）で有効にする
+- バージョンアップは、出てから 14 日たったものだけにする（`cooldown`。「CI/CD」の Railway CLI と同じ考え）。脆弱性の修正の PR は待たずに作られる
+- 上げないもの（`ignore`）
+  - `eclipse-temurin` のメジャー（Java 21 は技術スタックとして決めている）
+  - `postgres` のメジャー（上げると、ボリューム `postgres-data` の既存のデータを読めなくなる）
+- Dependabot が見ないもの。手で上げる
+  - `ci.yml` の Railway CLI（`npx` の引数に書いた版）
+  - `build.gradle.kts` の `spotless` の中の palantir-java-format・ktlint の版
+- Dependabot の PR も、ほかの PR と同じく CI（`spotlessCheck`・`test`）が通ってからマージする。マージすると `main` への push になり、デプロイが走る
+
 ## ディレクトリ構成
 
 ```
@@ -122,6 +135,7 @@ tsumory/
 ├── .env.example                  # .env のひな形（値は書かない）
 ├── Dockerfile                    # 本番用のイメージ（「本番のコンテナ」）
 ├── .github/workflows/ci.yml      # テストと Railway へのデプロイ（「CI/CD」）
+├── .github/dependabot.yml        # 依存のバージョンアップの PR（「CI/CD > Dependabot」）
 ├── .dockerignore
 ├── db/
 │   └── dev-seed.sql              # 動作確認用のテストデータ（手で流す。Flyway のマイグレーションではない）

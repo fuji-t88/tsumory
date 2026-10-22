@@ -1,0 +1,60 @@
+# 依存のバージョンアップの PR を作る（CLAUDE.md の「CI/CD > Dependabot」）。
+# 脆弱性の通知（Dependabot alerts）と修正の PR（security updates）は、GitHub のリポジトリの設定で有効にする
+version: 2
+
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    # 出てから 2 週間たっていない版は上げない（security updates には効かない）
+    cooldown:
+      default-days: 14
+    groups:
+      # マイナー・パッチは 1 つの PR にまとめる。メジャーは個別に PR にする
+      gradle-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    cooldown:
+      default-days: 14
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    cooldown:
+      default-days: 14
+    ignore:
+      # Java 21 は技術スタックとして決めている。メジャーを上げるときは手で上げる
+      - dependency-name: eclipse-temurin
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    cooldown:
+      default-days: 14
+    ignore:
+      # PostgreSQL のメジャーを上げると、既存のボリューム（postgres-data）のデータを読めなくなる
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
