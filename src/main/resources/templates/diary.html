@@ -24,31 +24,32 @@
             日記を書いています。1 分ほどかかることがあります。このままお待ちください
         </div>
 
-        <!--/* 日記あり：本文と「生成し直す」。つぶやきが 0 件の日も出す（押すとメッセージが出て、日記はそのまま残る） */-->
-        <th:block th:if="${diary != null}">
-            <div id="diary-content" data-has-diary="true">
+        <!--/* 枠は 1 つにし、日記があるときだけ data-has-diary を付ける（diary-generate.js が読む） */-->
+        <div id="diary-content" th:attr="data-has-diary=${diary != null} ? 'true'">
+            <!--/* 日記あり：本文 */-->
+            <th:block th:if="${diary != null}">
                 <p class="text-pre-wrap" th:text="${diary.content}">日記の本文</p>
                 <p class="text-secondary small" th:text="|${generatedAtLabel} に作成|">21:30 に作成</p>
-            </div>
-            <!--/* この画面の日付の日記を書き直す */-->
-            <form th:action="@{/diary/{date}/generate(date=${date})}" method="post" class="js-diary-generate">
-                <button type="submit" class="btn btn-outline-primary">生成し直す</button>
-            </form>
-        </th:block>
-
-        <!--/* 日記なし：つぶやきがあれば「日記を生成」、なければボタンを出さない */-->
-        <th:block th:if="${diary == null}">
-            <div id="diary-content">
+            </th:block>
+            <!--/* 日記なし */-->
+            <th:block th:if="${diary == null}">
                 <p class="mb-1">この日の日記はまだありません</p>
                 <p class="text-secondary small" th:unless="${#lists.isEmpty(posts)}"
                    th:text="|この日のつぶやき ${#lists.size(posts)} 件から日記を書きます|">この日のつぶやき 3 件から日記を書きます</p>
                 <p class="text-secondary small" th:if="${#lists.isEmpty(posts)}">この日のつぶやきはありません</p>
-            </div>
-            <form th:unless="${#lists.isEmpty(posts)}" th:action="@{/diary/{date}/generate(date=${date})}"
-                  method="post" class="js-diary-generate">
-                <button type="submit" class="btn btn-primary">日記を生成</button>
-            </form>
-        </th:block>
+            </th:block>
+        </div>
+
+        <!--/* 日記あり：この画面の日付の日記を書き直す。つぶやきが 0 件の日も出す（押すとメッセージが出て、日記はそのまま残る） */-->
+        <form th:if="${diary != null}" th:action="@{/diary/{date}/generate(date=${date})}" method="post"
+              class="js-diary-generate">
+            <button type="submit" class="btn btn-outline-primary">生成し直す</button>
+        </form>
+        <!--/* 日記なし：つぶやきがあれば「日記を生成」、なければボタンを出さない */-->
+        <form th:if="${diary == null and not #lists.isEmpty(posts)}"
+              th:action="@{/diary/{date}/generate(date=${date})}" method="post" class="js-diary-generate">
+            <button type="submit" class="btn btn-primary">日記を生成</button>
+        </form>
     </section>
 
     <!--/* この日のつぶやき（投稿時刻の古い順）。本文は読むだけで、編集・削除の操作は置かない */-->
