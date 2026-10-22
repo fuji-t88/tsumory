@@ -103,3 +103,49 @@
 - **コンパイラの警告が 0 件**：`-Xlint:all` で、raw 型・未検査の変換・非推奨の API などが 1 件もない。型で守られているので、改修で型の誤りが入るとコンパイルで気づける
 - **Error Prone でバグのパターンが 0 件**：`UnicodeInCode` と書き方の指摘を除くと、本体（`src/main`）に出たのは JavaDoc の 1 件だけ。`Optional` の誤用・`equals` の取り違え・戻り値の捨て忘れなどがない
 - **record のリストは、ほとんどの呼び出し側が書き換えられない形で渡している**：`Stream#toList` と `List.copyOf` を使い分けていて、指摘 1 の 1 か所だけが漏れていた。service が作った表示用の値を、controller・テンプレートで変えられないようになっている
+
+## SonarQube Cloud（2026-10-22）
+
+`.github/workflows/sonar.yml` で SonarQube Cloud を入れたときの、最初の解析の結果（CLAUDE.md の「CI/CD > SonarQube Cloud」）。上の解析（2026-10-19）とは別のツールなので、節を分けた。
+
+- 対象：コミット `8ff67b4`（`main` への push の解析）。Java に加えて、`.github/workflows`・`build.gradle.kts` も解析された
+- 方法：`./gradlew test jacocoTestReport sonar`。指摘は SonarQube Cloud の API（`api/issues/search`）で読んだ
+
+### 数字
+
+| 項目 | `8ff67b4`（解析した時点） | `1d3b25b`（指摘 S1 の対応後） |
+|---|---|---|
+| 指摘の数 | 10（脆弱性 8・バグ 1・コードの臭い 1） | 測っていない（push 後の解析で確かめる。見込みは 5） |
+| 品質ゲート | ERROR（新しいコードのセキュリティ評価が B。基準は A） | 測っていない |
+| カバレッジ | 88.4% | 測っていない（本体は変えていない） |
+| 重複 | 0.0% | 測っていない（本体は変えていない） |
+| テストの件数 | 408（すべて成功） | 408（すべて成功） |
+
+### まとめ
+
+| # | 重要度 | 観点 | 指摘 | 場所 | 状態 |
+|---|---|---|---|---|---|
+| S1 | 中 | セキュリティ | GitHub 以外が作った Actions を、タグ（`@v6`・`@v2`・`@main`）で参照している（`githubactions:S7637`。5 件） | `ci.yml`・`gitleaks.yml`・`trufflehog.yml`・`osv-scanner.yml`・`sonar.yml` | 対応済み |
+
+### S1. Actions をタグで参照している（中）✓ 対応済み
+
+- 指摘：`gradle/actions/setup-gradle@v6`・`gitleaks/gitleaks-action@v2`・`trufflesecurity/trufflehog@main` を、タグやブランチで参照している。タグは付け替えられるので、Actions の持ち主のアカウントが乗っ取られると、こちらのワークフローで別のコードが動く（サプライチェーン攻撃）。ワークフローは `SNYK_TOKEN`・`SONAR_TOKEN`・`RAILWAY_TOKEN` を扱う
+- 解消メモ（2026-10-22、`1d3b25b`）：3 つを、出てから 2 週間以上たったリリースのコミット SHA で固定し、版を行末のコメントに書いた（`gradle/actions` v6.4.0、`gitleaks-action` v2.3.9、`trufflehog` v3.99.0）。`trufflehog` は `main` を追いかけていたのをやめ、リリースに固定した。決まりは CLAUDE.md の「CI/CD」に書いた
+- GitHub の `actions/*`（`checkout`・`setup-java`・`upload-artifact`）はタグのまま。SonarQube Cloud も指摘していない
+
+### 指摘にしなかったもの（2026-10-22）
+
+SonarQube Cloud の画面では、誤検知を「False Positive」、指摘は正しいが直さないものを「Accept」にし、コメントにこの節を参照させる。前提が変わったら見直す（CLAUDE.md の「リファクタリングとレビューを深める 4 つの姿勢」の「更新する」）。
+
+| ツールの指摘 | 件数 | 画面での扱い | 判断と理由 | 見直す条件 |
+|---|---|---|---|---|
+| `java:S2178`（`GatewayAuthFilter#matches` の `&` を `&&` に） | 1 | Accept | 両方の比べた結果（`usernameMatches`・`passwordMatches`）を先に変数に入れているので、`&&` にしても振る舞いも処理時間も変わらない。`&` は「短絡させず両方を比べる」意図を、式の形でも示すために残す。直しても害はないが、直す理由もない | 比べ方を変え、比べる処理を式の中に書くようになったとき（そのときは `&` が守りになる） |
+| `javabugs:S2259`（`PostCategoryClassifier#classify` の `raw.length()` で `NullPointerException`） | 1 | False Positive | `raw` は `Collectors.joining()` の結果で、`null` にならない。呼び出し先の `parse` に `raw == null` の確かめがあるため、解析が「`null` になりうる」と推し量っている | `raw` の作り方を変えたとき |
+| `githubactions:S6505`（`ci.yml` の `npx` がパッケージをその場で入れ、lifecycle スクリプトを動かす） | 1 | Accept | Railway CLI を `npx` で動かすのは CLAUDE.md の「CI/CD」の決まり。版は固定し、出てから 2 週間以上たったものにしている。`package.json` と lockfile を置いてまで入れる手間に見合わない | Railway CLI を Railway の公式 Action などで動かせるようになったとき。版の固定をやめるとき |
+| `kotlin:S6474`（`verification-metadata.xml` がなく、依存のハッシュを確かめていない）、`text:S8569`（`gradle.lockfile` がなく、依存の版が決まらない） | 2 | Accept | 依存の版は Spring Boot の BOM と `build.gradle.kts` の明記で決まり、脆弱性は Snyk・OSV-Scanner・Dependabot が見る。lockfile を置かないのは CLAUDE.md の「CI/CD > OSV-Scanner」の判断。ハッシュの確認は、依存を変えるたびにメタデータを作り直す手間がかかる | 依存の取得元（Maven Central）を経由した攻撃が現実的になったとき。lockfile を置くと決めたとき |
+
+### よくできている点（SonarQube Cloud）
+
+- **重複が 0.0%**：2,232 行の中に、同じ処理を写した場所がない。上限や形式を定数 1 つから各層に配る決まり（CLAUDE.md の「入力の検証（多層防御）」）が効いていて、直すときに片方だけ直す漏れが起きにくい
+- **カバレッジが 88.4%**：テスト 408 件が本体の大半を通っている。守り（入力チェック・制約・例外）を足したら、本体の変更を外してテストが落ちることを確かめる決まり（CLAUDE.md の「テスト」）と合わせて、テストが空振りしていない
+- **Java のコードに直すべき指摘がない**：Java への指摘 2 件は、誤検知と、振る舞いの変わらない書き方の指摘だった。タイミング攻撃への備え（`GatewayAuthFilter`）のように、普通と違う書き方にはコメントで理由が書いてあり、判断がすぐできた
