@@ -146,6 +146,15 @@
 - `snyk/actions` は `@master` にせず、リリースのコミット SHA で固定する（Snyk 側の変更がそのまま動かないように）。上げるときは、出てから 2 週間以上たったものにする
   - アクションが使う Docker イメージ（`snyk/snyk:gradle-9-jdk21`）は、アクションの中でタグで指定されていて固定できない。Snyk の CLI の版は、こちらでは決められない
 
+#### OSV-Scanner
+
+- `.github/workflows/osv-scanner.yml`。`main` への push、`main` 向けの pull request、毎週月曜（UTC 0 時）に、OSV データベースで依存の脆弱性を調べる。`ci.yml` とは分け、デプロイは止めない
+- 結果は Security > Code scanning に送る（SARIF）。脆弱性が 1 件でもあれば、重大度によらずジョブを落とす（Snyk のような重大度のしきい値はない）
+- OSV-Scanner は `build.gradle.kts` を読めず、`gradle.lockfile` を読む。`lockfile` ジョブが、init script で依存のロックを有効にして `dependencies --write-locks` を流し、すべての configuration（テスト用も含む）の版を書き出してアーティファクトで渡す
+  - `gradle.lockfile` はリポジトリに置かない（`build.gradle.kts` でロックを有効にしない）。置くと、依存を変えるたびに lockfile も直す必要があり、版の上書き（「CI/CD > Snyk」）とも二重になるため
+- Google の再利用ワークフロー（`osv-scanner-reusable.yml`）を、リリースのコミット SHA で固定して呼ぶ。上げるときは、出てから 2 週間以上たったものにする（Dependabot の `github-actions` も、`cooldown` を守って上げる）
+- 2026-10-22 に、手元で同じ手順（init script → `gradle.lockfile` → `ghcr.io/google/osv-scanner:v2.6.0`）を流し、問題がないこと、Tomcat を 11.0.24 に戻すと critical を 3 件見つけて落ちることを確かめた
+
 ## ディレクトリ構成
 
 ```
@@ -156,6 +165,7 @@ tsumory/
 ├── .github/workflows/ci.yml      # テストと Railway へのデプロイ（「CI/CD」）
 ├── .github/dependabot.yml        # 依存のバージョンアップの PR（「CI/CD > Dependabot」）
 ├── .github/workflows/snyk.yml    # 依存の脆弱性の検査（「CI/CD > Snyk」）
+├── .github/workflows/osv-scanner.yml # 依存の脆弱性の検査（「CI/CD > OSV-Scanner」）
 ├── .dockerignore
 ├── db/
 │   └── dev-seed.sql              # 動作確認用のテストデータ（手で流す。Flyway のマイグレーションではない）

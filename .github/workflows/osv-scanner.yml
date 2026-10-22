@@ -1,0 +1,57 @@
+# 依存の脆弱性を OSV-Scanner で調べる（CLAUDE.md の「CI/CD > OSV-Scanner」）。ci.yml とは分け、デプロイは止めない
+name: OSV-Scanner
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # 依存を変えなくても、新しい脆弱性は公開される
+  schedule:
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # OSV-Scanner は build.gradle.kts を読めないので、解決した版の一覧（gradle.lockfile）を作って渡す
+  lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v6
+      # Git に gradlew が実行権限なしで入っている（ci.yml と同じ）
+      - run: chmod +x gradlew
+      # build.gradle.kts を変えずに、このジョブの中だけで依存のロックを有効にする
+      - run: |
+          cat > "$RUNNER_TEMP/lock.init.gradle.kts" <<'EOF'
+          allprojects {
+              dependencyLocking {
+                  lockAllConfigurations()
+              }
+          }
+          EOF
+          ./gradlew --init-script "$RUNNER_TEMP/lock.init.gradle.kts" dependencies --write-locks > /dev/null
+      - uses: actions/upload-artifact@v7
+        with:
+          name: gradle-lockfile
+          path: gradle.lockfile
+          retention-days: 1
+
+  scan:
+    needs: lockfile
+    permissions:
+      actions: read
+      contents: read
+      # 結果を Security > Code scanning に送る
+      security-events: write
+    # v2.6.0
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@a345acffa64b0eaede81a3d9aae6141214d9c8fc
+    with:
+      download-artifact: gradle-lockfile
