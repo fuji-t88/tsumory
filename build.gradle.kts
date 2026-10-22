@@ -25,6 +25,11 @@ extra["jackson-bom.version"] = "3.1.7"
 extra["jackson-2-bom.version"] = "2.21.7"
 extra["postgresql.version"] = "42.7.14"
 
+// Hibernate が XML のマッピングを読むための JAXB の実装。XXE の脆弱性があり、直った版がないので外す（CLAUDE.md の「CI/CD > Snyk」）
+configurations.all {
+    exclude(group = "org.glassfish.jaxb")
+}
+
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-flyway")

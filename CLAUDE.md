@@ -139,6 +139,10 @@
 - Snyk が見つけた脆弱性は、Spring Boot が決める版に入っていることが多い。Spring Boot のパッチ版がまだ出ていなければ、`build.gradle.kts` の `extra["<名前>.version"]`（Spring Boot の `spring-boot-dependencies` の property 名）で、直った版に上書きする。上げ先は直る最小の版にする
   - Spring Boot を上げたら、上書きした版が Spring Boot の決める版より古くなっていないかを確かめ、追いついたものは消す（上書きが残ると、古い版に固定される）
   - 2026-10-22：Spring Boot 4.1.1 に対して `tomcat`・`jackson-bom`（Jackson 3）・`jackson-2-bom`（Anthropic SDK が使う Jackson 2）・`postgresql` を上書きした
+- JAXB の実装（`org.glassfish.jaxb`。Hibernate の依存）は、`build.gradle.kts` の `configurations.all` で外している。2026-10-22 に Snyk が XXE（`SNYK-JAVA-ORGGLASSFISHJAXB-20883142`）を見つけ、直った版がなかったため
+  - Hibernate がこれを使うのは XML のマッピング（`META-INF/orm.xml` など）を読むときだけ。マッピングはアノテーションで書き、XML のマッピングを置かない
+  - 外したあとに `bootRun` で、Flyway の確認・Hibernate の起動・ユーザーを読むクエリ（ログイン）まで動くことを確かめた（テストは DB につながないので、テストでは確かめられない）
+  - 直った版が出たら、外すのをやめるかを見直す
 - `snyk/actions` は `@master` にせず、リリースのコミット SHA で固定する（Snyk 側の変更がそのまま動かないように）。上げるときは、出てから 2 週間以上たったものにする
   - アクションが使う Docker イメージ（`snyk/snyk:gradle-9-jdk21`）は、アクションの中でタグで指定されていて固定できない。Snyk の CLI の版は、こちらでは決められない
 
