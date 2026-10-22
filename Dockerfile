@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- ビルド：jar を作り、Spring Boot のレイヤーごとに展開する ----
-FROM eclipse-temurin:21.0.12.1_1-jdk-alpine-3.24 AS builder
+FROM eclipse-temurin:21-jdk-alpine-3.20 AS builder
 WORKDIR /workspace
 # CI があると compileJava の前の spotlessApply が走らない（CLAUDE.md の「コーディング規約 > 全般」）
 ENV CI=true
@@ -22,7 +22,7 @@ RUN ./gradlew --no-daemon bootJar \
     && java -Djarmode=tools -jar app.jar extract --layers --destination extracted
 
 # ---- Java のランタイム：アプリが使うモジュールだけを jlink で入れる ----
-FROM eclipse-temurin:21.0.12.1_1-jdk-alpine-3.24 AS jre
+FROM eclipse-temurin:21-jdk-alpine-3.20 AS jre
 # jdeps が見つけるモジュールに、jdeps では見つからない 2 つを足す。
 # jdk.crypto.ec は Claude API との TLS（楕円曲線暗号）、jdk.localedata は日付の曜日を日本語で出すのに要る
 RUN jlink \
