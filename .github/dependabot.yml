@@ -41,9 +41,8 @@ updates:
     cooldown:
       default-days: 14
     ignore:
-      # Java 21 は技術スタックとして決めている。メジャーを上げるときは手で上げる
+      # 21.0.12.1_1-jdk-alpine-3.24 の形のタグを比べられず、古い Alpine の 21-jdk-alpine-3.20 への PR を作る。手で上げる
       - dependency-name: eclipse-temurin
-        update-types: [version-update:semver-major]
 
   - package-ecosystem: docker-compose
     directory: /

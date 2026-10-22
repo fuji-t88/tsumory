@@ -120,9 +120,9 @@
 - 脆弱性の通知（Dependabot alerts）と、修正の PR（Dependabot security updates）は、ファイルではなく GitHub のリポジトリの設定（Settings > Advanced Security）で有効にする
 - バージョンアップは、出てから 14 日たったものだけにする（`cooldown`。「CI/CD」の Railway CLI と同じ考え）。脆弱性の修正の PR は待たずに作られる
 - 上げないもの（`ignore`）
-  - `eclipse-temurin` のメジャー（Java 21 は技術スタックとして決めている）
   - `postgres` のメジャー（上げると、ボリューム `postgres-data` の既存のデータを読めなくなる）
 - Dependabot が見ないもの。手で上げる
+  - `Dockerfile` の `eclipse-temurin`（`ignore` で外している）。Dependabot は `21.0.12.1_1-jdk-alpine-3.24` の形のタグを比べられず、Alpine を 3.20 に下げる PR を作った（2026-10-22）。上げるときは、Java 21 のまま、Alpine を `alpine` の段と同じ版にそろえる
   - `ci.yml` の Railway CLI（`npx` の引数に書いた版）
   - `build.gradle.kts` の `spotless` の中の palantir-java-format・ktlint の版
 - Dependabot の PR も、ほかの PR と同じく CI（`spotlessCheck`・`test`）が通ってからマージする。マージすると `main` への push になり、デプロイが走る
