@@ -199,6 +199,24 @@ class PostControllerTest {
     }
 
     @Test
+    void 投稿と編集の本文の欄はそれぞれ別のidでラベルと結び付ける() throws Exception {
+        // 編集中は、投稿のフォームと編集のフォームが同じ画面に出る
+        when(postService.getEditablePost(USER_ID, 10L)).thenReturn(TODAY_POST);
+
+        var html = mockMvc.perform(get("/posts/10/edit").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                .contains("<label for=\"post-content\" class=\"visually-hidden\">つぶやき</label>")
+                .containsPattern("<textarea id=\"post-content\"[^>]*name=\"content\"")
+                .contains("<label for=\"edit-content\" class=\"visually-hidden\">つぶやきの本文</label>")
+                .containsPattern("<textarea id=\"edit-content\"[^>]*name=\"content\"")
+                .doesNotContain("id=\"content\"");
+    }
+
+    @Test
     void 開発用のコメントを画面のHTMLに出さない() throws Exception {
         // テンプレートのコメントは Thymeleaf のコメント（<!--/* */-->）で書き、ブラウザに送らない
         mockMvc.perform(get("/").with(user(PRINCIPAL))).andExpect(content().string(not(containsString("<!--"))));

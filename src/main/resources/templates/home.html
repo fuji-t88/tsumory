@@ -21,8 +21,10 @@
             <form th:action="@{/posts}" th:object="${postForm}" method="post"
                   class="js-submit-once" data-submitting-label="つぶやいています…">
                 <div class="mb-2">
-                    <textarea th:field="*{content}" th:maxlength="${postContentMaxLength}" rows="2" class="form-control"
-                              th:disabled="${postLimitReached}"
+                    <!--/* 編集中は編集のフォームも同じ画面に出るので、th:field の id（content）を使わず別の id にする */-->
+                    <label for="post-content" class="visually-hidden">つぶやき</label>
+                    <textarea id="post-content" th:field="*{content}" th:maxlength="${postContentMaxLength}" rows="2"
+                              class="form-control" th:disabled="${postLimitReached}"
                               th:classappend="${#fields.hasErrors('content')} ? 'is-invalid'"></textarea>
                     <p th:if="${#fields.hasErrors('content')}" th:errors="*{content}" class="invalid-feedback"
                        role="alert"></p>
@@ -81,8 +83,9 @@
                           th:action="@{/posts/{id}/edit(id=${post.id})}" th:object="${postEditForm}" method="post"
                           class="js-submit-once" data-submitting-label="保存しています…">
                         <div class="mb-2">
-                            <textarea th:field="*{content}" th:maxlength="${postContentMaxLength}" rows="2" class="form-control"
-                                      th:classappend="${#fields.hasErrors('content')} ? 'is-invalid'"></textarea>
+                            <label for="edit-content" class="visually-hidden">つぶやきの本文</label>
+                            <textarea id="edit-content" th:field="*{content}" th:maxlength="${postContentMaxLength}"
+                                      rows="2" class="form-control" th:classappend="${#fields.hasErrors('content')} ? 'is-invalid'"></textarea>
                             <p th:if="${#fields.hasErrors('content')}" th:errors="*{content}"
                                class="invalid-feedback" role="alert"></p>
                         </div>
