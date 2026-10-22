@@ -1,9 +1,11 @@
 plugins {
     java
+    jacoco
     id("org.springframework.boot") version "4.1.1"
     id("io.spring.dependency-management") version "1.1.7"
     id("com.diffplug.spotless") version "8.10.3"
     id("org.owasp.dependencycheck") version "13.0.0"
+    id("org.sonarqube") version "7.5.0.8588"
 }
 
 group = "com.example"
@@ -87,5 +89,26 @@ if (System.getenv("CI") == null) {
 dependencyCheck {
     nvd {
         apiKey = System.getenv("NVD_API_KEY")
+    }
+}
+
+jacoco {
+    toolVersion = "0.8.15"
+}
+
+// SonarQube Cloud にカバレッジを渡すため、XML でも出す（CLAUDE.md の「CI/CD > SonarQube Cloud」）
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required = true
+    }
+}
+
+sonar {
+    properties {
+        property("sonar.host.url", "https://sonarcloud.io")
+        property("sonar.organization", "fuji-t88")
+        // 公開の識別子で、秘密情報ではない。名前の「Key」で Gitleaks が API キーと誤検知する
+        property("sonar.projectKey", "fuji-t88_tsumory") // gitleaks:allow
     }
 }

@@ -155,6 +155,21 @@
 - Google の再利用ワークフロー（`osv-scanner-reusable.yml`）を、リリースのコミット SHA で固定して呼ぶ。上げるときは、出てから 2 週間以上たったものにする（Dependabot の `github-actions` も、`cooldown` を守って上げる）
 - 2026-10-22 に、手元で同じ手順（init script → `gradle.lockfile` → `ghcr.io/google/osv-scanner:v2.6.0`）を流し、問題がないこと、Tomcat を 11.0.24 に戻すと critical を 3 件見つけて落ちることを確かめた
 
+#### SonarQube Cloud
+
+- 自分たちのコードの品質（バグになりそうな書き方・重複・複雑さ・カバレッジ・Security Hotspots）を解析する。依存の脆弱性は Snyk・OSV-Scanner が見る
+- `.github/workflows/sonar.yml`。`main` への push と `main` 向けの pull request で `./gradlew test jacocoTestReport sonar` を流す。`ci.yml` とは分け、デプロイは止めない
+  - 品質ゲートでは落とさない（`sonar.qualitygate.wait` を付けず、ゲートの結果を待たない）。結果は SonarQube Cloud の画面と PR で見る。慣れて基準を決めたら、落とすかを見直す
+  - CI の解析を使う。SonarQube Cloud の自動解析（Automatic Analysis）は切る（両方が有効だと、CI の解析が失敗する）。自動解析はソースだけを読むので Java の精度が下がり、カバレッジも出せない
+  - `env` の `CI: true` を消さない（`ci.yml` と同じ。ないと、解析の前の `compileJava` で `spotlessApply` が走る）
+  - `fetch-depth: 0` を消さない（新しいコードの判定と blame に Git の履歴が要る）
+- 設定は `build.gradle.kts` の `sonar { properties { ... } }`（`sonar.organization`・`sonar.projectKey`）。SonarQube Cloud の画面の値と合わせる
+  - `sonar.projectKey` の行には `// gitleaks:allow` を付けている。公開の識別子だが、Gitleaks の `generic-api-key` が名前の「Key」で誤検知し、コミットを止めるため。除外はこの行だけにし、ルールやフックは緩めない
+- カバレッジは JaCoCo。`jacocoTestReport` が XML を出し、`sonar` がそれを読む。手元では `./gradlew test jacocoTestReport` で `build/reports/jacoco/test/html/` に出る
+- トークンは GitHub の Secret `SONAR_TOKEN`。ワークフローやコードに書かない
+  - Dependabot の PR は Actions の Secret を読めないので、`sonar.yml` を流さない（`if: github.actor != 'dependabot[bot]'`。「CI/CD > Snyk」と同じ）
+- 2026-10-22 の導入時、手元のカバレッジは行 87.7%（673/767）、分岐 90.9%（199/219）
+
 ## ディレクトリ構成
 
 ```
@@ -166,6 +181,7 @@ tsumory/
 ├── .github/dependabot.yml        # 依存のバージョンアップの PR（「CI/CD > Dependabot」）
 ├── .github/workflows/snyk.yml    # 依存の脆弱性の検査（「CI/CD > Snyk」）
 ├── .github/workflows/osv-scanner.yml # 依存の脆弱性の検査（「CI/CD > OSV-Scanner」）
+├── .github/workflows/sonar.yml   # コードの品質の解析（「CI/CD > SonarQube Cloud」）
 ├── .dockerignore
 ├── db/
 │   └── dev-seed.sql              # 動作確認用のテストデータ（手で流す。Flyway のマイグレーションではない）

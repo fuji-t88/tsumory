@@ -1,0 +1,39 @@
+# コードの品質を SonarQube Cloud で解析する（CLAUDE.md の「CI/CD > SonarQube Cloud」）。ci.yml とは分け、デプロイは止めない
+name: SonarQube Cloud
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# spotlessApply を走らせず、整形を直さないまま解析する（ci.yml と同じ）
+env:
+  CI: true
+
+jobs:
+  sonar:
+    # Dependabot の PR は Actions の Secret（SONAR_TOKEN）を読めない
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # 新しいコードの判定と、行ごとの作者（blame）に履歴が要る
+          fetch-depth: 0
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v6
+      # Git に gradlew が実行権限なしで入っている（ci.yml と同じ）
+      - run: chmod +x gradlew
+      # 品質ゲートの結果は待たない（sonar.qualitygate.wait を付けない）ので、ゲートが Failed でもジョブは落ちない
+      - run: ./gradlew test jacocoTestReport sonar
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
