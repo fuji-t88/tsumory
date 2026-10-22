@@ -1,34 +1,33 @@
 # 依存の脆弱性を Snyk で調べる（CLAUDE.md の「CI/CD > Snyk」）。ci.yml とは分け、デプロイは止めない
-name: Snyk
+name: Snyk Security
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-  workflow_dispatch:
-
-permissions:
-  contents: read
+    branches:
+      - main
 
 jobs:
   snyk:
+    name: Snyk vulnerability scan
     # Dependabot の PR は Actions の Secret（SNYK_TOKEN）を読めない。Snyk の GitHub 連携の PR チェックで見る
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: "21"
-      - uses: gradle/actions/setup-gradle@v6
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       # Git に gradlew が実行権限なしで入っている（ci.yml と同じ）
-      - run: chmod +x gradlew
-      # 本番の jar に入る依存（runtimeClasspath）だけを見て、high 以上があれば落とす
-      - run: >-
-          npx --yes snyk@1.1307.4 test
-          --configuration-matching='^runtimeClasspath$'
-          --severity-threshold=high
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Run Snyk Open Source test
+        # v1.0.0。@master は Snyk 側の変更がそのまま動くので、コミットで固定する
+        uses: snyk/actions/gradle-9-jdk21@9adf32b1121593767fc3c057af55b55db032dc04
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high

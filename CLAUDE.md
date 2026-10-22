@@ -131,12 +131,13 @@
 
 - 2 つの入り口で使う
   - Snyk の GitHub 連携（snyk.io でリポジトリを取り込む）：依存・`Dockerfile`・コードを調べ、Snyk の画面に出す。PR にチェックを付ける
-  - `.github/workflows/snyk.yml`：`main` への push と pull request で `snyk test` を流し、本番の jar に入る依存（`runtimeClasspath`）に high 以上の脆弱性があれば落とす
+  - `.github/workflows/snyk.yml`：`main` への push と `main` 向けの pull request で `snyk test`（`snyk/actions/gradle-9-jdk21`）を流し、依存（テスト用も含む）に high 以上の脆弱性があれば落とす
 - `snyk.yml` は `ci.yml` と分ける。新しく見つかった脆弱性だけで、デプロイを止めないため。落ちたら、直してからマージする
 - 脆弱性を直す PR は Dependabot（security updates）に任せ、Snyk の GitHub 連携の Fix PR は切る（同じ脆弱性に PR が 2 本来ないように）
 - トークンは GitHub の Secret `SNYK_TOKEN`（Snyk の API トークン）。ワークフローやコードに書かない
   - Dependabot の PR は Actions の Secret を読めないので、`snyk.yml` を流さない（`if: github.actor != 'dependabot[bot]'`）。GitHub 連携の PR チェックで見る
-- CLI はバージョンを固定して `npx` で動かす（Dependabot は見ない）。上げるときは、出てから 2 週間以上たったものにする
+- `snyk/actions` は `@master` にせず、リリースのコミット SHA で固定する（Snyk 側の変更がそのまま動かないように）。上げるときは、出てから 2 週間以上たったものにする
+  - アクションが使う Docker イメージ（`snyk/snyk:gradle-9-jdk21`）は、アクションの中でタグで指定されていて固定できない。Snyk の CLI の版は、こちらでは決められない
 
 ## ディレクトリ構成
 
