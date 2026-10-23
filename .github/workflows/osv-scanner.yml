@@ -33,7 +33,6 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6
 
       # Git に gradlew が実行権限なしで入っているため付与
       - run: chmod +x gradlew
