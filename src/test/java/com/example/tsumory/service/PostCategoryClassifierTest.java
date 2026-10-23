@@ -1,22 +1,27 @@
 package com.example.tsumory.service;
 
+import static com.example.tsumory.service.ClaudeResponses.response;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.core.RequestOptions;
 import com.anthropic.errors.AnthropicIoException;
+import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
+import com.anthropic.models.messages.StopReason;
 import com.example.tsumory.config.ClaudeProperties;
 import com.example.tsumory.domain.PostCategory;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 
 class PostCategoryClassifierTest {
 
@@ -68,6 +73,58 @@ class PostCategoryClassifierTest {
         var category = new PostCategoryClassifier(client, properties()).classify("昼のカレーが辛すぎた");
 
         assertThat(category).isEmpty();
+    }
+
+    @Test
+    void 応答のカテゴリIDを判定したカテゴリとして返す() {
+        var client = respondingClient(response(StopReason.END_TURN, " work\n"));
+
+        var category = new PostCategoryClassifier(client, properties()).classify("今日の定例会議が延びた");
+
+        assertThat(category).contains(PostCategory.WORK);
+    }
+
+    @Test
+    void 分類の設定のモデルと上限と短いタイムアウトで本文を渡して呼ぶ() {
+        var client = respondingClient(response(StopReason.END_TURN, "WORK"));
+
+        new PostCategoryClassifier(client, properties()).classify("今日の定例会議が延びた");
+
+        var params = ArgumentCaptor.forClass(MessageCreateParams.class);
+        var options = ArgumentCaptor.forClass(RequestOptions.class);
+        verify(client.messages()).create(params.capture(), options.capture());
+        assertThat(params.getValue().model().asString()).isEqualTo("claude-opus-5-5");
+        assertThat(params.getValue().maxTokens()).isEqualTo(2000);
+        // 本文はシステムプロンプトに埋め込まず、ユーザーメッセージで渡す（CLAUDE.md の禁止事項「プロンプトインジェクション」）
+        assertThat(params.getValue().system().orElseThrow().asString()).doesNotContain("定例会議");
+        assertThat(params.getValue().messages().getFirst().content().asString()).isEqualTo("<post>今日の定例会議が延びた</post>");
+        assertThat(options.getValue().getTimeout().request()).isEqualTo(Duration.ofSeconds(10));
+    }
+
+    @Test
+    void 拒否や上限で止まったら判定できなかったものとする() {
+        for (var stopReason : new StopReason[] {StopReason.REFUSAL, StopReason.MAX_TOKENS}) {
+            var client = respondingClient(response(stopReason, "WORK"));
+
+            assertThat(new PostCategoryClassifier(client, properties()).classify("今日の定例会議が延びた"))
+                    .as(stopReason.asString())
+                    .isEmpty();
+        }
+    }
+
+    @Test
+    void カテゴリIDとして読めない応答は判定できなかったものとする() {
+        var client = respondingClient(response(StopReason.END_TURN, "WORK です"));
+
+        assertThat(new PostCategoryClassifier(client, properties()).classify("今日の定例会議が延びた"))
+                .isEmpty();
+    }
+
+    private static AnthropicClient respondingClient(Message response) {
+        var client = mock(AnthropicClient.class, RETURNS_DEEP_STUBS);
+        when(client.messages().create(any(MessageCreateParams.class), any(RequestOptions.class)))
+                .thenReturn(response);
+        return client;
     }
 
     @Test
