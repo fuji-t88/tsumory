@@ -101,11 +101,11 @@
 
 ### CI/CD
 
-- GitHub Actions の `.github/workflows/ci.yml`。`main` への push と pull request で、`./gradlew spotlessCheck`（整形の確認）、`./gradlew test`、`./gradlew jacocoTestCoverageVerification`（行のカバレッジが 85% 以上か。「コーディング規約 > テスト」）の順に別のステップで流し、`main` への push ですべて通ったときだけ Railway にデプロイする
+- GitHub Actions の `.github/workflows/ci.yml`。`main` への push と pull request で、`./gradlew spotlessCheck`（整形の確認）、`./gradlew test`、`./gradlew jacocoTestCoverageVerification`（行のカバレッジが 85% 以上か。「コーディング規約 > テスト」）、`./gradlew spotbugsMain`（バグになりそうな書き方がないか。「CI/CD > SpotBugs」）の順に別のステップで流し、`main` への push ですべて通ったときだけ Railway にデプロイする
   - ステップを分けるのは、整形とテストのどちらで落ちたかを Actions の画面で見分けられるようにし、整形の確認が先に走ることをワークフローに書いておくため。jar は Railway が `Dockerfile` でビルドするので、CI では作らない（`build` は流さない）
   - ワークフローの `env` に `CI: true` を書き、整形は直さず `spotlessCheck` で落とす（「コーディング規約 > 全般」）。GitHub Actions も `CI=true` を設定するが、それに頼らず明示する。`CI` がないと `compileJava` の前に `spotlessApply` が走り、崩れた整形を黙って直してから確かめるので、関門にならない。この `env` を消さない。push する前に手元で `./gradlew build` を通す
     - 2026-10-20 に、CI と同じ条件のクローンでわざと整形を崩して `CI=true ./gradlew build` を流し、`spotlessJavaCheck` で失敗し、ファイルが直されずに残ることを確かめた
-  - 失敗したときは、テストの結果（`build/reports/tests/test/`）を Actions の Artifacts に 7 日残す
+  - 失敗したときは、テストの結果（`build/reports/tests/test/`）と SpotBugs の結果（`build/reports/spotbugs/`）を Actions の Artifacts に 7 日残す
 - テストは DB にも Claude API にもつながないので、CI には PostgreSQL も API キーも `.env` も置かない（2026-10-20 に、`.env` のないクローンで `CI=true ./gradlew build` が 394 件とも通ることを確かめた）。テストに DB（Testcontainers）や秘密情報が要るようになったら、ワークフローも直す
 - デプロイは Railway CLI の `railway up --ci`。ソースを Railway に送り、Railway が `Dockerfile` でビルドする（「本番のコンテナ」）。ビルドが失敗すれば、ジョブも失敗する
   - CLI はバージョンを固定して `npx` で動かす。上げるときは、出てから 2 週間以上たったものにする
@@ -127,6 +127,7 @@
   - `Dockerfile` の `eclipse-temurin`（`ignore` で外している）。Dependabot は `21.0.12.1_1-jdk-alpine-3.24` の形のタグを比べられず、Alpine を 3.20 に下げる PR を作った（2026-10-22）。上げるときは、Java 21 のまま、Alpine を `alpine` の段と同じ版にそろえる
   - `ci.yml` の Railway CLI（`npx` の引数に書いた版）
   - `build.gradle.kts` の `spotless` の中の palantir-java-format・ktlint の版
+  - `build.gradle.kts` の `spotbugs` の `toolVersion`（SpotBugs 本体の版。プラグインの版は Dependabot が上げる）
 - Dependabot の PR も、ほかの PR と同じく CI（`spotlessCheck`・`test`）が通ってからマージする。マージすると `main` への push になり、デプロイが走る
 
 #### Snyk
@@ -174,6 +175,16 @@
   - Dependabot の PR は Actions の Secret を読めないので、`sonar.yml` を流さない（`if: github.actor != 'dependabot[bot]'`。「CI/CD > Snyk」と同じ）
 - 2026-10-22 の導入時、手元のカバレッジは行 87.7%（673/767）、分岐 90.9%（199/219）
 
+#### SpotBugs
+
+- `src/main` のバイトコードから、バグになりそうな書き方（`null` の参照外し、コンストラクタからの上書きできるメソッドの呼び出しなど）を探す。SonarQube Cloud がソースを読むのに対し、こちらはコンパイルしたクラスを読む
+- `build.gradle.kts` のプラグイン（`com.github.spotbugs`）。effort は max、確度は low まで出す。テストのコード（`spotbugsTest`）は対象にしない
+- 指摘が 1 件でもあれば落とす。`check` に入るので `./gradlew build` で落ち、CI でも `ci.yml` の `spotbugsMain` で落ちてデプロイしない（Snyk・OSV-Scanner と違い、結果はコードを変えたときにしか変わらないので、`ci.yml` に入れる）。結果は `build/reports/spotbugs/main.html`
+- 直さないと決めた指摘は `config/spotbugs/exclude.xml` で外す。クラスとメソッドを指定し、パターンを丸ごと外すのは理由がどのクラスにも当てはまるときだけにする。理由と見直す条件は `docs/code-review-static-analysis.md` に書く（「CI/CD > SonarQube Cloud」と同じ考え）
+- 版を上げるときは、出てから 2 週間以上たったものにする。プラグインと SpotBugs 本体（`toolVersion`）は別に上げる（「CI/CD > Dependabot」）
+- 依存の検証（`gradle/verification-metadata.xml`）があるので、プラグインや `toolVersion` を変えたら、空の `GRADLE_USER_HOME` で `--write-verification-metadata sha256` を付けて `build` と OSV-Scanner の lockfile の手順を流し、メタデータを足す
+- 2026-10-23 の導入時、指摘は 10 件。4 件を直し、6 件を除外した
+
 ## ディレクトリ構成
 
 ```
@@ -187,6 +198,7 @@ tsumory/
 ├── .github/workflows/osv-scanner.yml # 依存の脆弱性の検査（「CI/CD > OSV-Scanner」）
 ├── .github/workflows/sonar.yml   # コードの品質の解析（「CI/CD > SonarQube Cloud」）
 ├── .dockerignore
+├── config/spotbugs/exclude.xml   # SpotBugs で直さないと決めた指摘（「CI/CD > SpotBugs」）
 ├── db/
 │   └── dev-seed.sql              # 動作確認用のテストデータ（手で流す。Flyway のマイグレーションではない）
 ├── build.gradle.kts

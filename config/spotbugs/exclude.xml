@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  直さないと決めた指摘を外す。理由と見直す条件は docs/code-review-static-analysis.md の「指摘にしなかったもの」
+  （CLAUDE.md の「CI/CD > SpotBugs」）
+-->
+<FindBugsFilter xmlns="https://github.com/spotbugs/filter/3.0.0">
+  <!-- Finalizer 攻撃は、信頼できないコードが同じ JVM でサブクラスを作れることが前提で、このアプリには当てはまらない -->
+  <Match>
+    <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+  </Match>
+  <!-- プロンプトは OS によらず同じにしたいので、%n ではなく \n が正しい -->
+  <Match>
+    <Class name="com.example.tsumory.service.ClaudeService"/>
+    <Method name="buildUserMessage"/>
+    <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
+  </Match>
+  <!-- Spring Security の HttpSecurity#build が throws Exception と宣言している -->
+  <Match>
+    <Class name="com.example.tsumory.config.SecurityConfig"/>
+    <Method name="filterChain"/>
+    <Bug pattern="THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION"/>
+  </Match>
+</FindBugsFilter>

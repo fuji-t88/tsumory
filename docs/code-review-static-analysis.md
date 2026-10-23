@@ -193,3 +193,34 @@
 - **重複が 0.0%**：2,232 行の中に、同じ処理を写した場所がない。上限や形式を定数 1 つから各層に配る決まり（CLAUDE.md の「入力の検証（多層防御）」）が効いていて、直すときに片方だけ直す漏れが起きにくい
 - **カバレッジが 88.4%**：テスト 408 件が本体の大半を通っている。守り（入力チェック・制約・例外）を足したら、本体の変更を外してテストが落ちることを確かめる決まり（CLAUDE.md の「テスト」）と合わせて、テストが空振りしていない
 - **Java のコードに直すべき指摘がない**：Java への指摘 2 件は、誤検知と、振る舞いの変わらない書き方の指摘だった。タイミング攻撃への備え（`GatewayAuthFilter`）のように、普通と違う書き方にはコメントで理由が書いてあり、判断がすぐできた
+
+## SpotBugs の常設（2026-10-23）
+
+2026-10-19 は init スクリプトで一時的に当てただけだった SpotBugs を、`build.gradle.kts` のプラグインにして、`./gradlew build`（`check`）と CI（`ci.yml` の `spotbugsMain`）で毎回流すようにした（CLAUDE.md の「CI/CD > SpotBugs」）。
+
+- 設定は 2026-10-19 と同じ（effort は max、確度は low まで。`src/main` だけ）。版はプラグイン 6.5.12・SpotBugs 4.10.4（出てから 2 週間以上たったもの）
+- 対象：コミット `b12705b` の `src/main`
+
+### 数字
+
+| | 入れた時点（`b12705b`） | 対応後 |
+|---|---|---|
+| SpotBugs の指摘 | 10 | 0（4 件を直し、6 件を除外の設定で外した。除外の設定を空にすると 6 件出る） |
+| うち 2026-10-19 の「指摘にしなかったもの」と同じ指摘 | 5（`Post`・`Diary`・`User` の `CT_CONSTRUCTOR_THROW`、`VA_FORMAT_STRING_USES_NEWLINE`、`THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION`） | 0（除外） |
+| うち 2026-10-19 より後に足したクラスへの指摘 | 5（`DatabaseClock` 3 件、`GatewayAuthFilter` 1 件、`ClockConfig` 1 件） | 0（4 件を直し、`GatewayAuthFilter` の 1 件を除外） |
+| テストの件数 | 425（すべて成功） | 425（すべて成功） |
+
+### 直したもの
+
+- `MC_OVERRIDABLE_METHOD_CALL_IN_CONSTRUCTOR`（`DatabaseClock` のコンストラクタが、上書きできる `instant()` を呼ぶ）と、`DatabaseClock` の `CT_CONSTRUCTOR_THROW` 2 件：`DatabaseClock` を `final` にした（サブクラスを作れないので、どちらの指摘も前提がなくなる）。サブクラスを作る場所もモックする場所もない
+- `NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE`（`ClockConfig` が、`null` を返しうる `JdbcTemplate#queryForObject` の戻り値をそのまま使う）：`Objects.requireNonNull` で受けた。`SELECT clock_timestamp()` が `null` を返すことはないが、返ったときの例外が、どの値が `null` だったかを示すようになる
+
+### 指摘にしなかったもの（2026-10-23）
+
+外し方は `config/spotbugs/exclude.xml`。ルールを丸ごと外すのは `CT_CONSTRUCTOR_THROW` だけで、ほかはクラスとメソッドを指定する。
+
+| ツールの指摘 | 件数 | 判断と理由 | 見直す条件 |
+|---|---|---|---|
+| `CT_CONSTRUCTOR_THROW`（`Post`・`Diary`・`User`・`GatewayAuthFilter`） | 4 | 2026-10-19 の判断（エンティティの 3 件）を、すべてのクラスに広げた。Finalizer 攻撃は、信頼できないコードが同じ JVM でサブクラスを作れることが前提で、このアプリのどのクラスにも当てはまらない。コンストラクタで設定の誤りを止めるのは意図どおり（`GatewayAuthFilter` は片方だけの設定で起動しない。CLAUDE.md の「本番のコンテナ」）。クラスごとに書くと、コンストラクタで値を確かめるクラスを足すたびにビルドが落ちる | 信頼できないコード（プラグインなど）を読み込むようになったとき |
+| `VA_FORMAT_STRING_USES_NEWLINE`（`ClaudeService#buildUserMessage`） | 1 | 2026-10-19 と同じ | なし |
+| `THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION`（`SecurityConfig#filterChain`） | 1 | 2026-10-19 と同じ | Spring Security の宣言が変わったとき |

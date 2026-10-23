@@ -32,11 +32,15 @@ jobs:
       - run: ./gradlew test
       # 行のカバレッジが 85% を下回ったら、デプロイしない（CLAUDE.md の「テスト」）
       - run: ./gradlew jacocoTestCoverageVerification
+      # バグになりそうな書き方が見つかったら、デプロイしない（CLAUDE.md の「CI/CD > SpotBugs」）
+      - run: ./gradlew spotbugsMain
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: test-reports
-          path: build/reports/tests/test/
+          path: |
+            build/reports/tests/test/
+            build/reports/spotbugs/
           retention-days: 7
 
   deploy:

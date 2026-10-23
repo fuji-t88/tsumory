@@ -1,3 +1,6 @@
+import com.github.spotbugs.snom.Confidence
+import com.github.spotbugs.snom.Effort
+
 plugins {
     java
     jacoco
@@ -6,6 +9,7 @@ plugins {
     id("com.diffplug.spotless") version "8.10.3"
     id("org.owasp.dependencycheck") version "13.0.0"
     id("org.sonarqube") version "7.5.0.8588"
+    id("com.github.spotbugs") version "6.5.12"
 }
 
 group = "com.example"
@@ -119,6 +123,25 @@ tasks.jacocoTestCoverageVerification {
 
 tasks.check {
     dependsOn(tasks.jacocoTestCoverageVerification)
+}
+
+// バイトコードからバグになりそうな書き方を探す。見つかったら落とす（CLAUDE.md の「CI/CD > SpotBugs」）
+spotbugs {
+    toolVersion = "4.10.4"
+    effort = Effort.MAX
+    reportLevel = Confidence.LOW
+    excludeFilter = file("config/spotbugs/exclude.xml")
+}
+
+tasks.spotbugsMain {
+    reports.create("html") {
+        required = true
+    }
+}
+
+// テストのコードは対象にしない（Mockito の書き方などで、指摘にしないものばかり出る）
+tasks.spotbugsTest {
+    enabled = false
 }
 
 sonar {
