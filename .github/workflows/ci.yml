@@ -30,6 +30,8 @@ jobs:
       # 整形を先に確かめ、崩れていればテストを流さずに止める（CI=true なので spotlessApply は走らない）
       - run: ./gradlew spotlessCheck
       - run: ./gradlew test
+      # 行のカバレッジが 85% を下回ったら、デプロイしない（CLAUDE.md の「テスト」）
+      - run: ./gradlew jacocoTestCoverageVerification
       - if: failure()
         uses: actions/upload-artifact@v7
         with:

@@ -101,7 +101,7 @@
 
 ### CI/CD
 
-- GitHub Actions の `.github/workflows/ci.yml`。`main` への push と pull request で、`./gradlew spotlessCheck`（整形の確認）、`./gradlew test` の順に別のステップで流し、`main` への push で両方が通ったときだけ Railway にデプロイする
+- GitHub Actions の `.github/workflows/ci.yml`。`main` への push と pull request で、`./gradlew spotlessCheck`（整形の確認）、`./gradlew test`、`./gradlew jacocoTestCoverageVerification`（行のカバレッジが 85% 以上か。「コーディング規約 > テスト」）の順に別のステップで流し、`main` への push ですべて通ったときだけ Railway にデプロイする
   - ステップを分けるのは、整形とテストのどちらで落ちたかを Actions の画面で見分けられるようにし、整形の確認が先に走ることをワークフローに書いておくため。jar は Railway が `Dockerfile` でビルドするので、CI では作らない（`build` は流さない）
   - ワークフローの `env` に `CI: true` を書き、整形は直さず `spotlessCheck` で落とす（「コーディング規約 > 全般」）。GitHub Actions も `CI=true` を設定するが、それに頼らず明示する。`CI` がないと `compileJava` の前に `spotlessApply` が走り、崩れた整形を黙って直してから確かめるので、関門にならない。この `env` を消さない。push する前に手元で `./gradlew build` を通す
     - 2026-10-20 に、CI と同じ条件のクローンでわざと整形を崩して `CI=true ./gradlew build` を流し、`spotlessJavaCheck` で失敗し、ファイルが直されずに残ることを確かめた
@@ -363,6 +363,10 @@ tsumory/
 - 守り（入力チェック・制約・例外）を足したら、本体の変更を一度外して、そのテストが失敗することを確かめる（テストが空振りしていないか）
 - `@WebMvcTest`（MockMvc）はエラー画面への切り替えを再現しない。エラー画面は、テスト用の controller から描画するか、`/error` をエラーの属性を付けて呼んで確かめる。実際の動き（状態コードごとの画面の選び分けなど）は、ランダムポートでサーバーを立てる一時的なテストで確かめ、確かめたら消す
 - DB の制約のように自動テストできないもの（Testcontainers を入れるまで）は、開発 DB でトランザクションの中で確かめ、最後にロールバックする。開発 DB にデータを残さない
+- カバレッジは 85% 以上を保つ
+  - Java の行のカバレッジは、JaCoCo の `jacocoTestCoverageVerification` が 85% を下回ると落とす。`check` に入れているので `./gradlew build` で落ち、CI でも `test` の次のステップで流す（落ちればデプロイしない）
+  - SonarQube Cloud のカバレッジ（行と分岐、JS も含む）も 85% 以上を目安にする。JS にはテストの仕組みがなく、`static/js/` は通っていない行として数えられる（2026-10-23 時点で 81 行）。JS を足して 85% を割りそうなら、JS のテストを入れるかを決める
+  - 外部 API を呼ぶクラスは、SDK のクライアントと応答を Mockito で作って確かめる（`ClaudeResponses`）。成功だけでなく、SDK の例外・拒否・途中で止まった応答・空の応答と、ログに本文を出さないことも確かめる
 
 ### ログ
 

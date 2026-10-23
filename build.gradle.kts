@@ -104,6 +104,23 @@ tasks.jacocoTestReport {
     }
 }
 
+// 行のカバレッジが 85% を下回ったら落とす（CLAUDE.md の「テスト」）
+tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.test)
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                minimum = "0.85".toBigDecimal()
+            }
+        }
+    }
+}
+
+tasks.check {
+    dependsOn(tasks.jacocoTestCoverageVerification)
+}
+
 sonar {
     properties {
         property("sonar.host.url", "https://sonarcloud.io")
