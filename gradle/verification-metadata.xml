@@ -3,6 +3,16 @@
    <configuration>
       <verify-metadata>true</verify-metadata>
       <verify-signatures>false</verify-signatures>
+
+      <trusted-keys>
+         <trusted-key id="7B79ADD11F8A779FE90FD3D0893A028475557671">
+            <trusting group="com.gradle"/>
+            <trusting group="org.gradle"/>
+         </trusted-key>
+         <trusted-key id="E2879931BCA1A42E55F2D64DD9B2DFBD9F3298BA">
+            <trusting group="org.gradle"/>
+         </trusted-key>
+      </trusted-keys>
    </configuration>
    <components>
       <component group="biz.aQute.bnd" name="biz.aQute.bnd.annotation" version="7.1.0">
