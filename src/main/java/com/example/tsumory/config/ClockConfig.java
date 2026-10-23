@@ -3,6 +3,7 @@ package com.example.tsumory.config;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.Objects;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -25,7 +26,9 @@ public class ClockConfig {
             case "database" -> {
                 var jdbc = jdbcTemplate.getObject();
                 yield new DatabaseClock(
-                        () -> jdbc.queryForObject("SELECT clock_timestamp()", OffsetDateTime.class)
+                        () -> Objects.requireNonNull(
+                                        jdbc.queryForObject("SELECT clock_timestamp()", OffsetDateTime.class),
+                                        "clock_timestamp()")
                                 .toInstant(),
                         System::nanoTime,
                         ZONE);

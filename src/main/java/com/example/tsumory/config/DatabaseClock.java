@@ -17,7 +17,7 @@ import org.springframework.scheduling.annotation.Scheduled;
  * <p>理由は phase1-spec.md の「5. 処理の詳細 > 現在時刻の基準（本番は DB の時刻）」。
  */
 @Slf4j
-public class DatabaseClock extends Clock {
+public final class DatabaseClock extends Clock {
 
     static final String SYNC_INTERVAL = "PT1M";
 
