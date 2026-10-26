@@ -150,6 +150,7 @@
 - Snyk が見つけた脆弱性は、Spring Boot が決める版に入っていることが多い。Spring Boot のパッチ版がまだ出ていなければ、`build.gradle.kts` の `extra["<名前>.version"]`（Spring Boot の `spring-boot-dependencies` の property 名）で、直った版に上書きする。上げ先は直る最小の版にする
   - Spring Boot を上げたら、上書きした版が Spring Boot の決める版より古くなっていないかを確かめ、追いついたものは消す（上書きが残ると、古い版に固定される）
   - 2026-10-22：Spring Boot 4.1.1 に対して `tomcat`・`jackson-bom`（Jackson 3）・`jackson-2-bom`（Anthropic SDK が使う Jackson 2）・`postgresql` を上書きした
+  - 2026-10-26：Snyk が Tomcat 11.0.26 に Critical（`SNYK-JAVA-ORGAPACHETOMCATEMBED-21707475`）を見つけたので、`tomcat` の上書きを 11.0.27 に上げた（Spring Boot 4.1.2 でも直るが、Spring Boot を上げるのは Dependabot に任せる）
 - JAXB の実装（`org.glassfish.jaxb`。Hibernate の依存）は、`build.gradle.kts` の `configurations.all` で外している。2026-10-22 に Snyk が XXE（`SNYK-JAVA-ORGGLASSFISHJAXB-20883142`）を見つけ、直った版がなかったため
   - Hibernate がこれを使うのは XML のマッピング（`META-INF/orm.xml` など）を読むときだけ。マッピングはアノテーションで書き、XML のマッピングを置かない
   - 外したあとに `bootRun` で、Flyway の確認・Hibernate の起動・ユーザーを読むクエリ（ログイン）まで動くことを確かめた（テストは DB につながないので、テストでは確かめられない）
