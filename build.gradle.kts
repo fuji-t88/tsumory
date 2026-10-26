@@ -26,7 +26,7 @@ repositories {
 }
 
 // Spring Boot 4.1.1 が決める版には脆弱性がある。Spring Boot が追いついたら消す（CLAUDE.md の「CI/CD > Snyk」）
-extra["tomcat.version"] = "11.0.26"
+extra["tomcat.version"] = "11.0.27"
 extra["jackson-bom.version"] = "3.1.7"
 extra["jackson-2-bom.version"] = "2.21.7"
 extra["postgresql.version"] = "42.7.14"
