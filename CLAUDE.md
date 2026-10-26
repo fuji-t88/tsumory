@@ -129,6 +129,10 @@
   - `build.gradle.kts` の `spotless` の中の palantir-java-format・ktlint の版
   - `build.gradle.kts` の `spotbugs` の `toolVersion`（SpotBugs 本体の版。プラグインの版は Dependabot が上げる）
 - Dependabot の PR も、ほかの PR と同じく CI（`spotlessCheck`・`test`）が通ってからマージする。マージすると `main` への push になり、デプロイが走る
+- Gradle の依存を上げる PR は、そのままでは CI が落ちる。Dependabot は `build.gradle.kts` と wrapper の版だけを上げ、`gradle/verification-metadata.xml` に新しい版のチェックサムを足さないため（2026-10-26 の PR #18 で、spotless 8.10.4 の解決で「Dependency verification failed」になった）
+  - PR のブランチを手元に取り出し、空の `GRADLE_USER_HOME` で `--write-verification-metadata sha256` を付けて `build` と OSV-Scanner の lockfile の手順を流す（「CI/CD > SpotBugs」と同じ）。足されたのが上げた依存のものだけかを差分で確かめてから、そのブランチにコミットして push する
+  - 書き出しのあとに、付けずにもう一度流して通ることを確かめる。メタデータの改行は Git が LF にそろえる（`.gitattributes`）
+  - こちらがコミットした PR は、Dependabot が rebase や新しい版で作り直さなくなる。CI が通ったら早めにマージする
 
 #### Snyk
 
