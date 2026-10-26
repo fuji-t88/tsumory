@@ -53,6 +53,10 @@
   - `application.yaml` の `spring.config.import: optional:file:.env[.properties]` で、Spring Boot の標準機能として読む。`.env` を読むためだけのライブラリ（dotenv 系など）は追加しない
   - プロパティファイルとして読むので、`export` や値を囲む引用符は書かない（引用符も値に含まれてしまう）
   - OS の環境変数が同じ名前で設定されていれば、そちらが優先される。本番は `.env` を置かず、OS の環境変数で渡す
+- IntelliJ IDEA の Gradle の同期は、CLI のビルドでは取らないファイルも取りに行くので、依存の検証（`gradle/verification-metadata.xml`。「CI/CD > SpotBugs」）で落ちることがある。`./gradlew build` が通るのに同期だけが「Dependency verification failed」で落ちたら、これを疑う
+  - ソース・JavaDoc（`-sources.jar`・`-javadoc.jar`・Gradle 本体の `gradle-<版>-src.zip`）は、メタデータの `trusted-artifacts` で検証から外している。エディタで読むだけで、クラスパスには入らないため（Gradle のドキュメントが IDE 向けに勧める設定）。外す範囲を広げない
+  - それ以外（pom・jar）で落ちたら、検証は外さずにチェックサムを足す。その 1 つを解決する init script（`detachedConfiguration` で `group:name:版@pom` などを解決するタスク）を書き、`--write-verification-metadata sha256` を付けて流す。足した値は、Maven Central が公開する `.sha1` とダウンロードしたファイルの SHA-1 を比べて確かめる
+  - 同期は 1 か所で落ちると先へ進まないので、直すたびに同期し直す。2026-10-26 は、`gradle-9.8.0-src.zip` → 依存の `-sources.jar` → `kotlin-reflect-2.4.10.pom` の順に止まった
 
 ## コマンド
 
