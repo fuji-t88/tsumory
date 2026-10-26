@@ -3,6 +3,9 @@
    <configuration>
       <verify-metadata>true</verify-metadata>
       <verify-signatures>false</verify-signatures>
+      <trusted-artifacts>
+         <trust group="gradle" name="gradle" file="gradle-.*-src\.zip" regex="true"/>
+      </trusted-artifacts>
       <trusted-keys>
          <trusted-key id="7B79ADD11F8A779FE90FD3D0893A028475557671">
             <trusting group="com.gradle"/>
