@@ -132,6 +132,7 @@
   - `ci.yml` の Railway CLI（`npx` の引数に書いた版）
   - `build.gradle.kts` の `spotless` の中の palantir-java-format・ktlint の版
   - `build.gradle.kts` の `spotbugs` の `toolVersion`（SpotBugs 本体の版。プラグインの版は Dependabot が上げる）
+  - `fossa.yml` の `pinned-cli-version`（FOSSA の CLI の版。アクションの版は Dependabot が上げる）
 - Dependabot の PR も、ほかの PR と同じく CI（`spotlessCheck`・`test`）が通ってからマージする。マージすると `main` への push になり、デプロイが走る
 - Gradle の依存を上げる PR は、そのままでは CI が落ちる。Dependabot は `build.gradle.kts` と wrapper の版だけを上げ、`gradle/verification-metadata.xml` に新しい版のチェックサムを足さないため（2026-10-26 の PR #18 で、spotless 8.10.4 の解決で「Dependency verification failed」になった）
   - PR のブランチを手元に取り出し、空の `GRADLE_USER_HOME` で `--write-verification-metadata sha256` を付けて `build` と OSV-Scanner の lockfile の手順を流す（「CI/CD > SpotBugs」と同じ）。足されたのが上げた依存のものだけかを差分で確かめてから、そのブランチにコミットして push する
@@ -166,6 +167,18 @@
   - `gradle.lockfile` はリポジトリに置かない（`build.gradle.kts` でロックを有効にしない）。置くと、依存を変えるたびに lockfile も直す必要があり、版の上書き（「CI/CD > Snyk」）とも二重になるため
 - Google の再利用ワークフロー（`osv-scanner-reusable.yml`）を、リリースのコミット SHA で固定して呼ぶ。上げるときは、出てから 2 週間以上たったものにする（Dependabot の `github-actions` も、`cooldown` を守って上げる）
 - 2026-10-22 に、手元で同じ手順（init script → `gradle.lockfile` → `ghcr.io/google/osv-scanner:v2.6.0`）を流し、問題がないこと、Tomcat を 11.0.24 に戻すと critical を 3 件見つけて落ちることを確かめた
+
+#### FOSSA
+
+- 依存（テスト用も含む）のライセンスを調べる。脆弱性は Snyk・OSV-Scanner が見る
+- `.github/workflows/fossa.yml`。`main` への push と `main` 向けの pull request で、`fossa analyze`（依存の一覧を送る）と `fossa test`（ポリシーに違反するライセンスがあれば落とす）を流す。`ci.yml` とは分け、デプロイは止めない（ポリシーと FOSSA のライセンスのデータは、コードを変えなくても変わるため。「CI/CD > Snyk」と同じ考え）
+- ポリシーは FOSSA の画面（Policies > Licensing）で決め、既定のポリシーにして CI が作るプロジェクトに当てる。tsumory はソフトウェアを配布しない Web サービスなので、ネットワーク越しの提供でも義務が生じるもの（AGPL・SSPL）を拒否し、配布したときに義務が生じるもの（GPL・LGPL）とライセンス不明は要確認にする。配布する（イメージを公開するなど）ことになったら見直す
+- FOSSA の GitHub 連携（Quick Import）でリポジトリを取り込まない。CI の解析とプロジェクトが 2 つでき、結果が食い違う（「CI/CD > SonarQube Cloud」の自動解析と同じ）
+- API キーは GitHub のリポジトリの Secret `FOSSA_API_KEY`（push 専用ではないキー。`fossa test` で結果を読むため）。ワークフローやコードに書かない
+  - Dependabot の PR は Actions の Secret を読めないので、`fossa.yml` を流さない（`if: github.actor != 'dependabot[bot]'`）。依存を上げてライセンスが変わったときは、マージ後の `main` への push で分かる
+- `fossas/fossa-action` はリリースのコミット SHA で固定し、CLI の版も `pinned-cli-version` で固定する（固定しないと、毎回最新の CLI が入る）。どちらも上げるときは、出てから 2 週間以上たったものにする。CLI の版は Dependabot が見ないので手で上げる
+  - CLI を入れるスクリプト（`install-latest.sh`）は、アクションの中で fossa-cli の `master` から取っていて固定できない（「CI/CD > Snyk」の Docker イメージと同じ）
+- FOSSA の CLI は `gradlew` に独自の init script を当てて依存を解決する。依存の検証（「CI/CD > SpotBugs」）で落ちたら、空の `GRADLE_USER_HOME` で `--write-verification-metadata sha256` を付けて同じ解決を流し、メタデータを足す
 
 #### SonarQube Cloud
 
@@ -205,6 +218,7 @@ tsumory/
 ├── .github/dependabot.yml        # 依存のバージョンアップの PR（「CI/CD > Dependabot」）
 ├── .github/workflows/snyk.yml    # 依存の脆弱性の検査（「CI/CD > Snyk」）
 ├── .github/workflows/osv-scanner.yml # 依存の脆弱性の検査（「CI/CD > OSV-Scanner」）
+├── .github/workflows/fossa.yml   # 依存のライセンスの検査（「CI/CD > FOSSA」）
 ├── .github/workflows/sonar.yml   # コードの品質の解析（「CI/CD > SonarQube Cloud」）
 ├── .dockerignore
 ├── config/spotbugs/exclude.xml   # SpotBugs で直さないと決めた指摘（「CI/CD > SpotBugs」）
