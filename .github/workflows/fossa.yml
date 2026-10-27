@@ -39,10 +39,10 @@ jobs:
           pinned-cli-version: v3.20.1
           branch: ${{ github.head_ref || github.ref_name }}
 
-      # FOSSA のポリシーに違反するライセンスがあれば落とす
+      # FOSSA のポリシーに違反するライセンスがあれば落とす。fossa test は --branch を受け付けないので branch は渡さない
+      # （上の analyze と同じコミットの結果を読む）
       - uses: fossas/fossa-action@29693cc50323968e039056be419b32989fc5880c # v2.0.0
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
           pinned-cli-version: v3.20.1
-          branch: ${{ github.head_ref || github.ref_name }}
           run-tests: true
