@@ -171,11 +171,20 @@
 #### FOSSA
 
 - 依存（テスト用も含む）のライセンスを調べる。脆弱性は Snyk・OSV-Scanner が見る
-- `.github/workflows/fossa.yml`。`main` への push と `main` 向けの pull request で、`fossa analyze`（依存の一覧を送る）と `fossa test`（ポリシーに違反するライセンスがあれば落とす）を流す。`ci.yml` とは分け、デプロイは止めない（ポリシーと FOSSA のライセンスのデータは、コードを変えなくても変わるため。「CI/CD > Snyk」と同じ考え）
-- ポリシーは FOSSA の画面（Policies > Licensing）で決め、既定のポリシーにして CI が作るプロジェクトに当てる。tsumory はソフトウェアを配布しない Web サービスなので、ネットワーク越しの提供でも義務が生じるもの（AGPL・SSPL）を拒否し、配布したときに義務が生じるもの（GPL・LGPL）とライセンス不明は要確認にする。配布する（イメージを公開するなど）ことになったら見直す
+- `.github/workflows/fossa.yml`。`ci.yml` とは分け、デプロイは止めない（FOSSA のライセンスのデータは、コードを変えなくても変わるため。「CI/CD > Snyk」と同じ考え）
+  - `main` への push と `main` 向けの pull request で `fossa analyze`（依存の一覧を送る）を流す。`main` の各コミットの結果が、PR の比較の基準になる
+  - pull request でだけ `fossa test --diff <PR の base の SHA>` を流し、base にない issue が PR で増えたときだけ落とす。`main` への push では `fossa test` を流さない（差分なしだと、基準にした既存の issue で必ず落ちる）
+  - `fossa test` は `--branch` を受け付けない（`Invalid option '--branch'` で落ちる）。`branch` は `fossa analyze` にだけ渡す（PR の checkout はマージコミットの detached HEAD で、CLI がブランチ名を取れないため）
+  - base のコミットが analyze されていないと比較できない。FOSSA を入れた PR（2026-10-27）の base は、導入前のコミットだった
+- FOSSA は Free プランで、Custom Licensing Policy は使わない（既定のポリシーのまま）。Security・Quality は CI の判定に使わない（脆弱性は Snyk・OSV-Scanner が見る）
+- 2026-10-27 の導入時、Licensing の Flagged が 22 件あった（Denied・Unlicensed は 0 件）。中身を確かめたうえで、これを基準（ベースライン）として扱い、PR で増えたものだけを見る。Flagged は「使用禁止」ではない
+  - 確かめた結果、避けるべきライセンスはなかった。tomcat-embed-core（Declared は Apache-2.0）の GPL・CDDL・EPL は、同梱のサーブレット・JSP の XSD のもの。Java EE の XSD は CDDL か GPL、Jakarta EE の XSD は EPL-2.0 か GPL-2.0+Classpath Exception の選択式で、Tomcat の `META-INF/LICENSE` が CDDL-1.0・EPL-2.0 を選んでいる。jakarta.annotation・transaction・persistence・activation、logback も EPL-2.0 か BSD-3 を選べるデュアルライセンス。JUnit・AspectJ などの GPL は、EPL-2.0 の本文の中で GPL に触れているだけ
+  - tsumory は改変も配布もしない Web サービスなので、改変して配布したときにだけ義務が生じるもの（EPL・CDDL・LGPL・GPL+Classpath Exception）は許容する。ネットワーク越しの提供でも義務が生じるもの（AGPL・SSPL）と、利用を制限するもの（Commons Clause・BUSL・CC-BY-NC など）は使わない。配布する（イメージを公開するなど）ことになったら見直す
+  - PR で新しい issue が出たら、Declared（pom のライセンス）と Discovered（JAR の中のファイルから見つかったライセンス）を分けて見る。誤検知と決めつけず、そのファイルを開き、デュアルライセンスでどれを選べるか、同梱元の LICENSE がどれを選んでいるかを確かめる
 - FOSSA の GitHub 連携（Quick Import）でリポジトリを取り込まない。CI の解析とプロジェクトが 2 つでき、結果が食い違う（「CI/CD > SonarQube Cloud」の自動解析と同じ）
-- API キーは GitHub のリポジトリの Secret `FOSSA_API_KEY`（push 専用ではないキー。`fossa test` で結果を読むため）。ワークフローやコードに書かない
-  - Dependabot の PR は Actions の Secret を読めないので、`fossa.yml` を流さない（`if: github.actor != 'dependabot[bot]'`）。依存を上げてライセンスが変わったときは、マージ後の `main` への push で分かる
+- API キーは GitHub のリポジトリの Secret `FOSSA_API_KEY`（push 専用のキー）。ワークフローやコードに書かない
+  - push 専用のキーでは、`fossa test` は issue の件数だけを出し、どの依存の何のライセンスかはログに出ない。詳細は FOSSA の画面で見る
+  - Dependabot の PR は Actions の Secret を読めないので、`fossa.yml` を流さない（`if: github.actor != 'dependabot[bot]'`）。`main` への push でも `fossa test` は流さないので、Dependabot が上げた依存のライセンスの変化は CI では分からない。Dependabot の PR をマージしたら、FOSSA の画面で issue が増えていないかを見る
 - `fossas/fossa-action` はリリースのコミット SHA で固定し、CLI の版も `pinned-cli-version` で固定する（固定しないと、毎回最新の CLI が入る）。どちらも上げるときは、出てから 2 週間以上たったものにする。CLI の版は Dependabot が見ないので手で上げる
   - CLI を入れるスクリプト（`install-latest.sh`）は、アクションの中で fossa-cli の `master` から取っていて固定できない（「CI/CD > Snyk」の Docker イメージと同じ）
 - FOSSA の CLI は `gradlew` に独自の init script を当てて依存を解決する。依存の検証（「CI/CD > SpotBugs」）で落ちたら、空の `GRADLE_USER_HOME` で `--write-verification-metadata sha256` を付けて同じ解決を流し、メタデータを足す
