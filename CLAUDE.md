@@ -64,6 +64,7 @@
 - `./gradlew build` — ビルドとテスト
 - `./gradlew test` — テストのみ
 - `./gradlew spotlessApply` — 整形
+- `./gradlew generateLicenseReport` — 依存のライセンスの一覧（「CI/CD > Gradle License Report」）
 - `docker build -t tsumory .` — 本番用のイメージを作る（「本番のコンテナ」）
 - `docker compose --profile deploy up --build` — アプリもコンテナで動かす（本番相当の構成を手元で確かめる。「compose の構成」）
 - 本番へのデプロイは手で行わない。`main` に push すると、GitHub Actions がテストを流し、通れば Railway にデプロイする（「CI/CD」）
@@ -188,6 +189,16 @@
 - `fossas/fossa-action` はリリースのコミット SHA で固定し、CLI の版も `pinned-cli-version` で固定する（固定しないと、毎回最新の CLI が入る）。どちらも上げるときは、出てから 2 週間以上たったものにする。CLI の版は Dependabot が見ないので手で上げる
   - CLI を入れるスクリプト（`install-latest.sh`）は、アクションの中で fossa-cli の `master` から取っていて固定できない（「CI/CD > Snyk」の Docker イメージと同じ）
 - FOSSA の CLI は `gradlew` に独自の init script を当てて依存を解決する。依存の検証（「CI/CD > SpotBugs」）で落ちたら、空の `GRADLE_USER_HOME` で `--write-verification-metadata sha256` を付けて同じ解決を流し、メタデータを足す
+
+#### Gradle License Report
+
+- `build.gradle.kts` のプラグイン（`com.github.jk1.dependency-license-report`）。`./gradlew generateLicenseReport` で、依存のライセンスの一覧を `build/reports/dependency-license/index.html` に出す（ライセンスごとにまとめ、依存ごとに Manifest・POM のライセンスと同梱のライセンスファイルを出す）
+- 一覧を出すだけで、判定はしない。`check` にも CI にも入れない（ライセンスの関門は「CI/CD > FOSSA」）。依存を足したときや、ライセンスの一覧が要るときに手で流す
+- 対象は `productionRuntimeClasspath`（jar に入る依存）。`runtimeClasspath` は `developmentOnly` の `spring-boot-docker-compose` も含むので使わない。テスト用の依存も入れない
+- `LicenseBundleNormalizer` で、同じライセンスの書き方の違い（「Apache License, Version 2.0」と「Apache-2.0」など）をまとめる
+- CSV（`CsvReportRenderer`）は使わない。依存ごとにライセンスを 1 つしか出さないので、デュアルライセンスの片方しか見えない（logback が LGPL-2.1 だけ、jakarta.annotation が GPL-2.0+Classpath Exception だけに見える。「CI/CD > FOSSA」の 2026-10-27 の確かめ）
+- 依存がデュアルライセンスなら、一覧の複数のライセンスの節に同じ依存が出る。どちらかの節にあるだけで、そのライセンスで使っているとは限らない
+- 2026-10-28 の導入時は 3.1.4。依存の検証のメタデータに足したのはプラグイン本体だけ（ほかの依存の pom はすでにあった）。jar と `.module` の SHA-1 を Gradle Plugin Portal の公開値と照らし合わせた
 
 #### SonarQube Cloud
 

@@ -1,3 +1,7 @@
+import com.github.jk1.license.filter.DependencyFilter
+import com.github.jk1.license.filter.LicenseBundleNormalizer
+import com.github.jk1.license.render.InventoryHtmlReportRenderer
+import com.github.jk1.license.render.ReportRenderer
 import com.github.spotbugs.snom.Confidence
 import com.github.spotbugs.snom.Effort
 
@@ -10,6 +14,7 @@ plugins {
     id("org.owasp.dependencycheck") version "13.0.0"
     id("org.sonarqube") version "7.5.0.8588"
     id("com.github.spotbugs") version "6.5.12"
+    id("com.github.jk1.dependency-license-report") version "3.1.4"
 }
 
 group = "com.example"
@@ -142,6 +147,17 @@ tasks.spotbugsMain {
 // テストのコードは対象にしない（Mockito の書き方などで、指摘にしないものばかり出る）
 tasks.spotbugsTest {
     enabled = false
+}
+
+// 依存のライセンスの一覧を出す。手で流すだけで、build には入れない（CLAUDE.md の「CI/CD > Gradle License Report」）
+licenseReport {
+    // jar に入る依存だけ（runtimeClasspath は developmentOnly の spring-boot-docker-compose も含む。テスト用も含めない）
+    configurations = arrayOf("productionRuntimeClasspath")
+    excludeBoms = true
+    // 「Apache License, Version 2.0」と「Apache-2.0」などの書き方の違いを、同じライセンスにまとめる
+    filters = arrayOf<DependencyFilter>(LicenseBundleNormalizer())
+    // CSV は依存ごとにライセンスを 1 つしか出さず、デュアルライセンスの片方しか見えないので使わない
+    renderers = arrayOf<ReportRenderer>(InventoryHtmlReportRenderer("index.html", "tsumory"))
 }
 
 sonar {
