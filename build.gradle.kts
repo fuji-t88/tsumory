@@ -13,7 +13,7 @@ plugins {
     id("com.diffplug.spotless") version "8.10.4"
     id("org.owasp.dependencycheck") version "13.0.0"
     id("org.sonarqube") version "7.5.0.8588"
-    id("com.github.spotbugs") version "6.5.12"
+    id("com.github.spotbugs") version "6.5.13"
     id("com.github.jk1.dependency-license-report") version "3.1.4"
 }
 
@@ -50,7 +50,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("org.thymeleaf.extras:thymeleaf-extras-springsecurity6")
-    implementation("com.anthropic:anthropic-java:2.71.0")
+    implementation("com.anthropic:anthropic-java:2.73.0")
     implementation("org.webjars:bootstrap:5.3.8")
     implementation("org.webjars:webjars-locator-lite:1.1.5")
     compileOnly("org.projectlombok:lombok")
