@@ -35,7 +35,7 @@ RUN jlink \
     --output /jre
 
 # ---- 実行 ----
-FROM alpine:3.24.2
+FROM alpine:3.24.3
 COPY --from=jre /jre /opt/java
 ENV JAVA_HOME=/opt/java \
     PATH=/opt/java/bin:$PATH \
