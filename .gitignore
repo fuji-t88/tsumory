@@ -38,3 +38,7 @@ out/
 
 ### Secrets ###
 .env
+
+### WBS (local only) ###
+/WBS_tsumory.*
+/tools/WbsSync.java
