@@ -153,6 +153,7 @@
   - Spring Boot を上げたら、上書きした版が Spring Boot の決める版より古くなっていないかを確かめ、追いついたものは消す（上書きが残ると、古い版に固定される）
   - 2026-10-22：Spring Boot 4.1.1 に対して `tomcat`・`jackson-bom`（Jackson 3）・`jackson-2-bom`（Anthropic SDK が使う Jackson 2）・`postgresql` を上書きした
   - 2026-10-26：Snyk が Tomcat 11.0.26 に Critical（`SNYK-JAVA-ORGAPACHETOMCATEMBED-21707475`）を見つけたので、`tomcat` の上書きを 11.0.27 に上げた（Spring Boot 4.1.2 でも直るが、Spring Boot を上げるのは Dependabot に任せる）
+  - 2026-11-20：Snyk が Jackson 2.21.7・3.1.7 に Critical（信頼できないデータのデシリアライズ。`SNYK-JAVA-COMFASTERXMLJACKSONCORE-21761837`・`SNYK-JAVA-TOOLSJACKSONCORE-21761838`）を見つけたので、`jackson-2-bom` の上書きを 2.21.8、`jackson-bom` の上書きを 3.1.8 に上げた（Spring Boot 4.1.3 でも直る）
 - JAXB の実装（`org.glassfish.jaxb`。Hibernate の依存）は、`build.gradle.kts` の `configurations.all` で外している。2026-10-22 に Snyk が XXE（`SNYK-JAVA-ORGGLASSFISHJAXB-20883142`）を見つけ、直った版がなかったため
   - Hibernate がこれを使うのは XML のマッピング（`META-INF/orm.xml` など）を読むときだけ。マッピングはアノテーションで書き、XML のマッピングを置かない
   - 外したあとに `bootRun` で、Flyway の確認・Hibernate の起動・ユーザーを読むクエリ（ログイン）まで動くことを確かめた（テストは DB につながないので、テストでは確かめられない）
