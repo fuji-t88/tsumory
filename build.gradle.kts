@@ -174,6 +174,11 @@ sonar {
                 "fragmentTitle" to ("Web:PageWithoutTitleCheck" to "src/main/resources/templates/fragments/**"),
                 "loginAutofocus" to ("Web:S9379" to "src/main/resources/templates/login.html"),
                 "initialUserHash" to ("secrets:S8215" to "src/main/resources/db/migration/V1__init.sql"),
+                "photoUpdatedAtBackfill" to
+                    (
+                        "plsql:DeleteOrUpdateWithoutWhereCheck" to
+                            "src/main/resources/db/migration/V5__add_updated_at_to_post_photos.sql"
+                    ),
                 "railwayNpx" to ("githubactions:S6505" to ".github/workflows/ci.yml"),
                 "gradleLockfile" to ("text:S8569" to "build.gradle.kts"),
                 "gradleVerification" to ("kotlin:S6474" to "**"),

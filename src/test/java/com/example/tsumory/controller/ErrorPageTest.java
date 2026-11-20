@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.example.tsumory.config.CustomUserDetails;
 import com.example.tsumory.config.SecurityConfig;
+import com.example.tsumory.service.PhotoValidator;
 import jakarta.servlet.RequestDispatcher;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -49,6 +50,11 @@ class ErrorPageTest {
         @GetMapping("/test/not-found-page")
         String renderNotFound() {
             return "error/404";
+        }
+
+        @GetMapping("/test/too-large-page")
+        String renderTooLarge() {
+            return "error/413";
         }
     }
 
@@ -106,6 +112,33 @@ class ErrorPageTest {
                 .isNull();
         assertThat(resolver.resolveErrorView(request, HttpStatus.FORBIDDEN, Map.of()))
                 .isNull();
+    }
+
+    @Test
+    void アップロードの上限を超えたら写真の大きさの上限と戻るボタンを出す() throws Exception {
+        // 上限の数字は InputLimitsAdvice が渡す（テンプレートに書かない）
+        var html = mockMvc.perform(get("/test/too-large-page").with(user(DEMO)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                .contains("413")
+                .contains("ファイルが大きすぎます")
+                .contains("写真は " + PhotoValidator.MAX_BYTES / (1024 * 1024) + "MB 以内にしてください")
+                .contains("入力した内容は送られていません。")
+                .contains("<a href=\"/\" class=\"btn btn-primary\">今日のつぶやきへ戻る</a>")
+                .doesNotContain("ログアウト");
+    }
+
+    @Test
+    void 状態コードが413なら専用の画面を選ぶ() {
+        var resolver = new DefaultErrorViewResolver(applicationContext, new WebProperties.Resources());
+
+        assertThat(resolver.resolveErrorView(new MockHttpServletRequest(), HttpStatus.CONTENT_TOO_LARGE, Map.of())
+                        .getViewName())
+                .isEqualTo("error/413");
     }
 
     @Test

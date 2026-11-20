@@ -16,9 +16,11 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
@@ -28,10 +30,16 @@ import com.example.tsumory.config.CustomUserDetailsService;
 import com.example.tsumory.config.SecurityConfig;
 import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
+import com.example.tsumory.domain.PostPhoto;
 import com.example.tsumory.repository.UserRepository;
 import com.example.tsumory.service.DailyPostLimitExceededException;
 import com.example.tsumory.service.DiaryItem;
 import com.example.tsumory.service.DiaryService;
+import com.example.tsumory.service.InvalidPhotoException;
+import com.example.tsumory.service.PhotoChange;
+import com.example.tsumory.service.PhotoContent;
+import com.example.tsumory.service.PhotoUpload;
+import com.example.tsumory.service.PhotoValidator;
 import com.example.tsumory.service.PostItem;
 import com.example.tsumory.service.PostService;
 import com.example.tsumory.service.ResourceNotFoundException;
@@ -39,11 +47,14 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.MatchResult;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -51,14 +62,16 @@ import org.springframework.test.web.servlet.MockMvc;
 @Import({SecurityConfig.class, CustomUserDetailsService.class})
 class PostControllerTest {
 
+    private static final byte[] JPEG_BYTES = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x01};
+
     private static final Long USER_ID = 1L;
     private static final LocalDate TODAY = LocalDate.of(2026, 10, 7);
     private static final CustomUserDetails PRINCIPAL = new CustomUserDetails(USER_ID, "demo", "$2a$10$hash");
 
     private static final PostItem TODAY_POST =
-            new PostItem(10L, "昼のカレーが辛すぎた", LocalTime.of(12, 40), false, PostCategory.PRIVATE);
+            new PostItem(10L, "昼のカレーが辛すぎた", LocalTime.of(12, 40), false, PostCategory.PRIVATE, false);
     private static final PostItem EDITED_POST =
-            new PostItem(11L, "寝坊した", LocalTime.of(8, 12), true, PostCategory.OTHER);
+            new PostItem(11L, "寝坊した", LocalTime.of(8, 12), true, PostCategory.OTHER, false);
 
     @Autowired
     private MockMvc mockMvc;
@@ -319,7 +332,290 @@ class PostControllerTest {
                 .andExpect(redirectedUrl("/"));
 
         // 前後の空白は PostService が保存の前に取り除くので、controller は入力値をそのまま渡す
-        verify(postService).create(USER_ID, "  寝坊した  ");
+        verify(postService).create(USER_ID, "  寝坊した  ", null);
+    }
+
+    // --- 写真の添付（phase3-spec.md の「6. 処理の詳細 > つぶやきの投稿」） ---
+
+    @Test
+    void 写真を1枚付けて投稿すると写真も渡す() throws Exception {
+        mockMvc.perform(multipart("/posts")
+                        .file(new MockMultipartFile("photo", "lunch.jpg", "image/jpeg", JPEG_BYTES))
+                        .param("content", "昼はカレー")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/"));
+
+        verify(postService).create(USER_ID, "昼はカレー", new PhotoUpload(JPEG_BYTES));
+    }
+
+    @Test
+    void 写真を選ばずに投稿すると写真なしとして扱う() throws Exception {
+        // 写真を選ばなかったときも、ブラウザはファイル名と中身が空の部分を送る
+        mockMvc.perform(multipart("/posts")
+                        .file(new MockMultipartFile("photo", "", "application/octet-stream", new byte[0]))
+                        .param("content", "昼はカレー")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/"));
+
+        verify(postService).create(USER_ID, "昼はカレー", null);
+    }
+
+    @Test
+    void 写真を付けても本文の決まりは手で入力したときと同じ() throws Exception {
+        // 写真付きでも、本文は 100 文字まで・改行なし（CM-REQ-01）
+        for (var content : List.of("あ".repeat(Post.CONTENT_MAX_LENGTH + 1), "朝\n昼")) {
+            mockMvc.perform(multipart("/posts")
+                            .file(new MockMultipartFile("photo", "lunch.jpg", "image/jpeg", JPEG_BYTES))
+                            .param("content", content)
+                            .with(user(PRINCIPAL))
+                            .with(csrf()))
+                    .andExpect(status().isOk())
+                    .andExpect(view().name("home"));
+        }
+
+        verify(postService, never()).create(anyLong(), anyString(), any());
+    }
+
+    @Test
+    void 写真を2枚送ると入力エラーを表示して投稿しない() throws Exception {
+        // 画面からは 1 枚しか選べないが、リクエストを直接作れば 2 枚送れる
+        mockMvc.perform(multipart("/posts")
+                        .file(new MockMultipartFile("photo", "a.jpg", "image/jpeg", JPEG_BYTES))
+                        .file(new MockMultipartFile("photo", "b.jpg", "image/jpeg", JPEG_BYTES))
+                        .param("content", "昼はカレー")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(view().name("home"))
+                .andExpect(content().string(containsString("写真は " + PostPhoto.MAX_PER_POST + " 枚まで添付できます")));
+
+        verify(postService, never()).create(anyLong(), anyString(), any());
+    }
+
+    @Test
+    void 空のファイルを選んだら写真として渡しserviceに断らせる() throws Exception {
+        // ファイル名があれば、中身が空でも「写真を選ばなかった」とはみなさない（黙って写真なしで投稿しない）
+        mockMvc.perform(multipart("/posts")
+                        .file(new MockMultipartFile("photo", "empty.jpg", "image/jpeg", new byte[0]))
+                        .param("content", "昼はカレー")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/"));
+
+        verify(postService).create(USER_ID, "昼はカレー", new PhotoUpload(new byte[0]));
+    }
+
+    @Test
+    void 受け付けない写真は理由を表示し本文を残して投稿しない() throws Exception {
+        doThrow(new InvalidPhotoException(InvalidPhotoException.Reason.UNSUPPORTED_TYPE))
+                .when(postService)
+                .create(USER_ID, "昼はカレー", new PhotoUpload(JPEG_BYTES));
+
+        mockMvc.perform(multipart("/posts")
+                        .file(new MockMultipartFile("photo", "lunch.jpg", "image/jpeg", JPEG_BYTES))
+                        .param("content", "昼はカレー")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(view().name("home"))
+                .andExpect(content().string(containsString("写真は JPEG か PNG にしてください")))
+                .andExpect(content().string(containsString(">昼はカレー</textarea>")));
+    }
+
+    @Test
+    void 写真を受け付けない理由ごとにメッセージを出し上限は定数から出す() {
+        assertThat(PostController.photoErrorMessage(InvalidPhotoException.Reason.EMPTY))
+                .isEqualTo("写真のファイルが空です");
+        assertThat(PostController.photoErrorMessage(InvalidPhotoException.Reason.TOO_LARGE))
+                .isEqualTo("写真は " + PhotoValidator.MAX_BYTES / (1024 * 1024) + "MB 以内にしてください");
+        assertThat(PostController.photoErrorMessage(InvalidPhotoException.Reason.UNSUPPORTED_TYPE))
+                .isEqualTo("写真は JPEG か PNG にしてください");
+        assertThat(PostController.photoErrorMessage(InvalidPhotoException.Reason.TOO_MANY_PIXELS))
+                .isEqualTo("写真の画素数が多すぎます（" + PhotoValidator.MAX_PIXELS / 10_000 + " 万画素まで）");
+        assertThat(PostController.photoErrorMessage(InvalidPhotoException.Reason.BROKEN))
+                .isEqualTo("写真を読み込めませんでした。別の写真を選んでください");
+    }
+
+    @Test
+    void 写真の欄に受け付ける形式と大きさを示し送る前にブラウザでも確かめる() throws Exception {
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(photoInputs(html))
+                .singleElement()
+                .asString()
+                .contains("accept=\"image/jpeg,image/png\"")
+                .contains("data-max-bytes=\"" + PhotoValidator.MAX_BYTES + "\"")
+                .contains("data-type-message=\"写真は JPEG か PNG にしてください\"");
+        assertThat(html)
+                .contains("JPEG か PNG・" + PhotoValidator.MAX_BYTES / (1024 * 1024) + "MB まで")
+                .contains("<script src=\"/js/photo-input.js\"></script>");
+    }
+
+    @Test
+    void CSRFのトークンがない写真付きの投稿は拒否する() throws Exception {
+        mockMvc.perform(multipart("/posts")
+                        .file(new MockMultipartFile("photo", "lunch.jpg", "image/jpeg", JPEG_BYTES))
+                        .param("content", "昼はカレー")
+                        .with(user(PRINCIPAL)))
+                .andExpect(status().isForbidden());
+
+        verify(postService, never()).create(anyLong(), anyString(), any());
+    }
+
+    @Test
+    void 投稿フォームは写真を送れる形にし写真の欄は1つで複数を選べない() throws Exception {
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                .contains("enctype=\"multipart/form-data\"")
+                .contains("写真（任意・" + PostPhoto.MAX_PER_POST + " 枚まで）");
+        assertThat(photoInputs(html)).singleElement().asString().doesNotContain("multiple");
+    }
+
+    @Test
+    void 選んだ写真のプレビューと解除のボタンを隠して置いておく() throws Exception {
+        // プレビューと解除は photo-input.js が出す。解除のボタンはフォームを送らない（type="button"）
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(photoInputs(html)).singleElement().asString().contains("data-preview=\"post-photo-preview\"");
+        assertThat(html)
+                .contains("<div id=\"post-photo-preview\" class=\"mt-2\" hidden>")
+                .contains("alt=\"選んだ写真のプレビュー\"")
+                .contains(
+                        "<button type=\"button\" class=\"btn btn-outline-secondary btn-sm js-photo-clear\">写真を外す</button>");
+    }
+
+    @Test
+    void 投稿の上限に達したら写真の欄も無効にする() throws Exception {
+        when(postService.isPostLimitReached(USER_ID, TODAY)).thenReturn(true);
+
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(photoInputs(html)).singleElement().asString().contains("disabled");
+    }
+
+    // --- 写真の取得と表示（phase3-spec.md の「6. 処理の詳細 > 写真の取得」） ---
+
+    @Test
+    void 自分の写真を保存した形式で表示用に返す() throws Exception {
+        when(postService.findPhoto(USER_ID, 10L)).thenReturn(new PhotoContent("image/jpeg", JPEG_BYTES));
+
+        mockMvc.perform(get("/posts/10/photo").with(user(PRINCIPAL)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "image/jpeg"))
+                .andExpect(header().string("Content-Disposition", "inline; filename=\"photo.jpeg\""))
+                // 形式をブラウザに推測させない（Spring Security が付ける）
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(content().bytes(JPEG_BYTES));
+    }
+
+    @Test
+    void 他人の写真や写真のないつぶやきは本文なしの404() throws Exception {
+        when(postService.findPhoto(USER_ID, 99L)).thenThrow(new ResourceNotFoundException("PostPhoto", 99L));
+
+        mockMvc.perform(get("/posts/99/photo").with(user(PRINCIPAL)))
+                .andExpect(status().isNotFound())
+                .andExpect(content().bytes(new byte[0]));
+    }
+
+    @Test
+    void 未ログインなら写真を返さずログイン画面へリダイレクト() throws Exception {
+        mockMvc.perform(get("/posts/10/photo")).andExpect(redirectedUrl("/login"));
+
+        verify(postService, never()).findPhoto(anyLong(), anyLong());
+    }
+
+    @Test
+    void 写真のあるつぶやきにだけサムネイルを出し押すと元の写真を開く() throws Exception {
+        when(postService.findPosts(USER_ID, TODAY))
+                .thenReturn(List.of(
+                        new PostItem(10L, "昼のカレーが辛すぎた", LocalTime.of(12, 40), false, PostCategory.PRIVATE, true),
+                        new PostItem(11L, "寝坊した", LocalTime.of(8, 12), false, PostCategory.OTHER, false)));
+
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                .contains("<a href=\"/posts/10/photo\" target=\"_blank\" rel=\"noopener\"")
+                .contains("<img src=\"/posts/10/photo\"")
+                .doesNotContain("/posts/11/photo");
+    }
+
+    // --- 音声入力（phase3-spec.md の「5. 画面 > 音声入力」） ---
+
+    @Test
+    void 投稿フォームに音声入力の操作と注意書きを隠して置きスクリプトに任せる() throws Exception {
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                // 対応しているかは voice-input.js が確かめてから出す。画面を開いただけではマイクを求めない
+                .contains(
+                        "<div class=\"js-voice-input\" data-target=\"post-content\" data-unsupported=\"voice-unsupported\" hidden")
+                .contains(
+                        "<button type=\"button\" class=\"btn btn-outline-secondary btn-sm js-voice-start\">音声で入力</button>")
+                .contains(
+                        "<button type=\"button\" class=\"btn btn-outline-primary btn-sm js-voice-stop\" hidden>停止</button>")
+                .contains(
+                        "<button type=\"button\" class=\"btn btn-outline-secondary btn-sm js-voice-cancel\" hidden>キャンセル</button>")
+                .contains("role=\"status\" aria-live=\"polite\"")
+                .contains("ブラウザによっては、音声が外部の認識サービスに送られます。")
+                .contains("Tsumory のサーバーには音声を送らず、保存もしません。")
+                .contains(
+                        "<p id=\"voice-unsupported\" class=\"form-text mb-0\" hidden>このブラウザでは音声入力を使えません。キーボードで入力してください。</p>")
+                .contains("<script src=\"/js/voice-input.js\"></script>");
+    }
+
+    @Test
+    void 投稿の上限に達したら音声入力を出さない() throws Exception {
+        when(postService.isPostLimitReached(USER_ID, TODAY)).thenReturn(true);
+
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html).doesNotContain("js-voice-input").doesNotContain("voice-unsupported");
+    }
+
+    @Test
+    void 音声入力は投稿フォームだけに置き編集フォームには置かない() throws Exception {
+        when(postService.getEditablePost(USER_ID, 10L)).thenReturn(TODAY_POST);
+
+        var html = mockMvc.perform(get("/posts/10/edit").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html.split("js-voice-input", -1)).hasSize(2);
+        assertThat(html).doesNotContain("data-target=\"edit-content\"");
+    }
+
+    /** 画面の中の、写真を選ぶ欄（{@code <input type="file" name="photo">}）のタグ。 */
+    private static List<String> photoInputs(String html) {
+        return Pattern.compile("<input[^>]*name=\"photo\"[^>]*>")
+                .matcher(html)
+                .results()
+                .map(MatchResult::group)
+                .toList();
     }
 
     @Test
@@ -335,7 +631,7 @@ class PostControllerTest {
                     .andExpect(content().string(containsString("改行は入れられません")));
         }
 
-        verify(postService, never()).create(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString(), any());
     }
 
     @Test
@@ -358,7 +654,7 @@ class PostControllerTest {
                     .andExpect(content().string(not(containsString("改行は入れられません"))));
         }
 
-        verify(postService, never()).create(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString(), any());
     }
 
     @Test
@@ -373,7 +669,7 @@ class PostControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("見えない文字や制御文字は入れられません")));
 
-        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any());
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any(), any());
     }
 
     @Test
@@ -387,7 +683,7 @@ class PostControllerTest {
                         .with(csrf()))
                 .andExpect(redirectedUrl("/"));
 
-        verify(postService).create(USER_ID, content);
+        verify(postService).create(USER_ID, content, null);
     }
 
     @Test
@@ -403,7 +699,7 @@ class PostControllerTest {
                 .andExpect(content().string(containsString("action=\"/posts/10/edit\"")))
                 .andExpect(content().string(containsString("改行は入れられません")));
 
-        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any());
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any(), any());
     }
 
     @Test
@@ -416,7 +712,7 @@ class PostControllerTest {
                 .andExpect(view().name("home"))
                 .andExpect(content().string(containsString("内容を入力してください")));
 
-        verify(postService, never()).create(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString(), any());
     }
 
     @Test
@@ -430,7 +726,7 @@ class PostControllerTest {
                 .andExpect(view().name("home"))
                 .andExpect(content().string(containsString("内容を入力してください")));
 
-        verify(postService, never()).create(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString(), any());
     }
 
     @Test
@@ -445,7 +741,7 @@ class PostControllerTest {
                 .andExpect(content().string(containsString("100 文字以内で入力してください")))
                 .andExpect(content().string(containsString(content)));
 
-        verify(postService, never()).create(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString(), any());
     }
 
     @Test
@@ -469,7 +765,7 @@ class PostControllerTest {
     void 上限に達していたらメッセージを付けてトップへリダイレクト() throws Exception {
         doThrow(new DailyPostLimitExceededException(USER_ID, PostService.DAILY_POST_LIMIT))
                 .when(postService)
-                .create(USER_ID, "17 件目");
+                .create(USER_ID, "17 件目", null);
 
         mockMvc.perform(post("/posts")
                         .param("content", "17 件目")
@@ -484,7 +780,7 @@ class PostControllerTest {
         mockMvc.perform(post("/posts").param("content", "寝坊した").with(user(PRINCIPAL)))
                 .andExpect(status().isForbidden());
 
-        verify(postService, never()).create(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString(), any());
     }
 
     // --- 編集モード ---
@@ -550,7 +846,112 @@ class PostControllerTest {
                         .with(csrf()))
                 .andExpect(redirectedUrl("/"));
 
-        verify(postService).edit(USER_ID, 10L, " 昼のカレーがおいしかった ", PostCategory.WORK);
+        verify(postService).edit(USER_ID, 10L, " 昼のカレーがおいしかった ", PostCategory.WORK, PhotoChange.KEEP);
+    }
+
+    @Test
+    void 編集で写真を選ぶと差し替えとして渡す() throws Exception {
+        mockMvc.perform(multipart("/posts/10/edit")
+                        .file(new MockMultipartFile("photo", "new.jpg", "image/jpeg", JPEG_BYTES))
+                        .param("content", "昼はカレー")
+                        .param("category", "PRIVATE")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/"));
+
+        verify(postService)
+                .edit(
+                        USER_ID,
+                        10L,
+                        "昼はカレー",
+                        PostCategory.PRIVATE,
+                        new PhotoChange.Replace(new PhotoUpload(JPEG_BYTES)));
+    }
+
+    @Test
+    void 編集で写真を外すにチェックすると外すとして渡す() throws Exception {
+        mockMvc.perform(multipart("/posts/10/edit")
+                        .file(new MockMultipartFile("photo", "", "application/octet-stream", new byte[0]))
+                        .param("content", "昼はカレー")
+                        .param("category", "PRIVATE")
+                        .param("removePhoto", "true")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/"));
+
+        verify(postService).edit(USER_ID, 10L, "昼はカレー", PostCategory.PRIVATE, PhotoChange.REMOVE);
+    }
+
+    @Test
+    void 写真を外すと差し替えを同時に選ぶとエラーを表示して保存しない() throws Exception {
+        when(postService.getEditablePost(USER_ID, 10L)).thenReturn(TODAY_POST);
+
+        mockMvc.perform(multipart("/posts/10/edit")
+                        .file(new MockMultipartFile("photo", "new.jpg", "image/jpeg", JPEG_BYTES))
+                        .param("content", "昼はカレー")
+                        .param("category", "PRIVATE")
+                        .param("removePhoto", "true")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(view().name("home"))
+                .andExpect(content().string(containsString("写真を外すか差し替えるか、どちらかにしてください")));
+
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any(), any());
+    }
+
+    @Test
+    void 差し替える写真を受け付けないときは編集モードのまま理由を表示する() throws Exception {
+        when(postService.getEditablePost(USER_ID, 10L)).thenReturn(TODAY_POST);
+        doThrow(new InvalidPhotoException(InvalidPhotoException.Reason.BROKEN))
+                .when(postService)
+                .edit(
+                        USER_ID,
+                        10L,
+                        "昼はカレー",
+                        PostCategory.PRIVATE,
+                        new PhotoChange.Replace(new PhotoUpload(JPEG_BYTES)));
+
+        mockMvc.perform(multipart("/posts/10/edit")
+                        .file(new MockMultipartFile("photo", "new.jpg", "image/jpeg", JPEG_BYTES))
+                        .param("content", "昼はカレー")
+                        .param("category", "PRIVATE")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(view().name("home"))
+                .andExpect(content().string(containsString("写真を読み込めませんでした。別の写真を選んでください")))
+                .andExpect(content().string(containsString(">昼はカレー</textarea>")));
+    }
+
+    @Test
+    void 写真のあるつぶやきの編集モードでは今の写真と外すチェックと差し替えの欄を出す() throws Exception {
+        when(postService.getEditablePost(USER_ID, 10L))
+                .thenReturn(new PostItem(10L, "昼のカレーが辛すぎた", LocalTime.of(12, 40), false, PostCategory.PRIVATE, true));
+
+        var html = mockMvc.perform(get("/posts/10/edit").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                .contains("enctype=\"multipart/form-data\" class=\"js-submit-once\" data-submitting-label=\"保存しています…\"")
+                .contains("<img src=\"/posts/10/photo\"")
+                .contains("name=\"removePhoto\" value=\"true\"")
+                .contains("写真を差し替える（任意）")
+                .contains("id=\"edit-photo\"");
+    }
+
+    @Test
+    void 写真のないつぶやきの編集モードでは外すチェックを出さず添付の欄を出す() throws Exception {
+        when(postService.getEditablePost(USER_ID, 10L)).thenReturn(TODAY_POST);
+
+        var html = mockMvc.perform(get("/posts/10/edit").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html).doesNotContain("name=\"removePhoto\"").contains("写真を添付する（任意）");
     }
 
     @Test
@@ -568,7 +969,7 @@ class PostControllerTest {
                 // 型変換の内部的なメッセージは出さない
                 .andExpect(content().string(not(containsString("Failed to convert"))));
 
-        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any());
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any(), any());
     }
 
     @Test
@@ -582,7 +983,7 @@ class PostControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("カテゴリを選んでください")));
 
-        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any());
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any(), any());
     }
 
     @Test
@@ -599,14 +1000,14 @@ class PostControllerTest {
                 .andExpect(content().string(containsString("100 文字以内で入力してください")))
                 .andExpect(content().string(containsString(content)));
 
-        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any());
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any(), any());
     }
 
     @Test
     void 他人のつぶやきの編集はメッセージを付けてトップへリダイレクト() throws Exception {
         doThrow(new ResourceNotFoundException("Post", 99L))
                 .when(postService)
-                .edit(USER_ID, 99L, "書き換え", PostCategory.OTHER);
+                .edit(USER_ID, 99L, "書き換え", PostCategory.OTHER, PhotoChange.KEEP);
 
         mockMvc.perform(post("/posts/99/edit")
                         .param("content", "書き換え")
@@ -634,7 +1035,7 @@ class PostControllerTest {
         mockMvc.perform(post("/posts/10/edit").param("content", "書き換え").with(user(PRINCIPAL)))
                 .andExpect(status().isForbidden());
 
-        verify(postService, never()).edit(anyLong(), anyLong(), any(), any());
+        verify(postService, never()).edit(anyLong(), anyLong(), any(), any(), any());
     }
 
     // --- カテゴリの修正 ---

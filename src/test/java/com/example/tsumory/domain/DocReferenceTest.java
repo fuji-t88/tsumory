@@ -26,8 +26,8 @@ import org.junit.jupiter.api.Test;
 class DocReferenceTest {
 
     /** {@code xxx.md の「…」}。続けて書いた {@code 「…」「…」} も拾う。 */
-    private static final Pattern REFERENCE =
-            Pattern.compile("(phase1-spec|phase2-spec|phases|mymanifesto|spec|CLAUDE)\\.md の(禁止事項)?((?:「[^」]+」)+)");
+    private static final Pattern REFERENCE = Pattern.compile(
+            "(phase1-spec|phase2-spec|phase3-spec|phases|mymanifesto|spec|CLAUDE)\\.md の(禁止事項)?((?:「[^」]+」)+)");
 
     /** コメントの改行と、次の行の頭の「*」「//」（Javadoc の終わりの「*／」は除く）。 */
     private static final Pattern CONTINUATION = Pattern.compile("\\R\\s*(?:\\*(?!/)|//)\\s?");

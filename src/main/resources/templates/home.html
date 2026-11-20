@@ -18,7 +18,7 @@
     <section class="card shadow-sm mb-4">
         <div class="card-body">
             <h2 class="h5 card-title mb-3">いまの気持ちをつぶやく</h2>
-            <form th:action="@{/posts}" th:object="${postForm}" method="post"
+            <form th:action="@{/posts}" th:object="${postForm}" method="post" enctype="multipart/form-data"
                   class="js-submit-once" data-submitting-label="つぶやいています…">
                 <div class="mb-2">
                     <!--/* 編集中は編集のフォームも同じ画面に出るので、th:field の id（content）を使わず別の id にする */-->
@@ -28,6 +28,58 @@
                               th:classappend="${#fields.hasErrors('content')} ? 'is-invalid'"></textarea>
                     <p th:if="${#fields.hasErrors('content')}" th:errors="*{content}" class="invalid-feedback"
                        role="alert"></p>
+                </div>
+                <!--/* 音声入力（phase3-spec.md の「5. 画面 > 音声入力」）。voice-input.js が、ブラウザが音声認識に対応していれば出し、
+                       対応していなければ代わりの案内を出す。JavaScript が無効なら、どちらも出ない（キーボードで入力できる）。
+                       画面の文言は data 属性で渡す。投稿の上限に達したら出さない */-->
+                <div th:unless="${postLimitReached}" class="mb-2">
+                    <div class="js-voice-input" data-target="post-content" data-unsupported="voice-unsupported" hidden
+                         data-text-idle="音声入力を使えます"
+                         data-text-listening="聞き取っています…話し終えたら「停止」を押してください"
+                         data-text-stopping="終了しています…"
+                         data-text-done="音声を入力しました。必要なら直してから投稿してください"
+                         data-text-cancelled="音声入力を取り消しました（始める前の文章に戻しました）"
+                         data-error-not-allowed="マイクの使用が許可されていません。ブラウザの設定で許可するか、キーボードで入力してください"
+                         data-error-audio-capture="マイクが見つかりません。マイクをつなぐか、キーボードで入力してください"
+                         data-error-no-speech="音声が聞き取れませんでした。もう一度お試しください"
+                         data-error-network="通信できず、音声を認識できませんでした。時間をおいてお試しいただくか、キーボードで入力してください"
+                         data-error-other="音声を認識できませんでした。もう一度お試しいただくか、キーボードで入力してください">
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm js-voice-start">音声で入力</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm js-voice-stop" hidden>停止</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm js-voice-cancel" hidden>キャンセル</button>
+                            <span class="small text-body-secondary js-voice-status" role="status" aria-live="polite">音声入力を使えます</span>
+                        </div>
+                        <p class="form-text mb-0">
+                            音声はブラウザの音声認識で文字にします。ブラウザによっては、音声が外部の認識サービスに送られます。
+                            Tsumory のサーバーには音声を送らず、保存もしません。音声入力を使わずに、キーボードで入力することもできます。
+                        </p>
+                    </div>
+                    <p id="voice-unsupported" class="form-text mb-0" hidden>このブラウザでは音声入力を使えません。キーボードで入力してください。</p>
+                </div>
+                <div class="mb-2">
+                    <!--/* 選んだファイルは、入力エラーで画面を出し直すと残らない（ブラウザの仕様）。th:field は使わない */-->
+                    <label for="post-photo" class="form-label small text-body-secondary"
+                           th:text="|写真（任意・${photoMaxPerPost} 枚まで）|">写真</label>
+                    <!--/* 送る前の確かめ（形式・大きさ）は photo-input.js。サーバーでも同じ決まりで確かめる */-->
+                    <input type="file" id="post-photo" name="photo" th:accept="${photoAccept}"
+                           class="form-control form-control-sm js-photo-input" th:disabled="${postLimitReached}"
+                           th:classappend="${#fields.hasErrors('attachedPhotos')} ? 'is-invalid'"
+                           aria-describedby="post-photo-hint"
+                           th:data-max-bytes="${photoMaxBytes}" th:data-type-message="${photoTypeMessage}"
+                           th:data-too-large-message="${photoTooLargeMessage}" data-error="post-photo-error"
+                           data-preview="post-photo-preview">
+                    <p th:if="${#fields.hasErrors('attachedPhotos')}" th:errors="*{attachedPhotos}"
+                       class="invalid-feedback" role="alert"></p>
+                    <p id="post-photo-error" class="small text-danger mb-0" role="alert" hidden></p>
+                    <p id="post-photo-hint" class="form-text mb-0" th:text="${photoHint}">JPEG か PNG・5MB まで</p>
+                    <!--/* 選んだ写真のプレビューと解除（photo-input.js）。JavaScript が無効なら出ない */-->
+                    <div id="post-photo-preview" class="mt-2" hidden>
+                        <div class="d-flex align-items-end gap-2">
+                            <img class="photo-thumbnail img-thumbnail" alt="選んだ写真のプレビュー">
+                            <button type="button" class="btn btn-outline-secondary btn-sm js-photo-clear">写真を外す</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="d-flex align-items-center justify-content-end gap-3">
                     <span th:if="${postLimitReached}" class="text-body-secondary small"
@@ -58,6 +110,7 @@
                               th:text="${post.time}"></span>
                         <div class="flex-grow-1">
                             <div th:text="${post.content}">コーヒーがおいしい</div>
+                            <a th:replace="~{fragments/post-photo :: thumbnail(${post})}"></a>
                             <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
                                 <span th:replace="~{fragments/category-badge :: badge(${post.category})}"></span>
                                 <form th:action="@{/posts/{id}/category(id=${post.id})}" method="post" class="d-inline">
@@ -81,7 +134,7 @@
                     </div>
                     <form th:if="${editingPost != null and editingPost.id eq post.id}"
                           th:action="@{/posts/{id}/edit(id=${post.id})}" th:object="${postEditForm}" method="post"
-                          class="js-submit-once" data-submitting-label="保存しています…">
+                          enctype="multipart/form-data" class="js-submit-once" data-submitting-label="保存しています…">
                         <div class="mb-2">
                             <label for="edit-content" class="visually-hidden">つぶやきの本文</label>
                             <textarea id="edit-content" th:field="*{content}" th:maxlength="${postContentMaxLength}"
@@ -101,6 +154,38 @@
                             <p th:if="${#fields.hasErrors('category')}" class="invalid-feedback" role="alert">
                                 カテゴリを選んでください
                             </p>
+                        </div>
+                        <!--/* 写真の差し替え（PH-REQ-05）と外す（PH-REQ-06）。phase3-spec.md の「5. 画面 > 今日のつぶやき（編集モード）」 */-->
+                        <div class="mb-2">
+                            <div th:if="${editingPost.hasPhoto}" class="mb-2">
+                                <a th:replace="~{fragments/post-photo :: thumbnail(${editingPost})}"></a>
+                                <div class="form-check mt-1">
+                                    <input type="checkbox" id="edit-remove-photo" name="removePhoto" value="true"
+                                           class="form-check-input" th:checked="*{removePhoto}">
+                                    <label for="edit-remove-photo" class="form-check-label small">写真を外す（本文は残ります）</label>
+                                </div>
+                            </div>
+                            <label for="edit-photo" class="form-label small text-body-secondary"
+                                   th:text="${editingPost.hasPhoto} ? '写真を差し替える（任意）' : '写真を添付する（任意）'">写真</label>
+                            <input type="file" id="edit-photo" name="photo" th:accept="${photoAccept}"
+                                   class="form-control form-control-sm js-photo-input"
+                                   th:classappend="${#fields.hasErrors('attachedPhotos') or #fields.hasErrors('photoChoiceConsistent')} ? 'is-invalid'"
+                                   aria-describedby="edit-photo-hint"
+                                   th:data-max-bytes="${photoMaxBytes}" th:data-type-message="${photoTypeMessage}"
+                                   th:data-too-large-message="${photoTooLargeMessage}" data-error="edit-photo-error"
+                                   data-preview="edit-photo-preview">
+                            <p th:if="${#fields.hasErrors('attachedPhotos')}" th:errors="*{attachedPhotos}"
+                               class="invalid-feedback" role="alert"></p>
+                            <p th:if="${#fields.hasErrors('photoChoiceConsistent')}" th:errors="*{photoChoiceConsistent}"
+                               class="invalid-feedback" role="alert"></p>
+                            <p id="edit-photo-error" class="small text-danger mb-0" role="alert" hidden></p>
+                            <p id="edit-photo-hint" class="form-text mb-0" th:text="${photoHint}">JPEG か PNG・5MB まで</p>
+                            <div id="edit-photo-preview" class="mt-2" hidden>
+                                <div class="d-flex align-items-end gap-2">
+                                    <img class="photo-thumbnail img-thumbnail" alt="選んだ写真のプレビュー">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm js-photo-clear">選んだ写真を取り消す</button>
+                                </div>
+                            </div>
                         </div>
                         <div class="d-flex justify-content-end gap-2">
                             <a th:href="@{/}" class="btn btn-outline-secondary btn-sm">キャンセル</a>
@@ -137,5 +222,7 @@
     </section>
 </main>
 <script th:src="@{/js/form-submit.js}"></script>
+<script th:src="@{/js/photo-input.js}"></script>
+<script th:src="@{/js/voice-input.js}"></script>
 </body>
 </html>

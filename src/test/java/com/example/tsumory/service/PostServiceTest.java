@@ -12,23 +12,30 @@ import static com.example.tsumory.domain.TestFixtures.STUDY;
 import static com.example.tsumory.domain.TestFixtures.TODAY;
 import static com.example.tsumory.domain.TestFixtures.clockAt;
 import static com.example.tsumory.domain.TestFixtures.hanako;
+import static com.example.tsumory.domain.TestFixtures.jpegBytes;
 import static com.example.tsumory.domain.TestFixtures.jst;
+import static com.example.tsumory.domain.TestFixtures.pngBytes;
 import static com.example.tsumory.domain.TestFixtures.post;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
+import com.example.tsumory.domain.PostPhoto;
 import com.example.tsumory.domain.User;
+import com.example.tsumory.repository.PostPhotoRepository;
 import com.example.tsumory.repository.PostRepository;
 import com.example.tsumory.repository.UserRepository;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -42,6 +49,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Limit;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,8 +64,16 @@ class PostServiceTest {
     /** 今日（{@link com.example.tsumory.domain.TestFixtures#TODAY}）の 11:00 に投稿したつぶやきの時刻。 */
     private static final String THIS_MORNING = "2026-10-08T11:00:00";
 
+    /** 写真を付けない投稿。 */
+    private static final PhotoUpload NO_PHOTO = null;
+
+    private static final PhotoUpload JPEG = new PhotoUpload(jpegBytes(4, 3));
+
     @Mock
     private PostRepository postRepository;
+
+    @Mock
+    private PostPhotoRepository postPhotoRepository;
 
     @Mock
     private UserRepository userRepository;
@@ -86,7 +102,12 @@ class PostServiceTest {
     // 原稿のコンストラクタ（引数 4 つ）に、保存だけをトランザクションにするための TransactionTemplate を足している
     private PostService service(Clock clock) {
         return new PostService(
-                postRepository, userRepository, categoryClassifier, new TransactionTemplate(transactionManager), clock);
+                postRepository,
+                postPhotoRepository,
+                userRepository,
+                categoryClassifier,
+                new TransactionTemplate(transactionManager),
+                clock);
     }
 
     /** 今日の午前に投稿した、カテゴリ「その他」の昼ごはんのつぶやき。編集・カテゴリ修正の出発点にする。 */
@@ -107,14 +128,14 @@ class PostServiceTest {
     // --- 今日・昨日 ---
 
     @Test
-    void today_isJstDate() {
+    void 今日は日本時間の日付() {
         // UTC ではまだ 10/7 だが、日本時間では 10/8
         assertThat(serviceAt("2026-10-08T00:00:00").today()).isEqualTo(TODAY);
         assertThat(serviceAt("2026-10-08T23:59:59").today()).isEqualTo(TODAY);
     }
 
     @Test
-    void today_followsTheClocksZone() {
+    void 今日は時計のタイムゾーンで決まる() {
         // タイムゾーンの基準は Clock だけ。同じ瞬間でも、UTC の時計ならまだ 10/7（日本時間に決め打ちしない）
         var instant = jst("2026-10-08T00:30:00");
 
@@ -123,7 +144,7 @@ class PostServiceTest {
     }
 
     @Test
-    void isEditableDate_onlyTodayAndYesterday() {
+    void 編集できる日付は今日と昨日だけ() {
         var service = serviceAt("2026-10-08T00:00:00");
 
         assertThat(service.isEditableDate(TODAY)).isTrue();
@@ -135,7 +156,7 @@ class PostServiceTest {
     // --- 取得 ---
 
     @Test
-    void findPostsByDate_passesAnyDateAndClockZone() {
+    void 今日や昨日に限らず任意の日付のつぶやきを時計のタイムゾーンで探す() {
         // 今日・昨日に限らず、任意の日付のつぶやきを取れる
         var service = serviceAt(NOW);
         var lastWeek = LocalDate.of(2026, 10, 1);
@@ -146,7 +167,7 @@ class PostServiceTest {
     }
 
     @Test
-    void findPosts_searchesFromJstMidnightToNextMidnight() {
+    void その日のつぶやきを画面に出す形にして返す() {
         var service = serviceAt(NOW);
         when(postRepository.findByUserIdAndDate(USER_ID, TODAY, JST))
                 .thenReturn(List.of(post(user, OVERSLEPT, "2026-10-08T07:30:00")));
@@ -161,7 +182,7 @@ class PostServiceTest {
     }
 
     @Test
-    void countPosts_passesDateAndClockZone() {
+    void つぶやきの件数を日付と時計のタイムゾーンで数える() {
         var service = serviceAt(NOW);
         var lastWeek = LocalDate.of(2026, 10, 1);
         when(postRepository.countByUserIdAndDate(USER_ID, lastWeek, JST)).thenReturn(5L);
@@ -170,7 +191,7 @@ class PostServiceTest {
     }
 
     @Test
-    void getEditablePost_returnsTodaysPostAsItem() {
+    void 今日のつぶやきは編集モードで開ける() {
         var service = serviceAt(NOW);
         stubFind(post(user, LUNCH, "2026-10-08T11:30:00", PostCategory.PRIVATE));
 
@@ -183,7 +204,7 @@ class PostServiceTest {
     }
 
     @Test
-    void getEditablePost_othersPostOrDayBeforeYesterday_throwsNotFound() {
+    void 他人のつぶやきや一昨日のつぶやきは編集モードで開けない() {
         var service = serviceAt(NOW);
         when(postRepository.findByIdAndUserId(99L, USER_ID)).thenReturn(Optional.empty());
         stubFind(post(user, GOOD_NIGHT, "2026-10-06T23:59:59"));
@@ -196,10 +217,10 @@ class PostServiceTest {
     // --- 投稿 ---
 
     @Test
-    void create_savesStrippedContentWithSamePostedAndUpdatedTime() {
+    void 投稿すると前後の空白を除いた本文を投稿時刻と更新時刻を同じにして保存する() {
         var service = serviceAt(NOW);
 
-        service.create(USER_ID, "  " + LUNCH + "\n");
+        service.create(USER_ID, "  " + LUNCH + "\n", NO_PHOTO);
 
         var saved = capturedSavedPost();
         assertThat(saved.getContent()).isEqualTo(LUNCH);
@@ -209,11 +230,11 @@ class PostServiceTest {
     }
 
     @Test
-    void create_assignsTheClassifiedCategory() {
+    void 投稿すると判定したカテゴリが入り手で直した印は付かない() {
         var service = serviceAt(NOW);
         when(categoryClassifier.classify(MEETING)).thenReturn(Optional.of(PostCategory.WORK));
 
-        service.create(USER_ID, " " + MEETING + " ");
+        service.create(USER_ID, " " + MEETING + " ", NO_PHOTO);
 
         var saved = capturedSavedPost();
         assertThat(saved.getCategory()).isEqualTo(PostCategory.WORK);
@@ -221,13 +242,13 @@ class PostServiceTest {
     }
 
     @Test
-    void create_savesPostAndClassifiesCategory() {
+    void 投稿すると判定したカテゴリの入ったつぶやきを返す() {
         // given
         var postService = serviceAt(NOW);
         when(categoryClassifier.classify(MEETING)).thenReturn(Optional.of(PostCategory.WORK));
 
         // when
-        Post result = postService.create(USER_ID, MEETING);
+        Post result = postService.create(USER_ID, MEETING, NO_PHOTO);
 
         // then
         assertThat(result.getCategory()).isEqualTo(PostCategory.WORK);
@@ -236,18 +257,18 @@ class PostServiceTest {
     }
 
     @Test
-    void create_keepsOtherWhenClassificationFails() {
+    void カテゴリを判定できなくてもその他のまま投稿できる() {
         // 判定できなくても、つぶやきは保存する（コアループを Claude API の不調で止めない）
         var service = serviceAt(NOW);
         when(categoryClassifier.classify(LUNCH)).thenReturn(Optional.empty());
 
-        service.create(USER_ID, LUNCH);
+        service.create(USER_ID, LUNCH, NO_PHOTO);
 
         assertThat(capturedSavedPost().getCategory()).isEqualTo(PostCategory.OTHER);
     }
 
     @Test
-    void isPostLimitReached_trueFromTheLimitCount() {
+    void 上限の件数に達した時点で上限到達になる() {
         var service = serviceAt("2026-10-08T12:00:00");
         when(postRepository.countByUserIdAndDate(USER_ID, TODAY, JST))
                 .thenReturn((long) PostService.DAILY_POST_LIMIT - 1)
@@ -258,23 +279,23 @@ class PostServiceTest {
     }
 
     @Test
-    void create_allowsUpToTheDailyLimit() {
+    void 上限の件数までは1日に投稿できる() {
         // UTC ではまだ 10/7 だが、日本時間では 10/8 の 0:30。日本時間の今日の件数で数える
         var service = serviceAt("2026-10-08T00:30:00");
         when(postRepository.countByUserIdAndDate(USER_ID, TODAY, JST))
                 .thenReturn((long) PostService.DAILY_POST_LIMIT - 1);
 
-        service.create(USER_ID, GOOD_NIGHT);
+        service.create(USER_ID, GOOD_NIGHT, NO_PHOTO);
 
         verify(postRepository).save(any());
     }
 
     @Test
-    void create_rejectsWhenDailyLimitReached_withoutCallingClaude() {
+    void 上限に達していたらClaudeを呼ばずに投稿を断る() {
         var service = serviceAt(NOW);
         when(postRepository.countByUserIdAndDate(USER_ID, TODAY, JST)).thenReturn((long) PostService.DAILY_POST_LIMIT);
 
-        assertThatThrownBy(() -> service.create(USER_ID, BAKERY))
+        assertThatThrownBy(() -> service.create(USER_ID, BAKERY, NO_PHOTO))
                 .isInstanceOf(DailyPostLimitExceededException.class)
                 .hasMessage("Daily post limit exceeded: userId=1, limit=16");
 
@@ -283,24 +304,25 @@ class PostServiceTest {
     }
 
     @Test
-    void create_rejectsWhenLimitIsReachedWhileClassifying() {
+    void カテゴリの判定を待つ間に上限に達したら投稿を断る() {
         // 判定を待つ間に、別のタブから 16 件目が投稿された
         var service = serviceAt(NOW);
         when(postRepository.countByUserIdAndDate(USER_ID, TODAY, JST))
                 .thenReturn((long) PostService.DAILY_POST_LIMIT - 1, (long) PostService.DAILY_POST_LIMIT);
 
-        assertThatThrownBy(() -> service.create(USER_ID, BAKERY)).isInstanceOf(DailyPostLimitExceededException.class);
+        assertThatThrownBy(() -> service.create(USER_ID, BAKERY, NO_PHOTO))
+                .isInstanceOf(DailyPostLimitExceededException.class);
 
         verify(postRepository, never()).save(any());
     }
 
     @Test
-    void create_checksTheLimitInAShortTransactionBeforeClassifying() {
+    void 投稿の上限はカテゴリの判定より前に短いトランザクションで確かめる() {
         // 判定の前に読む上限の確認も、短いトランザクションで済ませる。トランザクションの外で直接読むと、その接続を
         // メソッドが終わるまで（Claude API の応答を待つ間も）握り続けるため
         var service = serviceAt(NOW);
 
-        service.create(USER_ID, MEETING);
+        service.create(USER_ID, MEETING, NO_PHOTO);
 
         var order = inOrder(transactionManager, postRepository, categoryClassifier);
         order.verify(transactionManager).getTransaction(any());
@@ -310,11 +332,11 @@ class PostServiceTest {
     }
 
     @Test
-    void create_classifiesOutsideTheTransactionAndSavesInside() {
+    void 投稿ではカテゴリをトランザクションの外で判定し中で保存する() {
         // Claude API の応答を待つ間に DB 接続を握らない：判定 → トランザクション開始 → 保存 → コミット の順
         var service = serviceAt(NOW);
 
-        service.create(USER_ID, MEETING);
+        service.create(USER_ID, MEETING, NO_PHOTO);
 
         var order = inOrder(categoryClassifier, transactionManager, postRepository);
         order.verify(categoryClassifier).classify(MEETING);
@@ -324,20 +346,281 @@ class PostServiceTest {
     }
 
     @Test
-    void create_checksTheLimitAgainstTheSameDateInsideTheTransaction() {
+    void 保存するトランザクションの中でも同じ日付で上限を確かめる() {
         // 上限の確かめ直しは、最初に求めた「今日」で行う（判定を待つ間に 0 時をまたいでも、投稿時刻の日付で数える）
         var service = serviceAt("2026-10-08T23:59:59");
 
-        service.create(USER_ID, GOOD_NIGHT);
+        service.create(USER_ID, GOOD_NIGHT, NO_PHOTO);
 
         verify(postRepository, times(2)).countByUserIdAndDate(USER_ID, TODAY, JST);
     }
 
+    // --- 写真の表示と取得 ---
+
+    /** ID を入れたつぶやき（保存したつぶやきの代わり）。 */
+    private Post postWithId(Long id, String content, String postedAt) {
+        var post = post(user, content, postedAt);
+        ReflectionTestUtils.setField(post, "id", id);
+        return post;
+    }
+
     @Test
-    void createAndEdit_runOutsideTransactionsBecauseTheyCallTheClaudeApi() throws NoSuchMethodException {
+    void その日のつぶやきに写真の有無を入れ写真はまとめて1回だけ問い合わせる() {
+        var service = serviceAt(NOW);
+        var lunch = postWithId(10L, LUNCH, "2026-10-08T11:00:00");
+        var meeting = postWithId(11L, MEETING, "2026-10-08T11:30:00");
+        when(postRepository.findByUserIdAndDate(USER_ID, TODAY, JST)).thenReturn(List.of(lunch, meeting));
+        when(postPhotoRepository.findPostIdsWithPhoto(List.of(10L, 11L))).thenReturn(List.of(11L));
+
+        var items = service.findPosts(USER_ID, TODAY);
+
+        assertThat(items)
+                .extracting(PostItem::id, PostItem::hasPhoto)
+                .containsExactly(tuple(10L, false), tuple(11L, true));
+        verify(postPhotoRepository, times(1)).findPostIdsWithPhoto(any());
+        verify(postPhotoRepository, never()).findById(any());
+    }
+
+    @Test
+    void つぶやきがない日は写真を問い合わせない() {
+        var service = serviceAt(NOW);
+        when(postRepository.findByUserIdAndDate(USER_ID, TODAY, JST)).thenReturn(List.of());
+
+        assertThat(service.findPosts(USER_ID, TODAY)).isEmpty();
+
+        verify(postPhotoRepository, never()).findPostIdsWithPhoto(any());
+    }
+
+    @Test
+    void 編集モードで開くつぶやきに写真の有無を入れる() {
+        var service = serviceAt(NOW);
+        stubFind(postWithId(POST_ID, LUNCH, THIS_MORNING));
+        when(postPhotoRepository.existsById(POST_ID)).thenReturn(true);
+
+        assertThat(service.getEditablePost(USER_ID, POST_ID).hasPhoto()).isTrue();
+    }
+
+    @Test
+    void 自分のつぶやきの写真を保存した形式で返す() {
+        var service = serviceAt(NOW);
+        var photo = new PostPhoto(todaysLunch(), "image/jpeg", JPEG.data(), jst(NOW));
+        when(postPhotoRepository.findByPostIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(photo));
+
+        assertThat(service.findPhoto(USER_ID, POST_ID)).isEqualTo(new PhotoContent("image/jpeg", JPEG.data()));
+    }
+
+    @Test
+    void 他人のつぶやきや写真のないつぶやきの写真は見つからないとして扱う() {
+        // ほかのユーザーのもの・写真がない・削除したつぶやきは、リポジトリがどれも空を返し、区別しない
+        var service = serviceAt(NOW);
+        when(postPhotoRepository.findByPostIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.findPhoto(USER_ID, POST_ID)).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // --- 編集での写真の差し替えと外す（PH-REQ-05・06） ---
+
+    @Test
+    void 編集で写真を差し替えると前の写真の行を書き換え前のデータを残さない() {
+        var service = serviceAt(NOW);
+        var post = todaysLunch();
+        stubFind(post);
+        var existing = new PostPhoto(post, "image/jpeg", JPEG.data(), jst(THIS_MORNING));
+        when(postPhotoRepository.findById(any())).thenReturn(Optional.of(existing));
+        var png = pngBytes(5, 4);
+
+        service.edit(USER_ID, POST_ID, LUNCH, post.getCategory(), new PhotoChange.Replace(new PhotoUpload(png)));
+
+        assertThat(existing.getContentType()).isEqualTo("image/png");
+        assertThat(existing.getData()).containsExactly(png);
+        assertThat(existing.getUpdatedAt()).isEqualTo(jst(NOW));
+        assertThat(existing.getCreatedAt()).isEqualTo(jst(THIS_MORNING));
+        verify(postPhotoRepository, never()).save(any());
+    }
+
+    @Test
+    void 写真のないつぶやきに編集で写真を添付できる() {
+        var service = serviceAt(NOW);
+        var post = todaysLunch();
+        stubFind(post);
+        when(postPhotoRepository.findById(any())).thenReturn(Optional.empty());
+
+        service.edit(USER_ID, POST_ID, LUNCH, post.getCategory(), new PhotoChange.Replace(JPEG));
+
+        var captor = ArgumentCaptor.forClass(PostPhoto.class);
+        verify(postPhotoRepository).save(captor.capture());
+        assertThat(captor.getValue().getPost()).isSameAs(post);
+        assertThat(captor.getValue().getContentType()).isEqualTo("image/jpeg");
+    }
+
+    @Test
+    void 編集で写真だけを外すと本文は残り編集済みにもならない() {
+        var service = serviceAt(NOW);
+        var post = todaysLunch();
+        stubFind(post);
+
+        service.edit(USER_ID, POST_ID, LUNCH, post.getCategory(), PhotoChange.REMOVE);
+
+        verify(postPhotoRepository).deleteById(post.getId());
+        assertThat(post.getContent()).isEqualTo(LUNCH);
+        assertThat(post.isEdited()).isFalse();
+    }
+
+    @Test
+    void 写真を変えない編集では写真に触れない() {
+        var service = serviceAt(NOW);
+        var post = todaysLunch();
+        stubFind(post);
+
+        service.edit(USER_ID, POST_ID, STUDY, post.getCategory(), PhotoChange.KEEP);
+
+        verifyNoInteractions(postPhotoRepository);
+    }
+
+    @Test
+    void 差し替える写真を受け付けないならClaudeを呼ばずつぶやきも写真も変えない() {
+        var service = serviceAt(NOW);
+        var text = new PhotoUpload("昼はカレーだった".getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(
+                        () -> service.edit(USER_ID, POST_ID, STUDY, PostCategory.OTHER, new PhotoChange.Replace(text)))
+                .isInstanceOf(InvalidPhotoException.class);
+
+        verify(postRepository, never()).findByIdAndUserId(any(), any());
+        verify(categoryClassifier, never()).classify(any());
+        verifyNoInteractions(postPhotoRepository);
+    }
+
+    @Test
+    void 写真の差し替えに失敗したら本文の変更も取り消す() {
+        // 写真の変更は、本文の変更と同じトランザクション
+        var service = serviceAt(NOW);
+        var post = todaysLunch();
+        stubFind(post);
+        when(postPhotoRepository.findById(any())).thenThrow(new IllegalStateException("photo read failed"));
+
+        assertThatThrownBy(
+                        () -> service.edit(USER_ID, POST_ID, STUDY, post.getCategory(), new PhotoChange.Replace(JPEG)))
+                .isInstanceOf(IllegalStateException.class);
+
+        var order = inOrder(postPhotoRepository, transactionManager);
+        order.verify(postPhotoRepository).findById(any());
+        order.verify(transactionManager).rollback(any());
+        // コミットしたのは、判定の前につぶやきを読んだ読むだけのトランザクションだけ
+        verify(transactionManager, times(1)).commit(any());
+    }
+
+    @Test
+    void 他人のつぶやきの写真は編集で差し替えられない() {
+        var service = serviceAt(NOW);
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(
+                        () -> service.edit(USER_ID, POST_ID, STUDY, PostCategory.OTHER, new PhotoChange.Replace(JPEG)))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verifyNoInteractions(postPhotoRepository);
+    }
+
+    // --- 写真の添付 ---
+
+    @Test
+    void 写真を付けて投稿するとつぶやきと一緒に写真も保存する() {
+        var service = serviceAt(NOW);
+
+        var saved = service.create(USER_ID, LUNCH, JPEG);
+
+        var captor = ArgumentCaptor.forClass(PostPhoto.class);
+        verify(postPhotoRepository).save(captor.capture());
+        var photo = captor.getValue();
+        assertThat(photo.getPost()).isSameAs(saved);
+        assertThat(photo.getContentType()).isEqualTo("image/jpeg");
+        assertThat(photo.getData()).containsExactly(JPEG.data());
+        assertThat(photo.getCreatedAt()).isEqualTo(jst(NOW));
+    }
+
+    @Test
+    void 写真を付けずに投稿すると写真は保存しない() {
+        serviceAt(NOW).create(USER_ID, LUNCH, NO_PHOTO);
+
+        verify(postRepository).save(any());
+        verify(postPhotoRepository, never()).save(any());
+    }
+
+    @Test
+    void 写真はつぶやきと同じトランザクションの中で保存する() {
+        // 上限の確認（読むだけ）と保存の 2 つだけがトランザクション。写真のために別のトランザクションを張らない
+        var service = serviceAt(NOW);
+
+        service.create(USER_ID, LUNCH, JPEG);
+
+        var order = inOrder(categoryClassifier, transactionManager, postRepository, postPhotoRepository);
+        order.verify(categoryClassifier).classify(LUNCH);
+        order.verify(transactionManager).getTransaction(any());
+        order.verify(postRepository).save(any());
+        order.verify(postPhotoRepository).save(any());
+        order.verify(transactionManager).commit(any());
+        verify(transactionManager, times(2)).getTransaction(any());
+    }
+
+    @Test
+    void 写真の保存に失敗したらつぶやきの保存も取り消す() {
+        var service = serviceAt(NOW);
+        when(postPhotoRepository.save(any())).thenThrow(new IllegalStateException("photo save failed"));
+
+        assertThatThrownBy(() -> service.create(USER_ID, LUNCH, JPEG)).isInstanceOf(IllegalStateException.class);
+
+        var order = inOrder(postRepository, postPhotoRepository, transactionManager);
+        order.verify(postRepository).save(any());
+        order.verify(postPhotoRepository).save(any());
+        order.verify(transactionManager).rollback(any());
+        // コミットしたのは、判定の前に上限を確かめた読むだけのトランザクションだけ
+        verify(transactionManager, times(1)).commit(any());
+    }
+
+    @Test
+    void 保存する写真の形式はブラウザが送った形式ではなくデータから決める() {
+        serviceAt(NOW).create(USER_ID, LUNCH, new PhotoUpload(pngBytes(4, 3)));
+
+        var captor = ArgumentCaptor.forClass(PostPhoto.class);
+        verify(postPhotoRepository).save(captor.capture());
+        assertThat(captor.getValue().getContentType()).isEqualTo("image/png");
+    }
+
+    @Test
+    void 受け付けない写真ならClaudeを呼ばず上限も数えず何も保存しない() {
+        // 写真の検証は、上限の確認と Claude API より前に行う（料金をかけないため）
+        var service = serviceAt(NOW);
+        var text = new PhotoUpload("昼はカレーだった".getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> service.create(USER_ID, LUNCH, text))
+                .isInstanceOfSatisfying(
+                        InvalidPhotoException.class,
+                        e -> assertThat(e.getReason()).isEqualTo(InvalidPhotoException.Reason.UNSUPPORTED_TYPE));
+
+        verify(postRepository, never()).countByUserIdAndDate(any(), any(), any());
+        verify(categoryClassifier, never()).classify(any());
+        verify(postRepository, never()).save(any());
+        verify(postPhotoRepository, never()).save(any());
+    }
+
+    @Test
+    void 上限に達していたら写真も保存しない() {
+        var service = serviceAt(NOW);
+        when(postRepository.countByUserIdAndDate(USER_ID, TODAY, JST)).thenReturn((long) PostService.DAILY_POST_LIMIT);
+
+        assertThatThrownBy(() -> service.create(USER_ID, BAKERY, JPEG))
+                .isInstanceOf(DailyPostLimitExceededException.class);
+
+        verify(postPhotoRepository, never()).save(any());
+    }
+
+    @Test
+    void 投稿と編集はClaudeのAPIを呼ぶのでトランザクションを張らない() throws NoSuchMethodException {
         for (var method : List.of(
-                PostService.class.getMethod("create", Long.class, String.class),
-                PostService.class.getMethod("edit", Long.class, Long.class, String.class, PostCategory.class))) {
+                PostService.class.getMethod("create", Long.class, String.class, PhotoUpload.class),
+                PostService.class.getMethod(
+                        "edit", Long.class, Long.class, String.class, PostCategory.class, PhotoChange.class))) {
             assertThat(method.getAnnotation(Transactional.class).propagation()).isEqualTo(Propagation.NOT_SUPPORTED);
         }
     }
@@ -345,50 +628,50 @@ class PostServiceTest {
     // --- 編集 ---
 
     @Test
-    void edit_reclassifiesWhenContentChanges() {
+    void 本文を変えるとカテゴリを判定し直す() {
         var service = serviceAt(NOW);
         var post = post(user, LUNCH, THIS_MORNING, PostCategory.PRIVATE);
         stubFind(post);
         when(categoryClassifier.classify(STUDY)).thenReturn(Optional.of(PostCategory.LEARNING));
 
-        service.edit(USER_ID, POST_ID, STUDY, post.getCategory());
+        service.edit(USER_ID, POST_ID, STUDY, post.getCategory(), PhotoChange.KEEP);
 
         assertThat(post.getCategory()).isEqualTo(PostCategory.LEARNING);
     }
 
     @Test
-    void edit_keepsPreviousCategoryWhenClassificationFails() {
+    void 判定し直せなければ前のカテゴリのまま() {
         var service = serviceAt(NOW);
         var post = post(user, LUNCH, THIS_MORNING, PostCategory.PRIVATE);
         stubFind(post);
         when(categoryClassifier.classify(BAKERY)).thenReturn(Optional.empty());
 
-        service.edit(USER_ID, POST_ID, BAKERY, post.getCategory());
+        service.edit(USER_ID, POST_ID, BAKERY, post.getCategory(), PhotoChange.KEEP);
 
         assertThat(post.getCategory()).isEqualTo(PostCategory.PRIVATE);
         assertThat(post.getContent()).isEqualTo(BAKERY);
     }
 
     @Test
-    void edit_doesNotClassifyWhenContentIsUnchanged() {
+    void 本文が変わらなければカテゴリを判定しない() {
         var service = serviceAt(NOW);
         var post = todaysLunch();
         stubFind(post);
 
-        service.edit(USER_ID, POST_ID, " " + LUNCH + " ", post.getCategory());
+        service.edit(USER_ID, POST_ID, " " + LUNCH + " ", post.getCategory(), PhotoChange.KEEP);
 
         verify(categoryClassifier, never()).classify(any());
     }
 
     @Test
-    void edit_doesNotClassifyCategorySetByUser() {
+    void 手で直したカテゴリは判定し直さない() {
         // 手で直したカテゴリは、本文を編集しても AI に上書きさせない（Post ではなく service で守る）
         var service = serviceAt(NOW);
         var post = post(user, LUNCH_WITH_CLIENT, THIS_MORNING, PostCategory.WORK);
         post.markCategorySetByUser();
         stubFind(post);
 
-        service.edit(USER_ID, POST_ID, MEETING, post.getCategory());
+        service.edit(USER_ID, POST_ID, MEETING, post.getCategory(), PhotoChange.KEEP);
 
         verify(categoryClassifier, never()).classify(any());
         assertThat(post.getCategory()).isEqualTo(PostCategory.WORK);
@@ -396,7 +679,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_doesNotOverwriteCategorySetByUserWhileClassifying() {
+    void 判定を待つ間に手で直されたカテゴリは上書きしない() {
         // 判定を待つ間に手で直された場合（トランザクションの中で読み直したつぶやきに印が立っている）
         // 取引先とのランチを「仕事」に直している間に、本文を勉強の話題に書き換えた。AI は「学習」と判定するが、手で直した「仕事」を優先する
         var service = serviceAt(NOW);
@@ -408,19 +691,19 @@ class PostServiceTest {
                 .thenReturn(Optional.of(reloaded));
         when(categoryClassifier.classify(STUDY)).thenReturn(Optional.of(PostCategory.LEARNING));
 
-        service.edit(USER_ID, POST_ID, STUDY, before.getCategory());
+        service.edit(USER_ID, POST_ID, STUDY, before.getCategory(), PhotoChange.KEEP);
 
         assertThat(reloaded.getCategory()).isEqualTo(PostCategory.WORK);
     }
 
     @Test
-    void edit_categoryChangedByUser_isMarkedAndNotClassified() {
+    void 編集でカテゴリを変えると手で直した印が付き判定しない() {
         // 本文とカテゴリを同じリクエストで直したら、AI の判定より手で選んだカテゴリを優先する
         var service = serviceAt(NOW);
         var post = todaysLunch();
         stubFind(post);
 
-        service.edit(USER_ID, POST_ID, LUNCH_WITH_CLIENT, PostCategory.WORK);
+        service.edit(USER_ID, POST_ID, LUNCH_WITH_CLIENT, PostCategory.WORK, PhotoChange.KEEP);
 
         verify(categoryClassifier, never()).classify(any());
         assertThat(post.getCategory()).isEqualTo(PostCategory.WORK);
@@ -429,12 +712,12 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_categoryOnly_doesNotMarkEdited() {
+    void カテゴリだけを変えても編集済みにしない() {
         var service = serviceAt(NOW);
         var post = todaysLunch();
         stubFind(post);
 
-        service.edit(USER_ID, POST_ID, " " + LUNCH + " ", PostCategory.PRIVATE);
+        service.edit(USER_ID, POST_ID, " " + LUNCH + " ", PostCategory.PRIVATE, PhotoChange.KEEP);
 
         verify(categoryClassifier, never()).classify(any());
         assertThat(post.getCategory()).isEqualTo(PostCategory.PRIVATE);
@@ -444,26 +727,26 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_sameCategory_isNotTreatedAsChangedByUser() {
+    void 今と同じカテゴリが送られても手で直したことにしない() {
         // 編集フォームは今のカテゴリを選んだ状態で送られてくるので、同じ値なら手で直したことにしない
         var service = serviceAt(NOW);
         var post = todaysLunch();
         stubFind(post);
         when(categoryClassifier.classify(STUDY)).thenReturn(Optional.of(PostCategory.LEARNING));
 
-        service.edit(USER_ID, POST_ID, STUDY, PostCategory.OTHER);
+        service.edit(USER_ID, POST_ID, STUDY, PostCategory.OTHER, PhotoChange.KEEP);
 
         assertThat(post.getCategory()).isEqualTo(PostCategory.LEARNING);
         assertThat(post.isCategorySetByUser()).isFalse();
     }
 
     @Test
-    void edit_readsThePostInAShortTransactionBeforeClassifying() {
+    void 編集ではカテゴリの判定より前に短いトランザクションでつぶやきを読む() {
         // create と同じく、判定の前の読み込みも短いトランザクションで済ませ、Claude API を待つ間に DB 接続を握らない
         var service = serviceAt(NOW);
         stubFind(todaysLunch());
 
-        service.edit(USER_ID, POST_ID, STUDY, PostCategory.OTHER);
+        service.edit(USER_ID, POST_ID, STUDY, PostCategory.OTHER, PhotoChange.KEEP);
 
         var order = inOrder(transactionManager, postRepository, categoryClassifier);
         order.verify(transactionManager).getTransaction(any());
@@ -473,12 +756,12 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_classifiesOutsideTheTransactionAndSavesInside() {
+    void 編集ではカテゴリをトランザクションの外で判定し中で保存する() {
         var service = serviceAt(NOW);
         var post = todaysLunch();
         stubFind(post);
 
-        service.edit(USER_ID, POST_ID, STUDY, post.getCategory());
+        service.edit(USER_ID, POST_ID, STUDY, post.getCategory(), PhotoChange.KEEP);
 
         var order = inOrder(categoryClassifier, transactionManager);
         order.verify(categoryClassifier).classify(STUDY);
@@ -487,12 +770,12 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_othersPost_throwsNotFoundWithoutClassifying() {
+    void 他人のつぶやきは判定せずに見つからないとして断る() {
         // 他人のつぶやきは、存在しない場合と区別しない（IDOR 対策）
         var service = serviceAt(NOW);
         when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, BAKERY, PostCategory.OTHER))
+        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, BAKERY, PostCategory.OTHER, PhotoChange.KEEP))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(categoryClassifier, never()).classify(any());
         // 読み込みの短いトランザクションはロールバックし、保存のトランザクションは始めない
@@ -501,7 +784,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_postDeletedWhileClassifying_throwsNotFoundAndRollsBack() {
+    void 判定を待つ間に削除されたつぶやきは見つからないとして断りロールバックする() {
         // 判定を待つ間に、別のタブから削除された場合（トランザクションの中で読み直すと見つからない）
         var service = serviceAt(NOW);
         var post = todaysLunch();
@@ -509,7 +792,8 @@ class PostServiceTest {
                 .thenReturn(Optional.of(post))
                 .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, LUNCH_WITH_CLIENT, post.getCategory()))
+        assertThatThrownBy(
+                        () -> service.edit(USER_ID, POST_ID, LUNCH_WITH_CLIENT, post.getCategory(), PhotoChange.KEEP))
                 .isInstanceOf(ResourceNotFoundException.class);
         // 判定の前の読み込み（1 つ目のトランザクション）はコミットし、保存（2 つ目）はロールバックする
         verify(transactionManager, times(1)).commit(any());
@@ -517,12 +801,12 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_keepsPostedAtAndMarksEdited() {
+    void 編集しても投稿時刻は変えず編集済みになる() {
         var service = serviceAt(NOW);
         var post = todaysLunch();
         stubFind(post);
 
-        service.edit(USER_ID, POST_ID, " " + BAKERY + " ", post.getCategory());
+        service.edit(USER_ID, POST_ID, " " + BAKERY + " ", post.getCategory(), PhotoChange.KEEP);
 
         assertThat(post.getContent()).isEqualTo(BAKERY);
         assertThat(post.getPostedAt()).isEqualTo(jst(THIS_MORNING));
@@ -531,23 +815,23 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_yesterdaysPostJustAfterMidnight() {
+    void 日付が変わった直後でも昨日のつぶやきは編集できる() {
         var service = serviceAt("2026-10-08T00:00:30");
         var post = post(user, GOOD_NIGHT, "2026-10-07T23:59:59");
         stubFind(post);
 
-        service.edit(USER_ID, POST_ID, "明日も早いので、もう寝よう", post.getCategory());
+        service.edit(USER_ID, POST_ID, "明日も早いので、もう寝よう", post.getCategory(), PhotoChange.KEEP);
 
         assertThat(post.getContent()).isEqualTo("明日も早いので、もう寝よう");
     }
 
     @Test
-    void edit_postFromDayBeforeYesterday_throwsNotFound() {
+    void 一昨日のつぶやきは編集できない() {
         var service = serviceAt("2026-10-08T00:00:30");
         var post = post(user, GOOD_NIGHT, "2026-10-06T23:59:59");
         stubFind(post);
 
-        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, BAKERY, PostCategory.OTHER))
+        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, BAKERY, PostCategory.OTHER, PhotoChange.KEEP))
                 .isInstanceOf(ResourceNotFoundException.class);
         assertThat(post.getContent()).isEqualTo(GOOD_NIGHT);
     }
@@ -555,7 +839,7 @@ class PostServiceTest {
     // --- カテゴリだけの修正 ---
 
     @Test
-    void updateCategory_assignsAndMarksWithoutMarkingEdited() {
+    void カテゴリだけを直すと手で直した印が付き編集済みにはならない() {
         // AI が判定できず「その他」になった取引先とのランチを、手で「仕事」に直す
         var service = serviceAt(NOW);
         var post = post(user, LUNCH_WITH_CLIENT, THIS_MORNING);
@@ -571,7 +855,7 @@ class PostServiceTest {
     }
 
     @Test
-    void updateCategory_postBeforeYesterday_canBeChanged() {
+    void 一昨日より前のつぶやきもカテゴリは直せる() {
         // 本文の編集と違い、カテゴリは昨日より前のつぶやきでも直せる
         var service = serviceAt(NOW);
         var post = post(user, LUNCH, "2026-10-01T12:00:00");
@@ -583,7 +867,7 @@ class PostServiceTest {
     }
 
     @Test
-    void updateCategory_updatesOwnPost() {
+    void 自分のつぶやきのカテゴリを直せる() {
         // given
         var postService = serviceAt(NOW);
         var post = post(user, LUNCH_WITH_CLIENT, NOW);
@@ -597,7 +881,7 @@ class PostServiceTest {
     }
 
     @Test
-    void updateCategory_throwsForOtherUsersPost() {
+    void 他人のつぶやきのカテゴリは直せない() {
         // given
         var postService = serviceAt(NOW);
         // 削除と同じガード：持ち主を条件に取得し、見つからなければ専用の例外（他人のつぶやきと存在しないつぶやきを区別しない）
@@ -611,7 +895,7 @@ class PostServiceTest {
     // --- 削除 ---
 
     @Test
-    void delete_deletesOwnPost() {
+    void 自分のつぶやきを削除できる() {
         // given
         var postService = serviceAt(NOW);
         var post = post(user, BAKERY, NOW);
@@ -625,7 +909,7 @@ class PostServiceTest {
     }
 
     @Test
-    void delete_throwsForOtherUsersPost() {
+    void 他人のつぶやきは削除できない() {
         // given
         var postService = serviceAt(NOW);
         when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.empty());
@@ -637,7 +921,7 @@ class PostServiceTest {
     }
 
     @Test
-    void delete_postFromDayBeforeYesterday_throwsNotFound() {
+    void 一昨日のつぶやきは削除できない() {
         // 本文の編集と同じく、消せるのは今日と昨日のつぶやきだけ
         var service = serviceAt("2026-10-08T00:00:30");
         stubFind(post(user, GOOD_NIGHT, "2026-10-06T23:59:59"));
@@ -651,7 +935,7 @@ class PostServiceTest {
     private static final Limit LIMIT = Limit.of(51);
 
     @Test
-    void searchPosts_routesToQueryByKeywordAndCategory() {
+    void キーワードとカテゴリの有無で検索のクエリを選ぶ() {
         var service = serviceAt("2026-10-08T12:00:00");
 
         service.searchPosts(USER_ID, "カレー", null, LIMIT);
@@ -664,7 +948,7 @@ class PostServiceTest {
     }
 
     @Test
-    void searchPosts_escapesKeywordForLike() {
+    void 検索のキーワードはLIKE用にエスケープして渡す() {
         serviceAt("2026-10-08T12:00:00").searchPosts(USER_ID, "達成率100%!", null, LIMIT);
 
         verify(postRepository).searchByKeyword(USER_ID, "達成率100!%!!", LIMIT);

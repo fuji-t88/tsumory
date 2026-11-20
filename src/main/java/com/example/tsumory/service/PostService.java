@@ -2,12 +2,17 @@ package com.example.tsumory.service;
 
 import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
+import com.example.tsumory.domain.PostPhoto;
+import com.example.tsumory.repository.PostPhotoRepository;
 import com.example.tsumory.repository.PostRepository;
 import com.example.tsumory.repository.UserRepository;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Limit;
@@ -26,6 +31,7 @@ public class PostService {
     public static final int DAILY_POST_LIMIT = 16;
 
     private final PostRepository postRepository;
+    private final PostPhotoRepository postPhotoRepository;
     private final UserRepository userRepository;
     private final PostCategoryClassifier categoryClassifier;
     private final TransactionTemplate transactionTemplate;
@@ -41,10 +47,16 @@ public class PostService {
         return date.equals(today) || date.equals(today.minusDays(1));
     }
 
-    /** その日（日本時間）のつぶやきを、画面に出す形にして投稿時刻の古い順に返す。 */
+    /** その日（日本時間）のつぶやきを、画面に出す形にして投稿時刻の古い順に返す。写真の有無も入れる（写真のデータは読まない）。 */
     public List<PostItem> findPosts(Long userId, LocalDate date) {
-        return findPostsByDate(userId, date).stream()
-                .map(post -> PostItem.from(post, clock.getZone()))
+        var posts = findPostsByDate(userId, date);
+        // つぶやきごとに問い合わせず（N+1 にしない）、写真のあるつぶやきの ID をまとめて取る
+        var withPhoto = posts.isEmpty()
+                ? Set.<Long>of()
+                : new HashSet<>(postPhotoRepository.findPostIdsWithPhoto(
+                        posts.stream().map(Post::getId).toList()));
+        return posts.stream()
+                .map(post -> PostItem.from(post, clock.getZone(), withPhoto.contains(post.getId())))
                 .toList();
     }
 
@@ -85,7 +97,21 @@ public class PostService {
 
     /** 編集モードで開くつぶやきを返す。自分の今日か昨日のつぶやきでなければ {@link ResourceNotFoundException}。 */
     public PostItem getEditablePost(Long userId, Long postId) {
-        return PostItem.from(findEditablePost(userId, postId), clock.getZone());
+        var post = findEditablePost(userId, postId);
+        return PostItem.from(post, clock.getZone(), postPhotoRepository.existsById(post.getId()));
+    }
+
+    /**
+     * 自分のつぶやきに添付した写真を返す。日付は問わない（日記表示から過去の写真も開ける）。ほかのユーザーのつぶやき・写真のないつぶやき・
+     * 削除したつぶやきなら {@link ResourceNotFoundException}（どれも区別しない。CLAUDE.md の禁止事項「他人のデータ（IDOR）」）。
+     */
+    public PhotoContent findPhoto(Long userId, Long postId) {
+        var photo = postPhotoRepository.findByPostIdAndUserId(postId, userId).orElseThrow(() -> {
+            // 他人の写真へのアクセスの試行を含む（写真のないつぶやき・削除済みとは区別できない）
+            log.warn("Photo not found for user: userId={}, postId={}", userId, postId);
+            return new ResourceNotFoundException("PostPhoto", postId);
+        });
+        return new PhotoContent(photo.getContentType(), photo.getData());
     }
 
     /**
@@ -93,12 +119,17 @@ public class PostService {
      * 今日のつぶやきが {@link #DAILY_POST_LIMIT} 件に達していれば {@link DailyPostLimitExceededException}。
      *
      * <p>Claude API はトランザクションの外で呼び、DB を読む・保存するところだけを短いトランザクションにする（CLAUDE.md の「Spring・Lombok」）。
+     * 写真は、つぶやきと同じトランザクションで保存する。どちらかが失敗したら、両方とも保存しない（phase3-spec.md の「6. 処理の詳細 > つぶやきの投稿」）。
      *
+     * @param photo 添付する写真。なければ {@code null}
      * @return 保存したつぶやき（判定したカテゴリが入っている）
+     * @throws InvalidPhotoException 写真を受け付けられないとき（{@link PhotoValidator#inspect}）。上限の確認と Claude API より前に確かめる
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public Post create(Long userId, String rawContent) {
+    public Post create(Long userId, String rawContent, PhotoUpload photo) {
         var content = rawContent.strip();
+        // 受け付けない写真なら、Claude API を呼ぶ前に断る（料金をかけないため）
+        var photoType = photo == null ? null : inspectPhoto(userId, photo);
         var now = clock.instant();
         var today = LocalDate.ofInstant(now, clock.getZone());
         // 上限に達しているなら、Claude API を呼ぶ前に断る（料金をかけないため）。読むだけでも短いトランザクションで囲む（CLAUDE.md の
@@ -109,9 +140,19 @@ public class PostService {
         var saved = transactionTemplate.execute(status -> {
             // 判定を待つ間に、別のタブなどから投稿されていないか確かめ直す
             checkPostLimit(userId, today);
-            return postRepository.save(post);
+            var savedPost = postRepository.save(post);
+            if (photo != null) {
+                postPhotoRepository.save(new PostPhoto(savedPost, photoType.contentType(), photo.data(), now));
+            }
+            return savedPost;
         });
-        log.info("Post created: userId={}, postId={}, contentLength={}", userId, saved.getId(), content.length());
+        // 写真は有無と大きさだけを出す（中身・ファイル名は出さない）
+        log.info(
+                "Post created: userId={}, postId={}, contentLength={}, photoBytes={}",
+                userId,
+                saved.getId(),
+                content.length(),
+                photo == null ? 0 : photo.size());
         return saved;
     }
 
@@ -122,10 +163,17 @@ public class PostService {
      * （以前に直したものも、このリクエストで直したものも）は判定し直さない。
      *
      * <p>{@link #create} と同じく、Claude API はトランザクションの外で呼び、DB を読む・保存するところだけを短いトランザクションにする。
+     *
+     * <p>写真は {@code photoChange} のとおりに、本文と同じトランザクションで変える（差し替え・添付・外す）。写真を変えても、つぶやきは
+     * 「編集済み」にしない（phase3-spec.md の「6. 処理の詳細 > つぶやきの編集」）。
+     *
+     * @throws InvalidPhotoException 差し替える写真を受け付けられないとき。Claude API より前に確かめる
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public void edit(Long userId, Long postId, String content, PostCategory category) {
+    public void edit(Long userId, Long postId, String content, PostCategory category, PhotoChange photoChange) {
         var stripped = content.strip();
+        // 受け付けない写真なら、Claude API を呼ぶ前に断る
+        var photoType = photoChange instanceof PhotoChange.Replace(var upload) ? inspectPhoto(userId, upload) : null;
         // create と同じく、読むだけでも短いトランザクションで囲む
         var current = transactionTemplate.execute(status -> findEditablePost(userId, postId));
         var contentChanged = !stripped.equals(current.getContent());
@@ -147,15 +195,34 @@ public class PostService {
             } else if (!post.isCategorySetByUser()) {
                 classified.ifPresent(post::assignCategory);
             }
+            changePhoto(post, photoChange, photoType, now);
         });
-        // どのカテゴリにしたかは出さない（CLAUDE.md の禁止事項「ログ」）
+        // どのカテゴリにしたかは出さない（CLAUDE.md の禁止事項「ログ」）。写真は変え方だけを出す
         log.info(
-                "Post edited: userId={}, postId={}, contentLength={}, classified={}, categorySetByUser={}",
+                "Post edited: userId={}, postId={}, contentLength={}, classified={}, categorySetByUser={}, photo={}",
                 userId,
                 postId,
                 stripped.length(),
                 shouldClassify,
-                categoryChangedByUser);
+                categoryChangedByUser,
+                photoChange.getClass().getSimpleName());
+    }
+
+    /** 編集のトランザクションの中で、写真を変える。差し替えは前の写真の行を書き換えるので、前の写真のデータは残らない。 */
+    private void changePhoto(Post post, PhotoChange photoChange, PhotoType photoType, Instant now) {
+        switch (photoChange) {
+            case PhotoChange.Keep keep -> {
+                // 写真は変えない
+            }
+            case PhotoChange.Remove remove -> postPhotoRepository.deleteById(post.getId());
+            case PhotoChange.Replace(var upload) ->
+                postPhotoRepository
+                        .findById(post.getId())
+                        .ifPresentOrElse(
+                                existing -> existing.replace(photoType.contentType(), upload.data(), now),
+                                () -> postPhotoRepository.save(
+                                        new PostPhoto(post, photoType.contentType(), upload.data(), now)));
+        }
     }
 
     /**
@@ -180,6 +247,16 @@ public class PostService {
     public void delete(Long userId, Long postId) {
         postRepository.delete(findEditablePost(userId, postId));
         log.info("Post deleted: userId={}, postId={}", userId, postId);
+    }
+
+    /** 写真を確かめて形式を返す。受け付けない写真なら、理由をログに残して {@link InvalidPhotoException} をそのまま投げる。 */
+    private static PhotoType inspectPhoto(Long userId, PhotoUpload photo) {
+        try {
+            return PhotoValidator.inspect(photo.data());
+        } catch (InvalidPhotoException e) {
+            log.warn("Photo rejected: userId={}, reason={}, photoBytes={}", userId, e.getReason(), photo.size());
+            throw e;
+        }
     }
 
     private void checkPostLimit(Long userId, LocalDate today) {

@@ -8,6 +8,13 @@ spring:
   threads:
     virtual:
       enabled: true
+  # 写真の添付。受け付ける上限（5MB）は PhotoValidator が確かめ、理由を画面に出す。ここはそれより大きくして、上限を少し超えた
+  # 写真にもメッセージを出せるようにする。ここを超えるリクエストは受け取らない（docs/phase3-spec.md の「6. 処理の詳細 > アップロードの大きさ（設定）」）
+  servlet:
+    multipart:
+      max-file-size: 7MB
+      # 写真と本文などのフォームの値を合わせた大きさ
+      max-request-size: 8MB
   # 日付の曜日などを日本語で出す（ブラウザの言語設定によらない）
   web:
     locale: ja_JP

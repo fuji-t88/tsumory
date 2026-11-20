@@ -62,6 +62,7 @@
                       th:text="${post.time}">12:40</span>
                 <div class="flex-grow-1">
                     <div th:text="${post.content}">昼のカレーが辛すぎた</div>
+                    <a th:replace="~{fragments/post-photo :: thumbnail(${post})}"></a>
                     <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
                         <span th:replace="~{fragments/category-badge :: badge(${post.category})}"></span>
                         <!--/* カテゴリだけを直す。JavaScript なしでも動くよう、選んだだけでは送信せず「変更」で送る。

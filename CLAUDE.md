@@ -245,6 +245,11 @@ tsumory/
 ├── .github/workflows/sonar.yml   # コードの品質の解析（「CI/CD > SonarQube Cloud」）
 ├── .dockerignore
 ├── config/spotbugs/exclude.xml   # SpotBugs で直さないと決めた指摘（「CI/CD > SpotBugs」）
+├── README.md                     # 開発に関わっていない人向けの案内（進捗の見方、手元での動かし方）
+├── WBS_tsumory.md                # 写真・音声機能の WBS の原本。運用は WBS_tsumory.README.md
+├── WBS_tsumory.xlsx              # WBS の最終成果物（指示したときだけ md から反映する）
+├── WBS_tsumory.README.md         # WBS の運用方法
+├── tools/WbsSync.java            # WBS の md を xlsx に反映するスクリプト（java tools/WbsSync.java）
 ├── db/
 │   └── dev-seed.sql              # 動作確認用のテストデータ（手で流す。Flyway のマイグレーションではない）
 ├── build.gradle.kts

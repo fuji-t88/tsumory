@@ -6,12 +6,23 @@ import com.example.tsumory.form.PostEditForm;
 import com.example.tsumory.form.PostForm;
 import com.example.tsumory.service.DailyPostLimitExceededException;
 import com.example.tsumory.service.DiaryService;
+import com.example.tsumory.service.InvalidPhotoException;
+import com.example.tsumory.service.PhotoChange;
+import com.example.tsumory.service.PhotoType;
+import com.example.tsumory.service.PhotoUpload;
+import com.example.tsumory.service.PhotoValidator;
 import com.example.tsumory.service.PostService;
 import com.example.tsumory.service.ResourceNotFoundException;
 import jakarta.validation.Valid;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -21,6 +32,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 @Controller
@@ -38,7 +50,7 @@ public class PostController {
 
     @GetMapping("/")
     public String index(@AuthenticationPrincipal CustomUserDetails principal, Model model) {
-        model.addAttribute("postForm", new PostForm(null));
+        model.addAttribute("postForm", PostForm.empty());
         populateHomeModel(principal.userId(), model, null);
         return "home";
     }
@@ -56,10 +68,15 @@ public class PostController {
             return "home";
         }
         try {
-            postService.create(userId, postForm.content());
+            postService.create(userId, postForm.content(), toPhotoUpload(postForm));
         } catch (DailyPostLimitExceededException e) {
             // ログは PostService が WARN で出しているので、ここでは出さない
             flash.addFlashAttribute("message", DAILY_LIMIT_MESSAGE);
+        } catch (InvalidPhotoException e) {
+            // 本文は残して、写真の欄にエラーを出す（ログは PostService が WARN で出している）
+            binding.rejectValue("attachedPhotos", "invalidPhoto", photoErrorMessage(e.getReason()));
+            populateHomeModel(userId, model, null);
+            return "home";
         }
         return "redirect:/";
     }
@@ -72,8 +89,8 @@ public class PostController {
             RedirectAttributes flash) {
         try {
             var post = postService.getEditablePost(principal.userId(), id);
-            model.addAttribute("postForm", new PostForm(null));
-            model.addAttribute("postEditForm", new PostEditForm(post.content(), post.category()));
+            model.addAttribute("postForm", PostForm.empty());
+            model.addAttribute("postEditForm", PostEditForm.of(post.content(), post.category()));
             populateHomeModel(principal.userId(), model, PostView.from(post));
             return "home";
         } catch (ResourceNotFoundException e) {
@@ -91,16 +108,40 @@ public class PostController {
             RedirectAttributes flash) {
         try {
             if (binding.hasErrors()) {
-                // 入力エラーでも、編集できないつぶやきなら再表示せずに戻す
-                var post = postService.getEditablePost(principal.userId(), id);
-                model.addAttribute("postForm", new PostForm(null));
-                populateHomeModel(principal.userId(), model, PostView.from(post));
-                return "home";
+                return showEditModeWithErrors(principal.userId(), id, model);
             }
-            postService.edit(principal.userId(), id, form.content(), form.category());
+            try {
+                postService.edit(principal.userId(), id, form.content(), form.category(), toPhotoChange(form));
+            } catch (InvalidPhotoException e) {
+                // 本文は残して、写真の欄にエラーを出す（ログは PostService が WARN で出している）
+                binding.rejectValue("attachedPhotos", "invalidPhoto", photoErrorMessage(e.getReason()));
+                return showEditModeWithErrors(principal.userId(), id, model);
+            }
             return "redirect:/";
         } catch (ResourceNotFoundException e) {
             return redirectWithNotFound(flash);
+        }
+    }
+
+    /**
+     * 自分のつぶやきに添付した写真を返す（phase3-spec.md の「6. 処理の詳細 > 写真の取得」）。形式は保存したときにデータから決めたもの。ほかの
+     * ユーザーのつぶやき・写真のないつぶやき・削除したつぶやきは、どれも区別せずに 404（本文なし。画像の要求なのでエラー画面は返さない）。
+     */
+    @GetMapping("/posts/{id}/photo")
+    public ResponseEntity<byte[]> photo(@AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long id) {
+        try {
+            var photo = postService.findPhoto(principal.userId(), id);
+            var type = MediaType.parseMediaType(photo.contentType());
+            var disposition = ContentDisposition.inline()
+                    .filename("photo." + type.getSubtype())
+                    .build();
+            return ResponseEntity.ok()
+                    .contentType(type)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                    .body(photo.data());
+        } catch (ResourceNotFoundException e) {
+            // ログは PostService が WARN で出しているので、ここでは出さない
+            return ResponseEntity.notFound().build();
         }
     }
 
@@ -157,6 +198,57 @@ public class PostController {
         model.addAttribute("editingPost", editingPost);
         // ホーム描画の全経路（通常表示・入力エラーの再表示）がカテゴリの選択肢を受け取れるよう、共有ヘルパーに置く
         model.addAttribute("categories", PostCategory.values());
+    }
+
+    /**
+     * 添付された写真を service に渡す形にする。なければ {@code null}。枚数はフォームの入力チェックで確かめてある。形式と中身は service が確かめる
+     * （phase3-spec.md の「6. 処理の詳細 > つぶやきの投稿」）。
+     */
+    private static PhotoUpload toPhotoUpload(PostForm form) {
+        var photos = form.getAttachedPhotos();
+        if (photos.isEmpty()) {
+            return null;
+        }
+        return readPhoto(photos.getFirst());
+    }
+
+    private static PhotoUpload readPhoto(MultipartFile file) {
+        try {
+            return new PhotoUpload(file.getBytes());
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read the uploaded photo", e);
+        }
+    }
+
+    /**
+     * 入力エラーのある編集モードを出し直す。編集できないつぶやき（他人のもの、削除済み、一昨日より前）なら
+     * {@link ResourceNotFoundException}（呼び出し側がトップに戻す）。
+     */
+    private String showEditModeWithErrors(Long userId, Long postId, Model model) {
+        var post = postService.getEditablePost(userId, postId);
+        model.addAttribute("postForm", PostForm.empty());
+        populateHomeModel(userId, model, PostView.from(post));
+        return "home";
+    }
+
+    /** 編集フォームの写真の欄から、写真の変え方を決める。差し替えと外すの同時指定は、フォームの入力チェックで断ってある。 */
+    private static PhotoChange toPhotoChange(PostEditForm form) {
+        var photos = form.getAttachedPhotos();
+        if (!photos.isEmpty()) {
+            return new PhotoChange.Replace(readPhoto(photos.getFirst()));
+        }
+        return form.removePhoto().booleanValue() ? PhotoChange.REMOVE : PhotoChange.KEEP;
+    }
+
+    /** 写真を受け付けない理由ごとの、画面に出すメッセージ。上限の数字は定数から出す。 */
+    static String photoErrorMessage(InvalidPhotoException.Reason reason) {
+        return switch (reason) {
+            case EMPTY -> "写真のファイルが空です";
+            case TOO_LARGE -> "写真は " + PhotoValidator.MAX_BYTES / (1024 * 1024) + "MB 以内にしてください";
+            case UNSUPPORTED_TYPE -> "写真は " + PhotoType.displayNames() + " にしてください";
+            case TOO_MANY_PIXELS -> "写真の画素数が多すぎます（" + PhotoValidator.MAX_PIXELS / 10_000 + " 万画素まで）";
+            case BROKEN -> "写真を読み込めませんでした。別の写真を選んでください";
+        };
     }
 
     // ログは PostService が WARN で出しているので、ここでは出さない
