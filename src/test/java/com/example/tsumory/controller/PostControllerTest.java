@@ -363,6 +363,22 @@ class PostControllerTest {
     }
 
     @Test
+    void 写真を付けても本文の決まりは手で入力したときと同じ() throws Exception {
+        // 写真付きでも、本文は 100 文字まで・改行なし（CM-REQ-01）
+        for (var content : List.of("あ".repeat(Post.CONTENT_MAX_LENGTH + 1), "朝\n昼")) {
+            mockMvc.perform(multipart("/posts")
+                            .file(new MockMultipartFile("photo", "lunch.jpg", "image/jpeg", JPEG_BYTES))
+                            .param("content", content)
+                            .with(user(PRINCIPAL))
+                            .with(csrf()))
+                    .andExpect(status().isOk())
+                    .andExpect(view().name("home"));
+        }
+
+        verify(postService, never()).create(anyLong(), anyString(), any());
+    }
+
+    @Test
     void 写真を2枚送ると入力エラーを表示して投稿しない() throws Exception {
         // 画面からは 1 枚しか選べないが、リクエストを直接作れば 2 枚送れる
         mockMvc.perform(multipart("/posts")
