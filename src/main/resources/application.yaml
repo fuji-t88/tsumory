@@ -12,9 +12,9 @@ spring:
   # 写真にもメッセージを出せるようにする。ここを超えるリクエストは受け取らない（docs/phase3-spec.md の「6. 処理の詳細 > アップロードの大きさ（設定）」）
   servlet:
     multipart:
-      max-file-size: 10MB
+      max-file-size: 7MB
       # 写真と本文などのフォームの値を合わせた大きさ
-      max-request-size: 11MB
+      max-request-size: 8MB
   # 日付の曜日などを日本語で出す（ブラウザの言語設定によらない）
   web:
     locale: ja_JP
