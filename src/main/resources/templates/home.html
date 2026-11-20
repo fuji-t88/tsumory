@@ -29,6 +29,34 @@
                     <p th:if="${#fields.hasErrors('content')}" th:errors="*{content}" class="invalid-feedback"
                        role="alert"></p>
                 </div>
+                <!--/* 音声入力（phase3-spec.md の「5. 画面 > 音声入力」）。voice-input.js が、ブラウザが音声認識に対応していれば出し、
+                       対応していなければ代わりの案内を出す。JavaScript が無効なら、どちらも出ない（キーボードで入力できる）。
+                       画面の文言は data 属性で渡す。投稿の上限に達したら出さない */-->
+                <div th:unless="${postLimitReached}" class="mb-2">
+                    <div class="js-voice-input" data-target="post-content" data-unsupported="voice-unsupported" hidden
+                         data-text-idle="音声入力を使えます"
+                         data-text-listening="聞き取っています…話し終えたら「停止」を押してください"
+                         data-text-stopping="終了しています…"
+                         data-text-done="音声を入力しました。必要なら直してから投稿してください"
+                         data-text-cancelled="音声入力を取り消しました（始める前の文章に戻しました）"
+                         data-error-not-allowed="マイクの使用が許可されていません。ブラウザの設定で許可するか、キーボードで入力してください"
+                         data-error-audio-capture="マイクが見つかりません。マイクをつなぐか、キーボードで入力してください"
+                         data-error-no-speech="音声が聞き取れませんでした。もう一度お試しください"
+                         data-error-network="通信できず、音声を認識できませんでした。時間をおいてお試しいただくか、キーボードで入力してください"
+                         data-error-other="音声を認識できませんでした。もう一度お試しいただくか、キーボードで入力してください">
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm js-voice-start">音声で入力</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm js-voice-stop" hidden>停止</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm js-voice-cancel" hidden>キャンセル</button>
+                            <span class="small text-body-secondary js-voice-status" role="status" aria-live="polite">音声入力を使えます</span>
+                        </div>
+                        <p class="form-text mb-0">
+                            音声はブラウザの音声認識で文字にします。ブラウザによっては、音声が外部の認識サービスに送られます。
+                            Tsumory のサーバーには音声を送らず、保存もしません。音声入力を使わずに、キーボードで入力することもできます。
+                        </p>
+                    </div>
+                    <p id="voice-unsupported" class="form-text mb-0" hidden>このブラウザでは音声入力を使えません。キーボードで入力してください。</p>
+                </div>
                 <div class="mb-2">
                     <!--/* 選んだファイルは、入力エラーで画面を出し直すと残らない（ブラウザの仕様）。th:field は使わない */-->
                     <label for="post-photo" class="form-label small text-body-secondary"
@@ -195,5 +223,6 @@
 </main>
 <script th:src="@{/js/form-submit.js}"></script>
 <script th:src="@{/js/photo-input.js}"></script>
+<script th:src="@{/js/voice-input.js}"></script>
 </body>
 </html>

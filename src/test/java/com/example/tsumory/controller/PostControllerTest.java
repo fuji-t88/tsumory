@@ -541,6 +541,58 @@ class PostControllerTest {
                 .doesNotContain("/posts/11/photo");
     }
 
+    // --- 音声入力（phase3-spec.md の「5. 画面 > 音声入力」） ---
+
+    @Test
+    void 投稿フォームに音声入力の操作と注意書きを隠して置きスクリプトに任せる() throws Exception {
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                // 対応しているかは voice-input.js が確かめてから出す。画面を開いただけではマイクを求めない
+                .contains(
+                        "<div class=\"js-voice-input\" data-target=\"post-content\" data-unsupported=\"voice-unsupported\" hidden")
+                .contains(
+                        "<button type=\"button\" class=\"btn btn-outline-secondary btn-sm js-voice-start\">音声で入力</button>")
+                .contains(
+                        "<button type=\"button\" class=\"btn btn-outline-primary btn-sm js-voice-stop\" hidden>停止</button>")
+                .contains(
+                        "<button type=\"button\" class=\"btn btn-outline-secondary btn-sm js-voice-cancel\" hidden>キャンセル</button>")
+                .contains("role=\"status\" aria-live=\"polite\"")
+                .contains("ブラウザによっては、音声が外部の認識サービスに送られます。")
+                .contains("Tsumory のサーバーには音声を送らず、保存もしません。")
+                .contains(
+                        "<p id=\"voice-unsupported\" class=\"form-text mb-0\" hidden>このブラウザでは音声入力を使えません。キーボードで入力してください。</p>")
+                .contains("<script src=\"/js/voice-input.js\"></script>");
+    }
+
+    @Test
+    void 投稿の上限に達したら音声入力を出さない() throws Exception {
+        when(postService.isPostLimitReached(USER_ID, TODAY)).thenReturn(true);
+
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html).doesNotContain("js-voice-input").doesNotContain("voice-unsupported");
+    }
+
+    @Test
+    void 音声入力は投稿フォームだけに置き編集フォームには置かない() throws Exception {
+        when(postService.getEditablePost(USER_ID, 10L)).thenReturn(TODAY_POST);
+
+        var html = mockMvc.perform(get("/posts/10/edit").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html.split("js-voice-input", -1)).hasSize(2);
+        assertThat(html).doesNotContain("data-target=\"edit-content\"");
+    }
+
     /** 画面の中の、写真を選ぶ欄（{@code <input type="file" name="photo">}）のタグ。 */
     private static List<String> photoInputs(String html) {
         return Pattern.compile("<input[^>]*name=\"photo\"[^>]*>")
