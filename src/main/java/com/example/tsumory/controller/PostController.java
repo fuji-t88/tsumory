@@ -6,7 +6,10 @@ import com.example.tsumory.form.PostEditForm;
 import com.example.tsumory.form.PostForm;
 import com.example.tsumory.service.DailyPostLimitExceededException;
 import com.example.tsumory.service.DiaryService;
+import com.example.tsumory.service.InvalidPhotoException;
+import com.example.tsumory.service.PhotoType;
 import com.example.tsumory.service.PhotoUpload;
+import com.example.tsumory.service.PhotoValidator;
 import com.example.tsumory.service.PostService;
 import com.example.tsumory.service.ResourceNotFoundException;
 import jakarta.validation.Valid;
@@ -15,7 +18,6 @@ import java.io.UncheckedIOException;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -64,6 +66,11 @@ public class PostController {
         } catch (DailyPostLimitExceededException e) {
             // ログは PostService が WARN で出しているので、ここでは出さない
             flash.addFlashAttribute("message", DAILY_LIMIT_MESSAGE);
+        } catch (InvalidPhotoException e) {
+            // 本文は残して、写真の欄にエラーを出す（ログは PostService が WARN で出している）
+            binding.rejectValue("attachedPhotos", "invalidPhoto", photoErrorMessage(e.getReason()));
+            populateHomeModel(userId, model, null);
+            return "home";
         }
         return "redirect:/";
     }
@@ -164,25 +171,30 @@ public class PostController {
     }
 
     /**
-     * 添付された写真を service に渡す形にする。なければ {@code null}。形式は、ブラウザが送った {@code Content-Type}（なければ
-     * {@code application/octet-stream}）。枚数はフォームの入力チェックで確かめてある（phase3-spec.md の「6. 処理の詳細 > つぶやきの投稿」）。
+     * 添付された写真を service に渡す形にする。なければ {@code null}。枚数はフォームの入力チェックで確かめてある。形式と中身は service が確かめる
+     * （phase3-spec.md の「6. 処理の詳細 > つぶやきの投稿」）。
      */
     private static PhotoUpload toPhotoUpload(PostForm form) {
         var photos = form.getAttachedPhotos();
         if (photos.isEmpty()) {
             return null;
         }
-        var file = photos.getFirst();
-        var contentType = file.getContentType();
         try {
-            return new PhotoUpload(
-                    contentType == null || contentType.isBlank()
-                            ? MediaType.APPLICATION_OCTET_STREAM_VALUE
-                            : contentType,
-                    file.getBytes());
+            return new PhotoUpload(photos.getFirst().getBytes());
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read the uploaded photo", e);
         }
+    }
+
+    /** 写真を受け付けない理由ごとの、画面に出すメッセージ。上限の数字は定数から出す。 */
+    static String photoErrorMessage(InvalidPhotoException.Reason reason) {
+        return switch (reason) {
+            case EMPTY -> "写真のファイルが空です";
+            case TOO_LARGE -> "写真は " + PhotoValidator.MAX_BYTES / (1024 * 1024) + "MB 以内にしてください";
+            case UNSUPPORTED_TYPE -> "写真は " + PhotoType.displayNames() + " にしてください";
+            case TOO_MANY_PIXELS -> "写真の画素数が多すぎます（" + PhotoValidator.MAX_PIXELS / 10_000 + " 万画素まで）";
+            case BROKEN -> "写真を読み込めませんでした。別の写真を選んでください";
+        };
     }
 
     // ログは PostService が WARN で出しているので、ここでは出さない

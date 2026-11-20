@@ -8,13 +8,13 @@ spring:
   threads:
     virtual:
       enabled: true
-  # 写真の添付。Spring の既定（1 ファイル 1MB）では多くの写真が送れない。上限を超えたときの画面は PH-REQ-03 で作る
-  # （docs/phase3-spec.md の「6. 処理の詳細 > アップロードの大きさ（設定）」）
+  # 写真の添付。受け付ける上限（5MB）は PhotoValidator が確かめ、理由を画面に出す。ここはそれより大きくして、上限を少し超えた
+  # 写真にもメッセージを出せるようにする。ここを超えるリクエストは受け取らない（docs/phase3-spec.md の「6. 処理の詳細 > アップロードの大きさ（設定）」）
   servlet:
     multipart:
-      max-file-size: 5MB
+      max-file-size: 10MB
       # 写真と本文などのフォームの値を合わせた大きさ
-      max-request-size: 6MB
+      max-request-size: 11MB
   # 日付の曜日などを日本語で出す（ブラウザの言語設定によらない）
   web:
     locale: ja_JP

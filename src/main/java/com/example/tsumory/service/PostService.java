@@ -100,10 +100,13 @@ public class PostService {
      *
      * @param photo 添付する写真。なければ {@code null}
      * @return 保存したつぶやき（判定したカテゴリが入っている）
+     * @throws InvalidPhotoException 写真を受け付けられないとき（{@link PhotoValidator#inspect}）。上限の確認と Claude API より前に確かめる
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Post create(Long userId, String rawContent, PhotoUpload photo) {
         var content = rawContent.strip();
+        // 受け付けない写真なら、Claude API を呼ぶ前に断る（料金をかけないため）
+        var photoType = photo == null ? null : inspectPhoto(userId, photo);
         var now = clock.instant();
         var today = LocalDate.ofInstant(now, clock.getZone());
         // 上限に達しているなら、Claude API を呼ぶ前に断る（料金をかけないため）。読むだけでも短いトランザクションで囲む（CLAUDE.md の
@@ -116,7 +119,7 @@ public class PostService {
             checkPostLimit(userId, today);
             var savedPost = postRepository.save(post);
             if (photo != null) {
-                postPhotoRepository.save(new PostPhoto(savedPost, photo.contentType(), photo.data(), now));
+                postPhotoRepository.save(new PostPhoto(savedPost, photoType.contentType(), photo.data(), now));
             }
             return savedPost;
         });
@@ -195,6 +198,16 @@ public class PostService {
     public void delete(Long userId, Long postId) {
         postRepository.delete(findEditablePost(userId, postId));
         log.info("Post deleted: userId={}, postId={}", userId, postId);
+    }
+
+    /** 写真を確かめて形式を返す。受け付けない写真なら、理由をログに残して {@link InvalidPhotoException} をそのまま投げる。 */
+    private static PhotoType inspectPhoto(Long userId, PhotoUpload photo) {
+        try {
+            return PhotoValidator.inspect(photo.data());
+        } catch (InvalidPhotoException e) {
+            log.warn("Photo rejected: userId={}, reason={}, photoBytes={}", userId, e.getReason(), photo.size());
+            throw e;
+        }
     }
 
     private void checkPostLimit(Long userId, LocalDate today) {

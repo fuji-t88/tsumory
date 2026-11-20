@@ -33,11 +33,17 @@
                     <!--/* 選んだファイルは、入力エラーで画面を出し直すと残らない（ブラウザの仕様）。th:field は使わない */-->
                     <label for="post-photo" class="form-label small text-body-secondary"
                            th:text="|写真（任意・${photoMaxPerPost} 枚まで）|">写真</label>
-                    <input type="file" id="post-photo" name="photo" accept="image/*"
-                           class="form-control form-control-sm" th:disabled="${postLimitReached}"
-                           th:classappend="${#fields.hasErrors('attachedPhotos')} ? 'is-invalid'">
+                    <!--/* 送る前の確かめ（形式・大きさ）は photo-input.js。サーバーでも同じ決まりで確かめる */-->
+                    <input type="file" id="post-photo" name="photo" th:accept="${photoAccept}"
+                           class="form-control form-control-sm js-photo-input" th:disabled="${postLimitReached}"
+                           th:classappend="${#fields.hasErrors('attachedPhotos')} ? 'is-invalid'"
+                           aria-describedby="post-photo-hint"
+                           th:data-max-bytes="${photoMaxBytes}" th:data-type-message="${photoTypeMessage}"
+                           th:data-too-large-message="${photoTooLargeMessage}" data-error="post-photo-error">
                     <p th:if="${#fields.hasErrors('attachedPhotos')}" th:errors="*{attachedPhotos}"
                        class="invalid-feedback" role="alert"></p>
+                    <p id="post-photo-error" class="small text-danger mb-0" role="alert" hidden></p>
+                    <p id="post-photo-hint" class="form-text mb-0" th:text="${photoHint}">JPEG か PNG・5MB まで</p>
                 </div>
                 <div class="d-flex align-items-center justify-content-end gap-3">
                     <span th:if="${postLimitReached}" class="text-body-secondary small"
@@ -147,5 +153,6 @@
     </section>
 </main>
 <script th:src="@{/js/form-submit.js}"></script>
+<script th:src="@{/js/photo-input.js}"></script>
 </body>
 </html>

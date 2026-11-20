@@ -12,7 +12,9 @@ import static com.example.tsumory.domain.TestFixtures.STUDY;
 import static com.example.tsumory.domain.TestFixtures.TODAY;
 import static com.example.tsumory.domain.TestFixtures.clockAt;
 import static com.example.tsumory.domain.TestFixtures.hanako;
+import static com.example.tsumory.domain.TestFixtures.jpegBytes;
 import static com.example.tsumory.domain.TestFixtures.jst;
+import static com.example.tsumory.domain.TestFixtures.pngBytes;
 import static com.example.tsumory.domain.TestFixtures.post;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -31,6 +33,7 @@ import com.example.tsumory.domain.User;
 import com.example.tsumory.repository.PostPhotoRepository;
 import com.example.tsumory.repository.PostRepository;
 import com.example.tsumory.repository.UserRepository;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -61,8 +64,7 @@ class PostServiceTest {
     /** 写真を付けない投稿。 */
     private static final PhotoUpload NO_PHOTO = null;
 
-    private static final PhotoUpload JPEG =
-            new PhotoUpload("image/jpeg", new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x01});
+    private static final PhotoUpload JPEG = new PhotoUpload(jpegBytes(4, 3));
 
     @Mock
     private PostRepository postRepository;
@@ -404,6 +406,32 @@ class PostServiceTest {
         order.verify(transactionManager).rollback(any());
         // コミットしたのは、判定の前に上限を確かめた読むだけのトランザクションだけ
         verify(transactionManager, times(1)).commit(any());
+    }
+
+    @Test
+    void 保存する写真の形式はブラウザが送った形式ではなくデータから決める() {
+        serviceAt(NOW).create(USER_ID, LUNCH, new PhotoUpload(pngBytes(4, 3)));
+
+        var captor = ArgumentCaptor.forClass(PostPhoto.class);
+        verify(postPhotoRepository).save(captor.capture());
+        assertThat(captor.getValue().getContentType()).isEqualTo("image/png");
+    }
+
+    @Test
+    void 受け付けない写真ならClaudeを呼ばず上限も数えず何も保存しない() {
+        // 写真の検証は、上限の確認と Claude API より前に行う（料金をかけないため）
+        var service = serviceAt(NOW);
+        var text = new PhotoUpload("昼はカレーだった".getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> service.create(USER_ID, LUNCH, text))
+                .isInstanceOfSatisfying(
+                        InvalidPhotoException.class,
+                        e -> assertThat(e.getReason()).isEqualTo(InvalidPhotoException.Reason.UNSUPPORTED_TYPE));
+
+        verify(postRepository, never()).countByUserIdAndDate(any(), any(), any());
+        verify(categoryClassifier, never()).classify(any());
+        verify(postRepository, never()).save(any());
+        verify(postPhotoRepository, never()).save(any());
     }
 
     @Test

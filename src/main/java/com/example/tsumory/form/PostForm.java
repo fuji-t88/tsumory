@@ -33,9 +33,17 @@ public record PostForm(
         return new PostForm(null, List.of());
     }
 
-    /** 添付された写真（中身が空の部分を除く）。 */
+    /**
+     * 添付された写真。写真を選ばなかったときの部分（ファイル名も中身も空）は除く。ファイル名があれば、中身が空でも残す（空のファイルを選んだとき。
+     * service が受け付けない写真として断る）。
+     */
     @Size(max = PostPhoto.MAX_PER_POST, message = "写真は {max} 枚まで添付できます")
     public List<MultipartFile> getAttachedPhotos() {
-        return photo.stream().filter(file -> !file.isEmpty()).toList();
+        return photo.stream().filter(PostForm::isChosen).toList();
+    }
+
+    private static boolean isChosen(MultipartFile file) {
+        var name = file.getOriginalFilename();
+        return !file.isEmpty() || (name != null && !name.isEmpty());
     }
 }

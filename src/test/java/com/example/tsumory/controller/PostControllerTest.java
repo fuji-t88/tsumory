@@ -34,7 +34,9 @@ import com.example.tsumory.repository.UserRepository;
 import com.example.tsumory.service.DailyPostLimitExceededException;
 import com.example.tsumory.service.DiaryItem;
 import com.example.tsumory.service.DiaryService;
+import com.example.tsumory.service.InvalidPhotoException;
 import com.example.tsumory.service.PhotoUpload;
+import com.example.tsumory.service.PhotoValidator;
 import com.example.tsumory.service.PostItem;
 import com.example.tsumory.service.PostService;
 import com.example.tsumory.service.ResourceNotFoundException;
@@ -341,7 +343,7 @@ class PostControllerTest {
                         .with(csrf()))
                 .andExpect(redirectedUrl("/"));
 
-        verify(postService).create(USER_ID, "昼はカレー", new PhotoUpload("image/jpeg", JPEG_BYTES));
+        verify(postService).create(USER_ID, "昼はカレー", new PhotoUpload(JPEG_BYTES));
     }
 
     @Test
@@ -374,15 +376,65 @@ class PostControllerTest {
     }
 
     @Test
-    void 形式が送られない写真はoctet_streamとして渡す() throws Exception {
+    void 空のファイルを選んだら写真として渡しserviceに断らせる() throws Exception {
+        // ファイル名があれば、中身が空でも「写真を選ばなかった」とはみなさない（黙って写真なしで投稿しない）
         mockMvc.perform(multipart("/posts")
-                        .file(new MockMultipartFile("photo", "lunch.jpg", null, JPEG_BYTES))
+                        .file(new MockMultipartFile("photo", "empty.jpg", "image/jpeg", new byte[0]))
                         .param("content", "昼はカレー")
                         .with(user(PRINCIPAL))
                         .with(csrf()))
                 .andExpect(redirectedUrl("/"));
 
-        verify(postService).create(USER_ID, "昼はカレー", new PhotoUpload("application/octet-stream", JPEG_BYTES));
+        verify(postService).create(USER_ID, "昼はカレー", new PhotoUpload(new byte[0]));
+    }
+
+    @Test
+    void 受け付けない写真は理由を表示し本文を残して投稿しない() throws Exception {
+        doThrow(new InvalidPhotoException(InvalidPhotoException.Reason.UNSUPPORTED_TYPE))
+                .when(postService)
+                .create(USER_ID, "昼はカレー", new PhotoUpload(JPEG_BYTES));
+
+        mockMvc.perform(multipart("/posts")
+                        .file(new MockMultipartFile("photo", "lunch.jpg", "image/jpeg", JPEG_BYTES))
+                        .param("content", "昼はカレー")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(view().name("home"))
+                .andExpect(content().string(containsString("写真は JPEG か PNG にしてください")))
+                .andExpect(content().string(containsString(">昼はカレー</textarea>")));
+    }
+
+    @Test
+    void 写真を受け付けない理由ごとにメッセージを出し上限は定数から出す() {
+        assertThat(PostController.photoErrorMessage(InvalidPhotoException.Reason.EMPTY))
+                .isEqualTo("写真のファイルが空です");
+        assertThat(PostController.photoErrorMessage(InvalidPhotoException.Reason.TOO_LARGE))
+                .isEqualTo("写真は " + PhotoValidator.MAX_BYTES / (1024 * 1024) + "MB 以内にしてください");
+        assertThat(PostController.photoErrorMessage(InvalidPhotoException.Reason.UNSUPPORTED_TYPE))
+                .isEqualTo("写真は JPEG か PNG にしてください");
+        assertThat(PostController.photoErrorMessage(InvalidPhotoException.Reason.TOO_MANY_PIXELS))
+                .isEqualTo("写真の画素数が多すぎます（" + PhotoValidator.MAX_PIXELS / 10_000 + " 万画素まで）");
+        assertThat(PostController.photoErrorMessage(InvalidPhotoException.Reason.BROKEN))
+                .isEqualTo("写真を読み込めませんでした。別の写真を選んでください");
+    }
+
+    @Test
+    void 写真の欄に受け付ける形式と大きさを示し送る前にブラウザでも確かめる() throws Exception {
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(photoInputs(html))
+                .singleElement()
+                .asString()
+                .contains("accept=\"image/jpeg,image/png\"")
+                .contains("data-max-bytes=\"" + PhotoValidator.MAX_BYTES + "\"")
+                .contains("data-type-message=\"写真は JPEG か PNG にしてください\"");
+        assertThat(html)
+                .contains("JPEG か PNG・" + PhotoValidator.MAX_BYTES / (1024 * 1024) + "MB まで")
+                .contains("<script src=\"/js/photo-input.js\"></script>");
     }
 
     @Test

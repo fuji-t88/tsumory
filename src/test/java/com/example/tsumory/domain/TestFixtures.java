@@ -2,6 +2,13 @@ package com.example.tsumory.domain;
 
 import static org.mockito.Mockito.mock;
 
+import java.awt.Color;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -9,6 +16,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.stream.IntStream;
+import java.util.zip.CRC32;
+import javax.imageio.ImageIO;
 
 /**
  * テストで使う共通のデータ。ユーザー・つぶやき・日記と、日本時間の時刻・固定の時計を作る。
@@ -156,5 +165,83 @@ public final class TestFixtures {
                     return diary(user, date, DIARY_CONTENT, date + "T21:30:00");
                 })
                 .toList();
+    }
+
+    // --- 写真 ---
+
+    /** 幅 {@code width}・高さ {@code height} の、本物の JPEG のデータ（ImageIO で書き出す）。 */
+    public static byte[] jpegBytes(int width, int height) {
+        return imageBytes("jpeg", width, height);
+    }
+
+    /** 幅 {@code width}・高さ {@code height} の、本物の PNG のデータ（ImageIO で書き出す）。 */
+    public static byte[] pngBytes(int width, int height) {
+        return imageBytes("png", width, height);
+    }
+
+    /**
+     * ちょうど {@code size} バイトの、読める PNG のデータ。PNG の決まりで読み飛ばされる補助のチャンク（{@code paDd}）を IEND の前に入れて、
+     * 大きさを合わせる。
+     */
+    public static byte[] pngBytesOfSize(int size) {
+        var png = pngBytes(2, 2);
+        int iend = png.length - 12; // IEND は長さ 4・種類 4・CRC 4 の 12 バイトで、データの最後にある
+        int padding = size - png.length - 12; // 補助のチャンクの長さ・種類・CRC の 12 バイトを除いた中身
+        if (padding < 0) {
+            throw new IllegalArgumentException("size is too small: " + size);
+        }
+        var out = new ByteArrayOutputStream(size);
+        out.write(png, 0, iend);
+        writeChunk(out, "paDd", new byte[padding]);
+        out.write(png, iend, 12);
+        return out.toByteArray();
+    }
+
+    /**
+     * 幅 {@code width}・高さ {@code height} と書いた、PNG の先頭（署名と IHDR）だけのデータ。画素のデータはない。大きすぎる画素数の写真を、
+     * 実際にその大きさの画像を作らずに試すために使う。
+     */
+    public static byte[] pngHeaderOnly(int width, int height) {
+        var out = new ByteArrayOutputStream();
+        out.writeBytes(new byte[] {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'});
+        var ihdr = ByteBuffer.allocate(13)
+                .putInt(width)
+                .putInt(height)
+                .put((byte) 8) // ビット深度
+                .put((byte) 2) // RGB
+                .put((byte) 0)
+                .put((byte) 0)
+                .put((byte) 0)
+                .array();
+        writeChunk(out, "IHDR", ihdr);
+        return out.toByteArray();
+    }
+
+    private static byte[] imageBytes(String format, int width, int height) {
+        var image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        var graphics = image.createGraphics();
+        graphics.setColor(new Color(0xE8, 0x7A, 0x41));
+        graphics.fillRect(0, 0, width, height);
+        graphics.dispose();
+        var out = new ByteArrayOutputStream();
+        try {
+            if (!ImageIO.write(image, format, out)) {
+                throw new IllegalStateException("No image writer for " + format);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return out.toByteArray();
+    }
+
+    private static void writeChunk(ByteArrayOutputStream out, String type, byte[] data) {
+        var typeBytes = type.getBytes(StandardCharsets.US_ASCII);
+        var crc = new CRC32();
+        crc.update(typeBytes);
+        crc.update(data);
+        out.writeBytes(ByteBuffer.allocate(4).putInt(data.length).array());
+        out.writeBytes(typeBytes);
+        out.writeBytes(data);
+        out.writeBytes(ByteBuffer.allocate(4).putInt((int) crc.getValue()).array());
     }
 }
