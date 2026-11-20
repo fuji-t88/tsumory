@@ -32,8 +32,8 @@ repositories {
 
 // Spring Boot 4.1.1 が決める版には脆弱性がある。Spring Boot が追いついたら消す（CLAUDE.md の「CI/CD > Snyk」）
 extra["tomcat.version"] = "11.0.27"
-extra["jackson-bom.version"] = "3.1.7"
-extra["jackson-2-bom.version"] = "2.21.7"
+extra["jackson-bom.version"] = "3.1.8"
+extra["jackson-2-bom.version"] = "2.21.8"
 extra["postgresql.version"] = "42.7.14"
 
 // Hibernate が XML のマッピングを読むための JAXB の実装。XXE の脆弱性があり、直った版がないので外す（CLAUDE.md の「CI/CD > Snyk」）
