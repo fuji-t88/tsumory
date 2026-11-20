@@ -106,7 +106,7 @@
                     </div>
                     <form th:if="${editingPost != null and editingPost.id eq post.id}"
                           th:action="@{/posts/{id}/edit(id=${post.id})}" th:object="${postEditForm}" method="post"
-                          class="js-submit-once" data-submitting-label="保存しています…">
+                          enctype="multipart/form-data" class="js-submit-once" data-submitting-label="保存しています…">
                         <div class="mb-2">
                             <label for="edit-content" class="visually-hidden">つぶやきの本文</label>
                             <textarea id="edit-content" th:field="*{content}" th:maxlength="${postContentMaxLength}"
@@ -126,6 +126,38 @@
                             <p th:if="${#fields.hasErrors('category')}" class="invalid-feedback" role="alert">
                                 カテゴリを選んでください
                             </p>
+                        </div>
+                        <!--/* 写真の差し替え（PH-REQ-05）と外す（PH-REQ-06）。phase3-spec.md の「5. 画面 > 今日のつぶやき（編集モード）」 */-->
+                        <div class="mb-2">
+                            <div th:if="${editingPost.hasPhoto}" class="mb-2">
+                                <a th:replace="~{fragments/post-photo :: thumbnail(${editingPost})}"></a>
+                                <div class="form-check mt-1">
+                                    <input type="checkbox" id="edit-remove-photo" name="removePhoto" value="true"
+                                           class="form-check-input" th:checked="*{removePhoto}">
+                                    <label for="edit-remove-photo" class="form-check-label small">写真を外す（本文は残ります）</label>
+                                </div>
+                            </div>
+                            <label for="edit-photo" class="form-label small text-body-secondary"
+                                   th:text="${editingPost.hasPhoto} ? '写真を差し替える（任意）' : '写真を添付する（任意）'">写真</label>
+                            <input type="file" id="edit-photo" name="photo" th:accept="${photoAccept}"
+                                   class="form-control form-control-sm js-photo-input"
+                                   th:classappend="${#fields.hasErrors('attachedPhotos') or #fields.hasErrors('photoChoiceConsistent')} ? 'is-invalid'"
+                                   aria-describedby="edit-photo-hint"
+                                   th:data-max-bytes="${photoMaxBytes}" th:data-type-message="${photoTypeMessage}"
+                                   th:data-too-large-message="${photoTooLargeMessage}" data-error="edit-photo-error"
+                                   data-preview="edit-photo-preview">
+                            <p th:if="${#fields.hasErrors('attachedPhotos')}" th:errors="*{attachedPhotos}"
+                               class="invalid-feedback" role="alert"></p>
+                            <p th:if="${#fields.hasErrors('photoChoiceConsistent')}" th:errors="*{photoChoiceConsistent}"
+                               class="invalid-feedback" role="alert"></p>
+                            <p id="edit-photo-error" class="small text-danger mb-0" role="alert" hidden></p>
+                            <p id="edit-photo-hint" class="form-text mb-0" th:text="${photoHint}">JPEG か PNG・5MB まで</p>
+                            <div id="edit-photo-preview" class="mt-2" hidden>
+                                <div class="d-flex align-items-end gap-2">
+                                    <img class="photo-thumbnail img-thumbnail" alt="選んだ写真のプレビュー">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm js-photo-clear">選んだ写真を取り消す</button>
+                                </div>
+                            </div>
                         </div>
                         <div class="d-flex justify-content-end gap-2">
                             <a th:href="@{/}" class="btn btn-outline-secondary btn-sm">キャンセル</a>

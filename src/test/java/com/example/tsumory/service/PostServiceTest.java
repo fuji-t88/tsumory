@@ -25,6 +25,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.example.tsumory.domain.Post;
@@ -417,6 +418,110 @@ class PostServiceTest {
         assertThatThrownBy(() -> service.findPhoto(USER_ID, POST_ID)).isInstanceOf(ResourceNotFoundException.class);
     }
 
+    // --- 編集での写真の差し替えと外す（PH-REQ-05・06） ---
+
+    @Test
+    void 編集で写真を差し替えると前の写真の行を書き換え前のデータを残さない() {
+        var service = serviceAt(NOW);
+        var post = todaysLunch();
+        stubFind(post);
+        var existing = new PostPhoto(post, "image/jpeg", JPEG.data(), jst(THIS_MORNING));
+        when(postPhotoRepository.findById(any())).thenReturn(Optional.of(existing));
+        var png = pngBytes(5, 4);
+
+        service.edit(USER_ID, POST_ID, LUNCH, post.getCategory(), new PhotoChange.Replace(new PhotoUpload(png)));
+
+        assertThat(existing.getContentType()).isEqualTo("image/png");
+        assertThat(existing.getData()).containsExactly(png);
+        assertThat(existing.getUpdatedAt()).isEqualTo(jst(NOW));
+        assertThat(existing.getCreatedAt()).isEqualTo(jst(THIS_MORNING));
+        verify(postPhotoRepository, never()).save(any());
+    }
+
+    @Test
+    void 写真のないつぶやきに編集で写真を添付できる() {
+        var service = serviceAt(NOW);
+        var post = todaysLunch();
+        stubFind(post);
+        when(postPhotoRepository.findById(any())).thenReturn(Optional.empty());
+
+        service.edit(USER_ID, POST_ID, LUNCH, post.getCategory(), new PhotoChange.Replace(JPEG));
+
+        var captor = ArgumentCaptor.forClass(PostPhoto.class);
+        verify(postPhotoRepository).save(captor.capture());
+        assertThat(captor.getValue().getPost()).isSameAs(post);
+        assertThat(captor.getValue().getContentType()).isEqualTo("image/jpeg");
+    }
+
+    @Test
+    void 編集で写真だけを外すと本文は残り編集済みにもならない() {
+        var service = serviceAt(NOW);
+        var post = todaysLunch();
+        stubFind(post);
+
+        service.edit(USER_ID, POST_ID, LUNCH, post.getCategory(), PhotoChange.REMOVE);
+
+        verify(postPhotoRepository).deleteById(post.getId());
+        assertThat(post.getContent()).isEqualTo(LUNCH);
+        assertThat(post.isEdited()).isFalse();
+    }
+
+    @Test
+    void 写真を変えない編集では写真に触れない() {
+        var service = serviceAt(NOW);
+        var post = todaysLunch();
+        stubFind(post);
+
+        service.edit(USER_ID, POST_ID, STUDY, post.getCategory(), PhotoChange.KEEP);
+
+        verifyNoInteractions(postPhotoRepository);
+    }
+
+    @Test
+    void 差し替える写真を受け付けないならClaudeを呼ばずつぶやきも写真も変えない() {
+        var service = serviceAt(NOW);
+        var text = new PhotoUpload("昼はカレーだった".getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(
+                        () -> service.edit(USER_ID, POST_ID, STUDY, PostCategory.OTHER, new PhotoChange.Replace(text)))
+                .isInstanceOf(InvalidPhotoException.class);
+
+        verify(postRepository, never()).findByIdAndUserId(any(), any());
+        verify(categoryClassifier, never()).classify(any());
+        verifyNoInteractions(postPhotoRepository);
+    }
+
+    @Test
+    void 写真の差し替えに失敗したら本文の変更も取り消す() {
+        // 写真の変更は、本文の変更と同じトランザクション
+        var service = serviceAt(NOW);
+        var post = todaysLunch();
+        stubFind(post);
+        when(postPhotoRepository.findById(any())).thenThrow(new IllegalStateException("photo read failed"));
+
+        assertThatThrownBy(
+                        () -> service.edit(USER_ID, POST_ID, STUDY, post.getCategory(), new PhotoChange.Replace(JPEG)))
+                .isInstanceOf(IllegalStateException.class);
+
+        var order = inOrder(postPhotoRepository, transactionManager);
+        order.verify(postPhotoRepository).findById(any());
+        order.verify(transactionManager).rollback(any());
+        // コミットしたのは、判定の前につぶやきを読んだ読むだけのトランザクションだけ
+        verify(transactionManager, times(1)).commit(any());
+    }
+
+    @Test
+    void 他人のつぶやきの写真は編集で差し替えられない() {
+        var service = serviceAt(NOW);
+        when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(
+                        () -> service.edit(USER_ID, POST_ID, STUDY, PostCategory.OTHER, new PhotoChange.Replace(JPEG)))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verifyNoInteractions(postPhotoRepository);
+    }
+
     // --- 写真の添付 ---
 
     @Test
@@ -514,7 +619,8 @@ class PostServiceTest {
     void 投稿と編集はClaudeのAPIを呼ぶのでトランザクションを張らない() throws NoSuchMethodException {
         for (var method : List.of(
                 PostService.class.getMethod("create", Long.class, String.class, PhotoUpload.class),
-                PostService.class.getMethod("edit", Long.class, Long.class, String.class, PostCategory.class))) {
+                PostService.class.getMethod(
+                        "edit", Long.class, Long.class, String.class, PostCategory.class, PhotoChange.class))) {
             assertThat(method.getAnnotation(Transactional.class).propagation()).isEqualTo(Propagation.NOT_SUPPORTED);
         }
     }
@@ -528,7 +634,7 @@ class PostServiceTest {
         stubFind(post);
         when(categoryClassifier.classify(STUDY)).thenReturn(Optional.of(PostCategory.LEARNING));
 
-        service.edit(USER_ID, POST_ID, STUDY, post.getCategory());
+        service.edit(USER_ID, POST_ID, STUDY, post.getCategory(), PhotoChange.KEEP);
 
         assertThat(post.getCategory()).isEqualTo(PostCategory.LEARNING);
     }
@@ -540,7 +646,7 @@ class PostServiceTest {
         stubFind(post);
         when(categoryClassifier.classify(BAKERY)).thenReturn(Optional.empty());
 
-        service.edit(USER_ID, POST_ID, BAKERY, post.getCategory());
+        service.edit(USER_ID, POST_ID, BAKERY, post.getCategory(), PhotoChange.KEEP);
 
         assertThat(post.getCategory()).isEqualTo(PostCategory.PRIVATE);
         assertThat(post.getContent()).isEqualTo(BAKERY);
@@ -552,7 +658,7 @@ class PostServiceTest {
         var post = todaysLunch();
         stubFind(post);
 
-        service.edit(USER_ID, POST_ID, " " + LUNCH + " ", post.getCategory());
+        service.edit(USER_ID, POST_ID, " " + LUNCH + " ", post.getCategory(), PhotoChange.KEEP);
 
         verify(categoryClassifier, never()).classify(any());
     }
@@ -565,7 +671,7 @@ class PostServiceTest {
         post.markCategorySetByUser();
         stubFind(post);
 
-        service.edit(USER_ID, POST_ID, MEETING, post.getCategory());
+        service.edit(USER_ID, POST_ID, MEETING, post.getCategory(), PhotoChange.KEEP);
 
         verify(categoryClassifier, never()).classify(any());
         assertThat(post.getCategory()).isEqualTo(PostCategory.WORK);
@@ -585,7 +691,7 @@ class PostServiceTest {
                 .thenReturn(Optional.of(reloaded));
         when(categoryClassifier.classify(STUDY)).thenReturn(Optional.of(PostCategory.LEARNING));
 
-        service.edit(USER_ID, POST_ID, STUDY, before.getCategory());
+        service.edit(USER_ID, POST_ID, STUDY, before.getCategory(), PhotoChange.KEEP);
 
         assertThat(reloaded.getCategory()).isEqualTo(PostCategory.WORK);
     }
@@ -597,7 +703,7 @@ class PostServiceTest {
         var post = todaysLunch();
         stubFind(post);
 
-        service.edit(USER_ID, POST_ID, LUNCH_WITH_CLIENT, PostCategory.WORK);
+        service.edit(USER_ID, POST_ID, LUNCH_WITH_CLIENT, PostCategory.WORK, PhotoChange.KEEP);
 
         verify(categoryClassifier, never()).classify(any());
         assertThat(post.getCategory()).isEqualTo(PostCategory.WORK);
@@ -611,7 +717,7 @@ class PostServiceTest {
         var post = todaysLunch();
         stubFind(post);
 
-        service.edit(USER_ID, POST_ID, " " + LUNCH + " ", PostCategory.PRIVATE);
+        service.edit(USER_ID, POST_ID, " " + LUNCH + " ", PostCategory.PRIVATE, PhotoChange.KEEP);
 
         verify(categoryClassifier, never()).classify(any());
         assertThat(post.getCategory()).isEqualTo(PostCategory.PRIVATE);
@@ -628,7 +734,7 @@ class PostServiceTest {
         stubFind(post);
         when(categoryClassifier.classify(STUDY)).thenReturn(Optional.of(PostCategory.LEARNING));
 
-        service.edit(USER_ID, POST_ID, STUDY, PostCategory.OTHER);
+        service.edit(USER_ID, POST_ID, STUDY, PostCategory.OTHER, PhotoChange.KEEP);
 
         assertThat(post.getCategory()).isEqualTo(PostCategory.LEARNING);
         assertThat(post.isCategorySetByUser()).isFalse();
@@ -640,7 +746,7 @@ class PostServiceTest {
         var service = serviceAt(NOW);
         stubFind(todaysLunch());
 
-        service.edit(USER_ID, POST_ID, STUDY, PostCategory.OTHER);
+        service.edit(USER_ID, POST_ID, STUDY, PostCategory.OTHER, PhotoChange.KEEP);
 
         var order = inOrder(transactionManager, postRepository, categoryClassifier);
         order.verify(transactionManager).getTransaction(any());
@@ -655,7 +761,7 @@ class PostServiceTest {
         var post = todaysLunch();
         stubFind(post);
 
-        service.edit(USER_ID, POST_ID, STUDY, post.getCategory());
+        service.edit(USER_ID, POST_ID, STUDY, post.getCategory(), PhotoChange.KEEP);
 
         var order = inOrder(categoryClassifier, transactionManager);
         order.verify(categoryClassifier).classify(STUDY);
@@ -669,7 +775,7 @@ class PostServiceTest {
         var service = serviceAt(NOW);
         when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, BAKERY, PostCategory.OTHER))
+        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, BAKERY, PostCategory.OTHER, PhotoChange.KEEP))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(categoryClassifier, never()).classify(any());
         // 読み込みの短いトランザクションはロールバックし、保存のトランザクションは始めない
@@ -686,7 +792,8 @@ class PostServiceTest {
                 .thenReturn(Optional.of(post))
                 .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, LUNCH_WITH_CLIENT, post.getCategory()))
+        assertThatThrownBy(
+                        () -> service.edit(USER_ID, POST_ID, LUNCH_WITH_CLIENT, post.getCategory(), PhotoChange.KEEP))
                 .isInstanceOf(ResourceNotFoundException.class);
         // 判定の前の読み込み（1 つ目のトランザクション）はコミットし、保存（2 つ目）はロールバックする
         verify(transactionManager, times(1)).commit(any());
@@ -699,7 +806,7 @@ class PostServiceTest {
         var post = todaysLunch();
         stubFind(post);
 
-        service.edit(USER_ID, POST_ID, " " + BAKERY + " ", post.getCategory());
+        service.edit(USER_ID, POST_ID, " " + BAKERY + " ", post.getCategory(), PhotoChange.KEEP);
 
         assertThat(post.getContent()).isEqualTo(BAKERY);
         assertThat(post.getPostedAt()).isEqualTo(jst(THIS_MORNING));
@@ -713,7 +820,7 @@ class PostServiceTest {
         var post = post(user, GOOD_NIGHT, "2026-10-07T23:59:59");
         stubFind(post);
 
-        service.edit(USER_ID, POST_ID, "明日も早いので、もう寝よう", post.getCategory());
+        service.edit(USER_ID, POST_ID, "明日も早いので、もう寝よう", post.getCategory(), PhotoChange.KEEP);
 
         assertThat(post.getContent()).isEqualTo("明日も早いので、もう寝よう");
     }
@@ -724,7 +831,7 @@ class PostServiceTest {
         var post = post(user, GOOD_NIGHT, "2026-10-06T23:59:59");
         stubFind(post);
 
-        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, BAKERY, PostCategory.OTHER))
+        assertThatThrownBy(() -> service.edit(USER_ID, POST_ID, BAKERY, PostCategory.OTHER, PhotoChange.KEEP))
                 .isInstanceOf(ResourceNotFoundException.class);
         assertThat(post.getContent()).isEqualTo(GOOD_NIGHT);
     }

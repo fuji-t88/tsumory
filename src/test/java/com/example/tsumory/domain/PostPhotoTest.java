@@ -12,6 +12,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 class PostPhotoTest {
 
     private static final Instant SAVED_AT = TestFixtures.jst("2026-10-08T12:00:00");
+    private static final Instant REPLACED_AT = TestFixtures.jst("2026-10-08T13:00:00");
     private static final byte[] JPEG_BYTES = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x01};
 
     private static final String BLANK_TYPE = "Photo content type must not be blank";
@@ -76,6 +77,62 @@ class PostPhotoTest {
         assertThatThrownBy(() -> new PostPhoto(post, "image/jpeg", new byte[0], SAVED_AT))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(EMPTY_DATA);
+    }
+
+    @Test
+    void 作った時点では保存した日時と差し替えた日時が同じ() {
+        var photo = new PostPhoto(post, "image/jpeg", JPEG_BYTES, SAVED_AT);
+
+        assertThat(photo.getUpdatedAt()).isEqualTo(SAVED_AT);
+    }
+
+    @Test
+    void 差し替えると形式とデータと大きさと差し替えた日時が変わり保存した日時は変わらない() {
+        var photo = new PostPhoto(post, "image/jpeg", JPEG_BYTES, SAVED_AT);
+        var png = new byte[] {(byte) 0x89, 'P', 'N', 'G', 1, 2};
+
+        photo.replace("image/png", png, REPLACED_AT);
+
+        assertSoftly(softly -> {
+            softly.assertThat(photo.getContentType()).isEqualTo("image/png");
+            softly.assertThat(photo.getData()).containsExactly(png);
+            softly.assertThat(photo.getSizeBytes()).isEqualTo(png.length);
+            softly.assertThat(photo.getUpdatedAt()).isEqualTo(REPLACED_AT);
+            softly.assertThat(photo.getCreatedAt()).isEqualTo(SAVED_AT);
+        });
+    }
+
+    @Test
+    void 決まりを破る値には差し替えられず元の写真のまま() {
+        var photo = new PostPhoto(post, "image/jpeg", JPEG_BYTES, SAVED_AT);
+
+        assertSoftly(softly -> {
+            softly.assertThatThrownBy(() -> photo.replace(" ", new byte[] {1}, REPLACED_AT))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage(BLANK_TYPE);
+            softly.assertThatThrownBy(() -> photo.replace("image/png", new byte[0], REPLACED_AT))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage(EMPTY_DATA);
+            softly.assertThatThrownBy(() -> photo.replace("image/png", new byte[] {1}, null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("now");
+            // 途中で失敗して、一部だけ書き換わっていない
+            softly.assertThat(photo.getContentType()).isEqualTo("image/jpeg");
+            softly.assertThat(photo.getData()).containsExactly(JPEG_BYTES);
+            softly.assertThat(photo.getSizeBytes()).isEqualTo(JPEG_BYTES.length);
+            softly.assertThat(photo.getUpdatedAt()).isEqualTo(SAVED_AT);
+        });
+    }
+
+    @Test
+    void 差し替えに渡したデータをあとで書き換えても写真は変わらない() {
+        var photo = new PostPhoto(post, "image/jpeg", JPEG_BYTES, SAVED_AT);
+        var source = new byte[] {(byte) 0x89, 'P', 'N', 'G'};
+
+        photo.replace("image/png", source, REPLACED_AT);
+        source[0] = 0;
+
+        assertThat(photo.getData()).containsExactly((byte) 0x89, 'P', 'N', 'G');
     }
 
     @Test

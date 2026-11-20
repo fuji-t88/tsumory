@@ -49,6 +49,9 @@ public class PostPhoto {
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(nullable = false)
+    private Instant updatedAt;
+
     /**
      * @throws NullPointerException 値が {@code null} のとき
      * @throws IllegalArgumentException 形式が空・空白だけ・{@link #CONTENT_TYPE_MAX_LENGTH} 文字を超えるとき、データが空のとき
@@ -59,6 +62,24 @@ public class PostPhoto {
         this.data = requireNotEmpty(data).clone();
         this.sizeBytes = this.data.length;
         this.createdAt = Objects.requireNonNull(now, "now");
+        this.updatedAt = now;
+    }
+
+    /**
+     * 写真を別の写真に差し替える（phase3-spec.md の「6. 処理の詳細 > つぶやきの編集」）。前の写真のデータは残さない。保存した日時は変えない。
+     *
+     * @throws NullPointerException 値が {@code null} のとき
+     * @throws IllegalArgumentException 形式が空・空白だけ・{@link #CONTENT_TYPE_MAX_LENGTH} 文字を超えるとき、データが空のとき
+     */
+    public void replace(String contentType, byte[] data, Instant now) {
+        // すべての値を確かめてから書き換える（途中で失敗して、一部だけ書き換わった状態にしない）
+        var validType = requireValidContentType(contentType);
+        var copied = requireNotEmpty(data).clone();
+        Objects.requireNonNull(now, "now");
+        this.contentType = validType;
+        this.data = copied;
+        this.sizeBytes = copied.length;
+        this.updatedAt = now;
     }
 
     /** 写真のデータの複製を返す。 */

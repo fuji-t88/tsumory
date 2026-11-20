@@ -7,6 +7,7 @@ import com.example.tsumory.repository.PostPhotoRepository;
 import com.example.tsumory.repository.PostRepository;
 import com.example.tsumory.repository.UserRepository;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
@@ -162,10 +163,17 @@ public class PostService {
      * （以前に直したものも、このリクエストで直したものも）は判定し直さない。
      *
      * <p>{@link #create} と同じく、Claude API はトランザクションの外で呼び、DB を読む・保存するところだけを短いトランザクションにする。
+     *
+     * <p>写真は {@code photoChange} のとおりに、本文と同じトランザクションで変える（差し替え・添付・外す）。写真を変えても、つぶやきは
+     * 「編集済み」にしない（phase3-spec.md の「6. 処理の詳細 > つぶやきの編集」）。
+     *
+     * @throws InvalidPhotoException 差し替える写真を受け付けられないとき。Claude API より前に確かめる
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public void edit(Long userId, Long postId, String content, PostCategory category) {
+    public void edit(Long userId, Long postId, String content, PostCategory category, PhotoChange photoChange) {
         var stripped = content.strip();
+        // 受け付けない写真なら、Claude API を呼ぶ前に断る
+        var photoType = photoChange instanceof PhotoChange.Replace(var upload) ? inspectPhoto(userId, upload) : null;
         // create と同じく、読むだけでも短いトランザクションで囲む
         var current = transactionTemplate.execute(status -> findEditablePost(userId, postId));
         var contentChanged = !stripped.equals(current.getContent());
@@ -187,15 +195,34 @@ public class PostService {
             } else if (!post.isCategorySetByUser()) {
                 classified.ifPresent(post::assignCategory);
             }
+            changePhoto(post, photoChange, photoType, now);
         });
-        // どのカテゴリにしたかは出さない（CLAUDE.md の禁止事項「ログ」）
+        // どのカテゴリにしたかは出さない（CLAUDE.md の禁止事項「ログ」）。写真は変え方だけを出す
         log.info(
-                "Post edited: userId={}, postId={}, contentLength={}, classified={}, categorySetByUser={}",
+                "Post edited: userId={}, postId={}, contentLength={}, classified={}, categorySetByUser={}, photo={}",
                 userId,
                 postId,
                 stripped.length(),
                 shouldClassify,
-                categoryChangedByUser);
+                categoryChangedByUser,
+                photoChange.getClass().getSimpleName());
+    }
+
+    /** 編集のトランザクションの中で、写真を変える。差し替えは前の写真の行を書き換えるので、前の写真のデータは残らない。 */
+    private void changePhoto(Post post, PhotoChange photoChange, PhotoType photoType, Instant now) {
+        switch (photoChange) {
+            case PhotoChange.Keep keep -> {
+                // 写真は変えない
+            }
+            case PhotoChange.Remove remove -> postPhotoRepository.deleteById(post.getId());
+            case PhotoChange.Replace(var upload) ->
+                postPhotoRepository
+                        .findById(post.getId())
+                        .ifPresentOrElse(
+                                existing -> existing.replace(photoType.contentType(), upload.data(), now),
+                                () -> postPhotoRepository.save(
+                                        new PostPhoto(post, photoType.contentType(), upload.data(), now)));
+        }
     }
 
     /**

@@ -36,6 +36,7 @@ import com.example.tsumory.service.DailyPostLimitExceededException;
 import com.example.tsumory.service.DiaryItem;
 import com.example.tsumory.service.DiaryService;
 import com.example.tsumory.service.InvalidPhotoException;
+import com.example.tsumory.service.PhotoChange;
 import com.example.tsumory.service.PhotoContent;
 import com.example.tsumory.service.PhotoUpload;
 import com.example.tsumory.service.PhotoValidator;
@@ -600,7 +601,7 @@ class PostControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("見えない文字や制御文字は入れられません")));
 
-        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any());
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any(), any());
     }
 
     @Test
@@ -630,7 +631,7 @@ class PostControllerTest {
                 .andExpect(content().string(containsString("action=\"/posts/10/edit\"")))
                 .andExpect(content().string(containsString("改行は入れられません")));
 
-        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any());
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any(), any());
     }
 
     @Test
@@ -777,7 +778,112 @@ class PostControllerTest {
                         .with(csrf()))
                 .andExpect(redirectedUrl("/"));
 
-        verify(postService).edit(USER_ID, 10L, " 昼のカレーがおいしかった ", PostCategory.WORK);
+        verify(postService).edit(USER_ID, 10L, " 昼のカレーがおいしかった ", PostCategory.WORK, PhotoChange.KEEP);
+    }
+
+    @Test
+    void 編集で写真を選ぶと差し替えとして渡す() throws Exception {
+        mockMvc.perform(multipart("/posts/10/edit")
+                        .file(new MockMultipartFile("photo", "new.jpg", "image/jpeg", JPEG_BYTES))
+                        .param("content", "昼はカレー")
+                        .param("category", "PRIVATE")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/"));
+
+        verify(postService)
+                .edit(
+                        USER_ID,
+                        10L,
+                        "昼はカレー",
+                        PostCategory.PRIVATE,
+                        new PhotoChange.Replace(new PhotoUpload(JPEG_BYTES)));
+    }
+
+    @Test
+    void 編集で写真を外すにチェックすると外すとして渡す() throws Exception {
+        mockMvc.perform(multipart("/posts/10/edit")
+                        .file(new MockMultipartFile("photo", "", "application/octet-stream", new byte[0]))
+                        .param("content", "昼はカレー")
+                        .param("category", "PRIVATE")
+                        .param("removePhoto", "true")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/"));
+
+        verify(postService).edit(USER_ID, 10L, "昼はカレー", PostCategory.PRIVATE, PhotoChange.REMOVE);
+    }
+
+    @Test
+    void 写真を外すと差し替えを同時に選ぶとエラーを表示して保存しない() throws Exception {
+        when(postService.getEditablePost(USER_ID, 10L)).thenReturn(TODAY_POST);
+
+        mockMvc.perform(multipart("/posts/10/edit")
+                        .file(new MockMultipartFile("photo", "new.jpg", "image/jpeg", JPEG_BYTES))
+                        .param("content", "昼はカレー")
+                        .param("category", "PRIVATE")
+                        .param("removePhoto", "true")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(view().name("home"))
+                .andExpect(content().string(containsString("写真を外すか差し替えるか、どちらかにしてください")));
+
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any(), any());
+    }
+
+    @Test
+    void 差し替える写真を受け付けないときは編集モードのまま理由を表示する() throws Exception {
+        when(postService.getEditablePost(USER_ID, 10L)).thenReturn(TODAY_POST);
+        doThrow(new InvalidPhotoException(InvalidPhotoException.Reason.BROKEN))
+                .when(postService)
+                .edit(
+                        USER_ID,
+                        10L,
+                        "昼はカレー",
+                        PostCategory.PRIVATE,
+                        new PhotoChange.Replace(new PhotoUpload(JPEG_BYTES)));
+
+        mockMvc.perform(multipart("/posts/10/edit")
+                        .file(new MockMultipartFile("photo", "new.jpg", "image/jpeg", JPEG_BYTES))
+                        .param("content", "昼はカレー")
+                        .param("category", "PRIVATE")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(view().name("home"))
+                .andExpect(content().string(containsString("写真を読み込めませんでした。別の写真を選んでください")))
+                .andExpect(content().string(containsString(">昼はカレー</textarea>")));
+    }
+
+    @Test
+    void 写真のあるつぶやきの編集モードでは今の写真と外すチェックと差し替えの欄を出す() throws Exception {
+        when(postService.getEditablePost(USER_ID, 10L))
+                .thenReturn(new PostItem(10L, "昼のカレーが辛すぎた", LocalTime.of(12, 40), false, PostCategory.PRIVATE, true));
+
+        var html = mockMvc.perform(get("/posts/10/edit").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                .contains("enctype=\"multipart/form-data\" class=\"js-submit-once\" data-submitting-label=\"保存しています…\"")
+                .contains("<img src=\"/posts/10/photo\"")
+                .contains("name=\"removePhoto\" value=\"true\"")
+                .contains("写真を差し替える（任意）")
+                .contains("id=\"edit-photo\"");
+    }
+
+    @Test
+    void 写真のないつぶやきの編集モードでは外すチェックを出さず添付の欄を出す() throws Exception {
+        when(postService.getEditablePost(USER_ID, 10L)).thenReturn(TODAY_POST);
+
+        var html = mockMvc.perform(get("/posts/10/edit").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html).doesNotContain("name=\"removePhoto\"").contains("写真を添付する（任意）");
     }
 
     @Test
@@ -795,7 +901,7 @@ class PostControllerTest {
                 // 型変換の内部的なメッセージは出さない
                 .andExpect(content().string(not(containsString("Failed to convert"))));
 
-        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any());
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any(), any());
     }
 
     @Test
@@ -809,7 +915,7 @@ class PostControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("カテゴリを選んでください")));
 
-        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any());
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any(), any());
     }
 
     @Test
@@ -826,14 +932,14 @@ class PostControllerTest {
                 .andExpect(content().string(containsString("100 文字以内で入力してください")))
                 .andExpect(content().string(containsString(content)));
 
-        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any());
+        verify(postService, never()).edit(anyLong(), anyLong(), anyString(), any(), any());
     }
 
     @Test
     void 他人のつぶやきの編集はメッセージを付けてトップへリダイレクト() throws Exception {
         doThrow(new ResourceNotFoundException("Post", 99L))
                 .when(postService)
-                .edit(USER_ID, 99L, "書き換え", PostCategory.OTHER);
+                .edit(USER_ID, 99L, "書き換え", PostCategory.OTHER, PhotoChange.KEEP);
 
         mockMvc.perform(post("/posts/99/edit")
                         .param("content", "書き換え")
@@ -861,7 +967,7 @@ class PostControllerTest {
         mockMvc.perform(post("/posts/10/edit").param("content", "書き換え").with(user(PRINCIPAL)))
                 .andExpect(status().isForbidden());
 
-        verify(postService, never()).edit(anyLong(), anyLong(), any(), any());
+        verify(postService, never()).edit(anyLong(), anyLong(), any(), any(), any());
     }
 
     // --- カテゴリの修正 ---
