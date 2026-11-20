@@ -153,6 +153,7 @@
   - Spring Boot を上げたら、上書きした版が Spring Boot の決める版より古くなっていないかを確かめ、追いついたものは消す（上書きが残ると、古い版に固定される）
   - 2026-10-22：Spring Boot 4.1.1 に対して `tomcat`・`jackson-bom`（Jackson 3）・`jackson-2-bom`（Anthropic SDK が使う Jackson 2）・`postgresql` を上書きした
   - 2026-10-26：Snyk が Tomcat 11.0.26 に Critical（`SNYK-JAVA-ORGAPACHETOMCATEMBED-21707475`）を見つけたので、`tomcat` の上書きを 11.0.27 に上げた（Spring Boot 4.1.2 でも直るが、Spring Boot を上げるのは Dependabot に任せる）
+  - 2026-11-20：Snyk が Jackson 2.21.7・3.1.7 に Critical（信頼できないデータのデシリアライズ。`SNYK-JAVA-COMFASTERXMLJACKSONCORE-21761837`・`SNYK-JAVA-TOOLSJACKSONCORE-21761838`）を見つけたので、`jackson-2-bom` の上書きを 2.21.8、`jackson-bom` の上書きを 3.1.8 に上げた（Spring Boot 4.1.3 でも直る）
 - JAXB の実装（`org.glassfish.jaxb`。Hibernate の依存）は、`build.gradle.kts` の `configurations.all` で外している。2026-10-22 に Snyk が XXE（`SNYK-JAVA-ORGGLASSFISHJAXB-20883142`）を見つけ、直った版がなかったため
   - Hibernate がこれを使うのは XML のマッピング（`META-INF/orm.xml` など）を読むときだけ。マッピングはアノテーションで書き、XML のマッピングを置かない
   - 外したあとに `bootRun` で、Flyway の確認・Hibernate の起動・ユーザーを読むクエリ（ログイン）まで動くことを確かめた（テストは DB につながないので、テストでは確かめられない）
@@ -182,6 +183,8 @@
   - 確かめた結果、避けるべきライセンスはなかった。tomcat-embed-core（Declared は Apache-2.0）の GPL・CDDL・EPL は、同梱のサーブレット・JSP の XSD のもの。Java EE の XSD は CDDL か GPL、Jakarta EE の XSD は EPL-2.0 か GPL-2.0+Classpath Exception の選択式で、Tomcat の `META-INF/LICENSE` が CDDL-1.0・EPL-2.0 を選んでいる。jakarta.annotation・transaction・persistence・activation、logback も EPL-2.0 か BSD-3 を選べるデュアルライセンス。JUnit・AspectJ などの GPL は、EPL-2.0 の本文の中で GPL に触れているだけ
   - tsumory は改変も配布もしない Web サービスなので、改変して配布したときにだけ義務が生じるもの（EPL・CDDL・LGPL・GPL+Classpath Exception）は許容する。ネットワーク越しの提供でも義務が生じるもの（AGPL・SSPL）と、利用を制限するもの（Commons Clause・BUSL・CC-BY-NC など）は使わない。配布する（イメージを公開するなど）ことになったら見直す
   - PR で新しい issue が出たら、Declared（pom のライセンス）と Discovered（JAR の中のファイルから見つかったライセンス）を分けて見る。誤検知と決めつけず、そのファイルを開き、デュアルライセンスでどれを選べるか、同梱元の LICENSE がどれを選んでいるかを確かめる
+  - 依存を変えていない PR でも、基準のコミットのあとに見つかった脆弱性は「新しい issue」として数えられ、`fossa test` が落ちる（2026-11-20、`.gitignore` だけの PR #15 で 3 件）
+  - 2026-11-20：Jackson の脆弱性を直す PR #16 の 1 回目の `fossa test` では、新しい issue が 1 件残った（#15 の 3 件から 2 件減った）。上げた Jackson の新旧の版で、pom のライセンスと JAR の中のライセンスファイルが同じことを確かめた。依存を変えずにコミットを足して流し直すと 0 件になり、通った。残りの 1 件が何だったか、なぜ消えたかは確かめていない（push 専用のキーではログに出ない。FOSSA 側の解析が追いついていなかったと考えられる）。同じように依存を変えていないのに件数が変わったら、まず流し直す
 - FOSSA の GitHub 連携（Quick Import）でリポジトリを取り込まない。CI の解析とプロジェクトが 2 つでき、結果が食い違う（「CI/CD > SonarQube Cloud」の自動解析と同じ）
 - API キーは GitHub のリポジトリの Secret `FOSSA_API_KEY`（push 専用のキー）。ワークフローやコードに書かない
   - push 専用のキーでは、`fossa test` は issue の件数だけを出し、どの依存の何のライセンスかはログに出ない。詳細は FOSSA の画面で見る
