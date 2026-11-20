@@ -107,14 +107,14 @@ class PostServiceTest {
     // --- 今日・昨日 ---
 
     @Test
-    void today_isJstDate() {
+    void 今日は日本時間の日付() {
         // UTC ではまだ 10/7 だが、日本時間では 10/8
         assertThat(serviceAt("2026-10-08T00:00:00").today()).isEqualTo(TODAY);
         assertThat(serviceAt("2026-10-08T23:59:59").today()).isEqualTo(TODAY);
     }
 
     @Test
-    void today_followsTheClocksZone() {
+    void 今日は時計のタイムゾーンで決まる() {
         // タイムゾーンの基準は Clock だけ。同じ瞬間でも、UTC の時計ならまだ 10/7（日本時間に決め打ちしない）
         var instant = jst("2026-10-08T00:30:00");
 
@@ -123,7 +123,7 @@ class PostServiceTest {
     }
 
     @Test
-    void isEditableDate_onlyTodayAndYesterday() {
+    void 編集できる日付は今日と昨日だけ() {
         var service = serviceAt("2026-10-08T00:00:00");
 
         assertThat(service.isEditableDate(TODAY)).isTrue();
@@ -135,7 +135,7 @@ class PostServiceTest {
     // --- 取得 ---
 
     @Test
-    void findPostsByDate_passesAnyDateAndClockZone() {
+    void 今日や昨日に限らず任意の日付のつぶやきを時計のタイムゾーンで探す() {
         // 今日・昨日に限らず、任意の日付のつぶやきを取れる
         var service = serviceAt(NOW);
         var lastWeek = LocalDate.of(2026, 10, 1);
@@ -146,7 +146,7 @@ class PostServiceTest {
     }
 
     @Test
-    void findPosts_searchesFromJstMidnightToNextMidnight() {
+    void その日のつぶやきを画面に出す形にして返す() {
         var service = serviceAt(NOW);
         when(postRepository.findByUserIdAndDate(USER_ID, TODAY, JST))
                 .thenReturn(List.of(post(user, OVERSLEPT, "2026-10-08T07:30:00")));
@@ -161,7 +161,7 @@ class PostServiceTest {
     }
 
     @Test
-    void countPosts_passesDateAndClockZone() {
+    void つぶやきの件数を日付と時計のタイムゾーンで数える() {
         var service = serviceAt(NOW);
         var lastWeek = LocalDate.of(2026, 10, 1);
         when(postRepository.countByUserIdAndDate(USER_ID, lastWeek, JST)).thenReturn(5L);
@@ -170,7 +170,7 @@ class PostServiceTest {
     }
 
     @Test
-    void getEditablePost_returnsTodaysPostAsItem() {
+    void 今日のつぶやきは編集モードで開ける() {
         var service = serviceAt(NOW);
         stubFind(post(user, LUNCH, "2026-10-08T11:30:00", PostCategory.PRIVATE));
 
@@ -183,7 +183,7 @@ class PostServiceTest {
     }
 
     @Test
-    void getEditablePost_othersPostOrDayBeforeYesterday_throwsNotFound() {
+    void 他人のつぶやきや一昨日のつぶやきは編集モードで開けない() {
         var service = serviceAt(NOW);
         when(postRepository.findByIdAndUserId(99L, USER_ID)).thenReturn(Optional.empty());
         stubFind(post(user, GOOD_NIGHT, "2026-10-06T23:59:59"));
@@ -196,7 +196,7 @@ class PostServiceTest {
     // --- 投稿 ---
 
     @Test
-    void create_savesStrippedContentWithSamePostedAndUpdatedTime() {
+    void 投稿すると前後の空白を除いた本文を投稿時刻と更新時刻を同じにして保存する() {
         var service = serviceAt(NOW);
 
         service.create(USER_ID, "  " + LUNCH + "\n");
@@ -209,7 +209,7 @@ class PostServiceTest {
     }
 
     @Test
-    void create_assignsTheClassifiedCategory() {
+    void 投稿すると判定したカテゴリが入り手で直した印は付かない() {
         var service = serviceAt(NOW);
         when(categoryClassifier.classify(MEETING)).thenReturn(Optional.of(PostCategory.WORK));
 
@@ -221,7 +221,7 @@ class PostServiceTest {
     }
 
     @Test
-    void create_savesPostAndClassifiesCategory() {
+    void 投稿すると判定したカテゴリの入ったつぶやきを返す() {
         // given
         var postService = serviceAt(NOW);
         when(categoryClassifier.classify(MEETING)).thenReturn(Optional.of(PostCategory.WORK));
@@ -236,7 +236,7 @@ class PostServiceTest {
     }
 
     @Test
-    void create_keepsOtherWhenClassificationFails() {
+    void カテゴリを判定できなくてもその他のまま投稿できる() {
         // 判定できなくても、つぶやきは保存する（コアループを Claude API の不調で止めない）
         var service = serviceAt(NOW);
         when(categoryClassifier.classify(LUNCH)).thenReturn(Optional.empty());
@@ -247,7 +247,7 @@ class PostServiceTest {
     }
 
     @Test
-    void isPostLimitReached_trueFromTheLimitCount() {
+    void 上限の件数に達した時点で上限到達になる() {
         var service = serviceAt("2026-10-08T12:00:00");
         when(postRepository.countByUserIdAndDate(USER_ID, TODAY, JST))
                 .thenReturn((long) PostService.DAILY_POST_LIMIT - 1)
@@ -258,7 +258,7 @@ class PostServiceTest {
     }
 
     @Test
-    void create_allowsUpToTheDailyLimit() {
+    void 上限の件数までは1日に投稿できる() {
         // UTC ではまだ 10/7 だが、日本時間では 10/8 の 0:30。日本時間の今日の件数で数える
         var service = serviceAt("2026-10-08T00:30:00");
         when(postRepository.countByUserIdAndDate(USER_ID, TODAY, JST))
@@ -270,7 +270,7 @@ class PostServiceTest {
     }
 
     @Test
-    void create_rejectsWhenDailyLimitReached_withoutCallingClaude() {
+    void 上限に達していたらClaudeを呼ばずに投稿を断る() {
         var service = serviceAt(NOW);
         when(postRepository.countByUserIdAndDate(USER_ID, TODAY, JST)).thenReturn((long) PostService.DAILY_POST_LIMIT);
 
@@ -283,7 +283,7 @@ class PostServiceTest {
     }
 
     @Test
-    void create_rejectsWhenLimitIsReachedWhileClassifying() {
+    void カテゴリの判定を待つ間に上限に達したら投稿を断る() {
         // 判定を待つ間に、別のタブから 16 件目が投稿された
         var service = serviceAt(NOW);
         when(postRepository.countByUserIdAndDate(USER_ID, TODAY, JST))
@@ -295,7 +295,7 @@ class PostServiceTest {
     }
 
     @Test
-    void create_checksTheLimitInAShortTransactionBeforeClassifying() {
+    void 投稿の上限はカテゴリの判定より前に短いトランザクションで確かめる() {
         // 判定の前に読む上限の確認も、短いトランザクションで済ませる。トランザクションの外で直接読むと、その接続を
         // メソッドが終わるまで（Claude API の応答を待つ間も）握り続けるため
         var service = serviceAt(NOW);
@@ -310,7 +310,7 @@ class PostServiceTest {
     }
 
     @Test
-    void create_classifiesOutsideTheTransactionAndSavesInside() {
+    void 投稿ではカテゴリをトランザクションの外で判定し中で保存する() {
         // Claude API の応答を待つ間に DB 接続を握らない：判定 → トランザクション開始 → 保存 → コミット の順
         var service = serviceAt(NOW);
 
@@ -324,7 +324,7 @@ class PostServiceTest {
     }
 
     @Test
-    void create_checksTheLimitAgainstTheSameDateInsideTheTransaction() {
+    void 保存するトランザクションの中でも同じ日付で上限を確かめる() {
         // 上限の確かめ直しは、最初に求めた「今日」で行う（判定を待つ間に 0 時をまたいでも、投稿時刻の日付で数える）
         var service = serviceAt("2026-10-08T23:59:59");
 
@@ -334,7 +334,7 @@ class PostServiceTest {
     }
 
     @Test
-    void createAndEdit_runOutsideTransactionsBecauseTheyCallTheClaudeApi() throws NoSuchMethodException {
+    void 投稿と編集はClaudeのAPIを呼ぶのでトランザクションを張らない() throws NoSuchMethodException {
         for (var method : List.of(
                 PostService.class.getMethod("create", Long.class, String.class),
                 PostService.class.getMethod("edit", Long.class, Long.class, String.class, PostCategory.class))) {
@@ -345,7 +345,7 @@ class PostServiceTest {
     // --- 編集 ---
 
     @Test
-    void edit_reclassifiesWhenContentChanges() {
+    void 本文を変えるとカテゴリを判定し直す() {
         var service = serviceAt(NOW);
         var post = post(user, LUNCH, THIS_MORNING, PostCategory.PRIVATE);
         stubFind(post);
@@ -357,7 +357,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_keepsPreviousCategoryWhenClassificationFails() {
+    void 判定し直せなければ前のカテゴリのまま() {
         var service = serviceAt(NOW);
         var post = post(user, LUNCH, THIS_MORNING, PostCategory.PRIVATE);
         stubFind(post);
@@ -370,7 +370,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_doesNotClassifyWhenContentIsUnchanged() {
+    void 本文が変わらなければカテゴリを判定しない() {
         var service = serviceAt(NOW);
         var post = todaysLunch();
         stubFind(post);
@@ -381,7 +381,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_doesNotClassifyCategorySetByUser() {
+    void 手で直したカテゴリは判定し直さない() {
         // 手で直したカテゴリは、本文を編集しても AI に上書きさせない（Post ではなく service で守る）
         var service = serviceAt(NOW);
         var post = post(user, LUNCH_WITH_CLIENT, THIS_MORNING, PostCategory.WORK);
@@ -396,7 +396,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_doesNotOverwriteCategorySetByUserWhileClassifying() {
+    void 判定を待つ間に手で直されたカテゴリは上書きしない() {
         // 判定を待つ間に手で直された場合（トランザクションの中で読み直したつぶやきに印が立っている）
         // 取引先とのランチを「仕事」に直している間に、本文を勉強の話題に書き換えた。AI は「学習」と判定するが、手で直した「仕事」を優先する
         var service = serviceAt(NOW);
@@ -414,7 +414,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_categoryChangedByUser_isMarkedAndNotClassified() {
+    void 編集でカテゴリを変えると手で直した印が付き判定しない() {
         // 本文とカテゴリを同じリクエストで直したら、AI の判定より手で選んだカテゴリを優先する
         var service = serviceAt(NOW);
         var post = todaysLunch();
@@ -429,7 +429,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_categoryOnly_doesNotMarkEdited() {
+    void カテゴリだけを変えても編集済みにしない() {
         var service = serviceAt(NOW);
         var post = todaysLunch();
         stubFind(post);
@@ -444,7 +444,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_sameCategory_isNotTreatedAsChangedByUser() {
+    void 今と同じカテゴリが送られても手で直したことにしない() {
         // 編集フォームは今のカテゴリを選んだ状態で送られてくるので、同じ値なら手で直したことにしない
         var service = serviceAt(NOW);
         var post = todaysLunch();
@@ -458,7 +458,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_readsThePostInAShortTransactionBeforeClassifying() {
+    void 編集ではカテゴリの判定より前に短いトランザクションでつぶやきを読む() {
         // create と同じく、判定の前の読み込みも短いトランザクションで済ませ、Claude API を待つ間に DB 接続を握らない
         var service = serviceAt(NOW);
         stubFind(todaysLunch());
@@ -473,7 +473,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_classifiesOutsideTheTransactionAndSavesInside() {
+    void 編集ではカテゴリをトランザクションの外で判定し中で保存する() {
         var service = serviceAt(NOW);
         var post = todaysLunch();
         stubFind(post);
@@ -487,7 +487,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_othersPost_throwsNotFoundWithoutClassifying() {
+    void 他人のつぶやきは判定せずに見つからないとして断る() {
         // 他人のつぶやきは、存在しない場合と区別しない（IDOR 対策）
         var service = serviceAt(NOW);
         when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.empty());
@@ -501,7 +501,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_postDeletedWhileClassifying_throwsNotFoundAndRollsBack() {
+    void 判定を待つ間に削除されたつぶやきは見つからないとして断りロールバックする() {
         // 判定を待つ間に、別のタブから削除された場合（トランザクションの中で読み直すと見つからない）
         var service = serviceAt(NOW);
         var post = todaysLunch();
@@ -517,7 +517,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_keepsPostedAtAndMarksEdited() {
+    void 編集しても投稿時刻は変えず編集済みになる() {
         var service = serviceAt(NOW);
         var post = todaysLunch();
         stubFind(post);
@@ -531,7 +531,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_yesterdaysPostJustAfterMidnight() {
+    void 日付が変わった直後でも昨日のつぶやきは編集できる() {
         var service = serviceAt("2026-10-08T00:00:30");
         var post = post(user, GOOD_NIGHT, "2026-10-07T23:59:59");
         stubFind(post);
@@ -542,7 +542,7 @@ class PostServiceTest {
     }
 
     @Test
-    void edit_postFromDayBeforeYesterday_throwsNotFound() {
+    void 一昨日のつぶやきは編集できない() {
         var service = serviceAt("2026-10-08T00:00:30");
         var post = post(user, GOOD_NIGHT, "2026-10-06T23:59:59");
         stubFind(post);
@@ -555,7 +555,7 @@ class PostServiceTest {
     // --- カテゴリだけの修正 ---
 
     @Test
-    void updateCategory_assignsAndMarksWithoutMarkingEdited() {
+    void カテゴリだけを直すと手で直した印が付き編集済みにはならない() {
         // AI が判定できず「その他」になった取引先とのランチを、手で「仕事」に直す
         var service = serviceAt(NOW);
         var post = post(user, LUNCH_WITH_CLIENT, THIS_MORNING);
@@ -571,7 +571,7 @@ class PostServiceTest {
     }
 
     @Test
-    void updateCategory_postBeforeYesterday_canBeChanged() {
+    void 一昨日より前のつぶやきもカテゴリは直せる() {
         // 本文の編集と違い、カテゴリは昨日より前のつぶやきでも直せる
         var service = serviceAt(NOW);
         var post = post(user, LUNCH, "2026-10-01T12:00:00");
@@ -583,7 +583,7 @@ class PostServiceTest {
     }
 
     @Test
-    void updateCategory_updatesOwnPost() {
+    void 自分のつぶやきのカテゴリを直せる() {
         // given
         var postService = serviceAt(NOW);
         var post = post(user, LUNCH_WITH_CLIENT, NOW);
@@ -597,7 +597,7 @@ class PostServiceTest {
     }
 
     @Test
-    void updateCategory_throwsForOtherUsersPost() {
+    void 他人のつぶやきのカテゴリは直せない() {
         // given
         var postService = serviceAt(NOW);
         // 削除と同じガード：持ち主を条件に取得し、見つからなければ専用の例外（他人のつぶやきと存在しないつぶやきを区別しない）
@@ -611,7 +611,7 @@ class PostServiceTest {
     // --- 削除 ---
 
     @Test
-    void delete_deletesOwnPost() {
+    void 自分のつぶやきを削除できる() {
         // given
         var postService = serviceAt(NOW);
         var post = post(user, BAKERY, NOW);
@@ -625,7 +625,7 @@ class PostServiceTest {
     }
 
     @Test
-    void delete_throwsForOtherUsersPost() {
+    void 他人のつぶやきは削除できない() {
         // given
         var postService = serviceAt(NOW);
         when(postRepository.findByIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.empty());
@@ -637,7 +637,7 @@ class PostServiceTest {
     }
 
     @Test
-    void delete_postFromDayBeforeYesterday_throwsNotFound() {
+    void 一昨日のつぶやきは削除できない() {
         // 本文の編集と同じく、消せるのは今日と昨日のつぶやきだけ
         var service = serviceAt("2026-10-08T00:00:30");
         stubFind(post(user, GOOD_NIGHT, "2026-10-06T23:59:59"));
@@ -651,7 +651,7 @@ class PostServiceTest {
     private static final Limit LIMIT = Limit.of(51);
 
     @Test
-    void searchPosts_routesToQueryByKeywordAndCategory() {
+    void キーワードとカテゴリの有無で検索のクエリを選ぶ() {
         var service = serviceAt("2026-10-08T12:00:00");
 
         service.searchPosts(USER_ID, "カレー", null, LIMIT);
@@ -664,7 +664,7 @@ class PostServiceTest {
     }
 
     @Test
-    void searchPosts_escapesKeywordForLike() {
+    void 検索のキーワードはLIKE用にエスケープして渡す() {
         serviceAt("2026-10-08T12:00:00").searchPosts(USER_ID, "達成率100%!", null, LIMIT);
 
         verify(postRepository).searchByKeyword(USER_ID, "達成率100!%!!", LIMIT);
