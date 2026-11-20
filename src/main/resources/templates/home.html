@@ -18,7 +18,7 @@
     <section class="card shadow-sm mb-4">
         <div class="card-body">
             <h2 class="h5 card-title mb-3">いまの気持ちをつぶやく</h2>
-            <form th:action="@{/posts}" th:object="${postForm}" method="post"
+            <form th:action="@{/posts}" th:object="${postForm}" method="post" enctype="multipart/form-data"
                   class="js-submit-once" data-submitting-label="つぶやいています…">
                 <div class="mb-2">
                     <!--/* 編集中は編集のフォームも同じ画面に出るので、th:field の id（content）を使わず別の id にする */-->
@@ -28,6 +28,16 @@
                               th:classappend="${#fields.hasErrors('content')} ? 'is-invalid'"></textarea>
                     <p th:if="${#fields.hasErrors('content')}" th:errors="*{content}" class="invalid-feedback"
                        role="alert"></p>
+                </div>
+                <div class="mb-2">
+                    <!--/* 選んだファイルは、入力エラーで画面を出し直すと残らない（ブラウザの仕様）。th:field は使わない */-->
+                    <label for="post-photo" class="form-label small text-body-secondary"
+                           th:text="|写真（任意・${photoMaxPerPost} 枚まで）|">写真</label>
+                    <input type="file" id="post-photo" name="photo" accept="image/*"
+                           class="form-control form-control-sm" th:disabled="${postLimitReached}"
+                           th:classappend="${#fields.hasErrors('attachedPhotos')} ? 'is-invalid'">
+                    <p th:if="${#fields.hasErrors('attachedPhotos')}" th:errors="*{attachedPhotos}"
+                       class="invalid-feedback" role="alert"></p>
                 </div>
                 <div class="d-flex align-items-center justify-content-end gap-3">
                     <span th:if="${postLimitReached}" class="text-body-secondary small"

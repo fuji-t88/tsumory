@@ -16,6 +16,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
@@ -28,10 +29,12 @@ import com.example.tsumory.config.CustomUserDetailsService;
 import com.example.tsumory.config.SecurityConfig;
 import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
+import com.example.tsumory.domain.PostPhoto;
 import com.example.tsumory.repository.UserRepository;
 import com.example.tsumory.service.DailyPostLimitExceededException;
 import com.example.tsumory.service.DiaryItem;
 import com.example.tsumory.service.DiaryService;
+import com.example.tsumory.service.PhotoUpload;
 import com.example.tsumory.service.PostItem;
 import com.example.tsumory.service.PostService;
 import com.example.tsumory.service.ResourceNotFoundException;
@@ -39,17 +42,22 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.MatchResult;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(PostController.class)
 @Import({SecurityConfig.class, CustomUserDetailsService.class})
 class PostControllerTest {
+
+    private static final byte[] JPEG_BYTES = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x01};
 
     private static final Long USER_ID = 1L;
     private static final LocalDate TODAY = LocalDate.of(2026, 10, 7);
@@ -319,7 +327,107 @@ class PostControllerTest {
                 .andExpect(redirectedUrl("/"));
 
         // 前後の空白は PostService が保存の前に取り除くので、controller は入力値をそのまま渡す
-        verify(postService).create(USER_ID, "  寝坊した  ");
+        verify(postService).create(USER_ID, "  寝坊した  ", null);
+    }
+
+    // --- 写真の添付（phase3-spec.md の「6. 処理の詳細 > つぶやきの投稿」） ---
+
+    @Test
+    void 写真を1枚付けて投稿すると写真も渡す() throws Exception {
+        mockMvc.perform(multipart("/posts")
+                        .file(new MockMultipartFile("photo", "lunch.jpg", "image/jpeg", JPEG_BYTES))
+                        .param("content", "昼はカレー")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/"));
+
+        verify(postService).create(USER_ID, "昼はカレー", new PhotoUpload("image/jpeg", JPEG_BYTES));
+    }
+
+    @Test
+    void 写真を選ばずに投稿すると写真なしとして扱う() throws Exception {
+        // 写真を選ばなかったときも、ブラウザはファイル名と中身が空の部分を送る
+        mockMvc.perform(multipart("/posts")
+                        .file(new MockMultipartFile("photo", "", "application/octet-stream", new byte[0]))
+                        .param("content", "昼はカレー")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/"));
+
+        verify(postService).create(USER_ID, "昼はカレー", null);
+    }
+
+    @Test
+    void 写真を2枚送ると入力エラーを表示して投稿しない() throws Exception {
+        // 画面からは 1 枚しか選べないが、リクエストを直接作れば 2 枚送れる
+        mockMvc.perform(multipart("/posts")
+                        .file(new MockMultipartFile("photo", "a.jpg", "image/jpeg", JPEG_BYTES))
+                        .file(new MockMultipartFile("photo", "b.jpg", "image/jpeg", JPEG_BYTES))
+                        .param("content", "昼はカレー")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(view().name("home"))
+                .andExpect(content().string(containsString("写真は " + PostPhoto.MAX_PER_POST + " 枚まで添付できます")));
+
+        verify(postService, never()).create(anyLong(), anyString(), any());
+    }
+
+    @Test
+    void 形式が送られない写真はoctet_streamとして渡す() throws Exception {
+        mockMvc.perform(multipart("/posts")
+                        .file(new MockMultipartFile("photo", "lunch.jpg", null, JPEG_BYTES))
+                        .param("content", "昼はカレー")
+                        .with(user(PRINCIPAL))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/"));
+
+        verify(postService).create(USER_ID, "昼はカレー", new PhotoUpload("application/octet-stream", JPEG_BYTES));
+    }
+
+    @Test
+    void CSRFのトークンがない写真付きの投稿は拒否する() throws Exception {
+        mockMvc.perform(multipart("/posts")
+                        .file(new MockMultipartFile("photo", "lunch.jpg", "image/jpeg", JPEG_BYTES))
+                        .param("content", "昼はカレー")
+                        .with(user(PRINCIPAL)))
+                .andExpect(status().isForbidden());
+
+        verify(postService, never()).create(anyLong(), anyString(), any());
+    }
+
+    @Test
+    void 投稿フォームは写真を送れる形にし写真の欄は1つで複数を選べない() throws Exception {
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                .contains("enctype=\"multipart/form-data\"")
+                .contains("写真（任意・" + PostPhoto.MAX_PER_POST + " 枚まで）");
+        assertThat(photoInputs(html)).singleElement().asString().doesNotContain("multiple");
+    }
+
+    @Test
+    void 投稿の上限に達したら写真の欄も無効にする() throws Exception {
+        when(postService.isPostLimitReached(USER_ID, TODAY)).thenReturn(true);
+
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(photoInputs(html)).singleElement().asString().contains("disabled");
+    }
+
+    /** 画面の中の、写真を選ぶ欄（{@code <input type="file" name="photo">}）のタグ。 */
+    private static List<String> photoInputs(String html) {
+        return Pattern.compile("<input[^>]*name=\"photo\"[^>]*>")
+                .matcher(html)
+                .results()
+                .map(MatchResult::group)
+                .toList();
     }
 
     @Test
@@ -335,7 +443,7 @@ class PostControllerTest {
                     .andExpect(content().string(containsString("改行は入れられません")));
         }
 
-        verify(postService, never()).create(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString(), any());
     }
 
     @Test
@@ -358,7 +466,7 @@ class PostControllerTest {
                     .andExpect(content().string(not(containsString("改行は入れられません"))));
         }
 
-        verify(postService, never()).create(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString(), any());
     }
 
     @Test
@@ -387,7 +495,7 @@ class PostControllerTest {
                         .with(csrf()))
                 .andExpect(redirectedUrl("/"));
 
-        verify(postService).create(USER_ID, content);
+        verify(postService).create(USER_ID, content, null);
     }
 
     @Test
@@ -416,7 +524,7 @@ class PostControllerTest {
                 .andExpect(view().name("home"))
                 .andExpect(content().string(containsString("内容を入力してください")));
 
-        verify(postService, never()).create(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString(), any());
     }
 
     @Test
@@ -430,7 +538,7 @@ class PostControllerTest {
                 .andExpect(view().name("home"))
                 .andExpect(content().string(containsString("内容を入力してください")));
 
-        verify(postService, never()).create(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString(), any());
     }
 
     @Test
@@ -445,7 +553,7 @@ class PostControllerTest {
                 .andExpect(content().string(containsString("100 文字以内で入力してください")))
                 .andExpect(content().string(containsString(content)));
 
-        verify(postService, never()).create(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString(), any());
     }
 
     @Test
@@ -469,7 +577,7 @@ class PostControllerTest {
     void 上限に達していたらメッセージを付けてトップへリダイレクト() throws Exception {
         doThrow(new DailyPostLimitExceededException(USER_ID, PostService.DAILY_POST_LIMIT))
                 .when(postService)
-                .create(USER_ID, "17 件目");
+                .create(USER_ID, "17 件目", null);
 
         mockMvc.perform(post("/posts")
                         .param("content", "17 件目")
@@ -484,7 +592,7 @@ class PostControllerTest {
         mockMvc.perform(post("/posts").param("content", "寝坊した").with(user(PRINCIPAL)))
                 .andExpect(status().isForbidden());
 
-        verify(postService, never()).create(anyLong(), anyString());
+        verify(postService, never()).create(anyLong(), anyString(), any());
     }
 
     // --- 編集モード ---

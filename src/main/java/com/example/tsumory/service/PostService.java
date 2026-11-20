@@ -2,6 +2,8 @@ package com.example.tsumory.service;
 
 import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
+import com.example.tsumory.domain.PostPhoto;
+import com.example.tsumory.repository.PostPhotoRepository;
 import com.example.tsumory.repository.PostRepository;
 import com.example.tsumory.repository.UserRepository;
 import java.time.Clock;
@@ -26,6 +28,7 @@ public class PostService {
     public static final int DAILY_POST_LIMIT = 16;
 
     private final PostRepository postRepository;
+    private final PostPhotoRepository postPhotoRepository;
     private final UserRepository userRepository;
     private final PostCategoryClassifier categoryClassifier;
     private final TransactionTemplate transactionTemplate;
@@ -93,11 +96,13 @@ public class PostService {
      * 今日のつぶやきが {@link #DAILY_POST_LIMIT} 件に達していれば {@link DailyPostLimitExceededException}。
      *
      * <p>Claude API はトランザクションの外で呼び、DB を読む・保存するところだけを短いトランザクションにする（CLAUDE.md の「Spring・Lombok」）。
+     * 写真は、つぶやきと同じトランザクションで保存する。どちらかが失敗したら、両方とも保存しない（phase3-spec.md の「6. 処理の詳細 > つぶやきの投稿」）。
      *
+     * @param photo 添付する写真。なければ {@code null}
      * @return 保存したつぶやき（判定したカテゴリが入っている）
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public Post create(Long userId, String rawContent) {
+    public Post create(Long userId, String rawContent, PhotoUpload photo) {
         var content = rawContent.strip();
         var now = clock.instant();
         var today = LocalDate.ofInstant(now, clock.getZone());
@@ -109,9 +114,19 @@ public class PostService {
         var saved = transactionTemplate.execute(status -> {
             // 判定を待つ間に、別のタブなどから投稿されていないか確かめ直す
             checkPostLimit(userId, today);
-            return postRepository.save(post);
+            var savedPost = postRepository.save(post);
+            if (photo != null) {
+                postPhotoRepository.save(new PostPhoto(savedPost, photo.contentType(), photo.data(), now));
+            }
+            return savedPost;
         });
-        log.info("Post created: userId={}, postId={}, contentLength={}", userId, saved.getId(), content.length());
+        // 写真は有無と大きさだけを出す（中身・ファイル名は出さない）
+        log.info(
+                "Post created: userId={}, postId={}, contentLength={}, photoBytes={}",
+                userId,
+                saved.getId(),
+                content.length(),
+                photo == null ? 0 : photo.size());
         return saved;
     }
 

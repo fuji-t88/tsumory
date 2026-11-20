@@ -6,12 +6,16 @@ import com.example.tsumory.form.PostEditForm;
 import com.example.tsumory.form.PostForm;
 import com.example.tsumory.service.DailyPostLimitExceededException;
 import com.example.tsumory.service.DiaryService;
+import com.example.tsumory.service.PhotoUpload;
 import com.example.tsumory.service.PostService;
 import com.example.tsumory.service.ResourceNotFoundException;
 import jakarta.validation.Valid;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -38,7 +42,7 @@ public class PostController {
 
     @GetMapping("/")
     public String index(@AuthenticationPrincipal CustomUserDetails principal, Model model) {
-        model.addAttribute("postForm", new PostForm(null));
+        model.addAttribute("postForm", PostForm.empty());
         populateHomeModel(principal.userId(), model, null);
         return "home";
     }
@@ -56,7 +60,7 @@ public class PostController {
             return "home";
         }
         try {
-            postService.create(userId, postForm.content());
+            postService.create(userId, postForm.content(), toPhotoUpload(postForm));
         } catch (DailyPostLimitExceededException e) {
             // ログは PostService が WARN で出しているので、ここでは出さない
             flash.addFlashAttribute("message", DAILY_LIMIT_MESSAGE);
@@ -72,7 +76,7 @@ public class PostController {
             RedirectAttributes flash) {
         try {
             var post = postService.getEditablePost(principal.userId(), id);
-            model.addAttribute("postForm", new PostForm(null));
+            model.addAttribute("postForm", PostForm.empty());
             model.addAttribute("postEditForm", new PostEditForm(post.content(), post.category()));
             populateHomeModel(principal.userId(), model, PostView.from(post));
             return "home";
@@ -93,7 +97,7 @@ public class PostController {
             if (binding.hasErrors()) {
                 // 入力エラーでも、編集できないつぶやきなら再表示せずに戻す
                 var post = postService.getEditablePost(principal.userId(), id);
-                model.addAttribute("postForm", new PostForm(null));
+                model.addAttribute("postForm", PostForm.empty());
                 populateHomeModel(principal.userId(), model, PostView.from(post));
                 return "home";
             }
@@ -157,6 +161,28 @@ public class PostController {
         model.addAttribute("editingPost", editingPost);
         // ホーム描画の全経路（通常表示・入力エラーの再表示）がカテゴリの選択肢を受け取れるよう、共有ヘルパーに置く
         model.addAttribute("categories", PostCategory.values());
+    }
+
+    /**
+     * 添付された写真を service に渡す形にする。なければ {@code null}。形式は、ブラウザが送った {@code Content-Type}（なければ
+     * {@code application/octet-stream}）。枚数はフォームの入力チェックで確かめてある（phase3-spec.md の「6. 処理の詳細 > つぶやきの投稿」）。
+     */
+    private static PhotoUpload toPhotoUpload(PostForm form) {
+        var photos = form.getAttachedPhotos();
+        if (photos.isEmpty()) {
+            return null;
+        }
+        var file = photos.getFirst();
+        var contentType = file.getContentType();
+        try {
+            return new PhotoUpload(
+                    contentType == null || contentType.isBlank()
+                            ? MediaType.APPLICATION_OCTET_STREAM_VALUE
+                            : contentType,
+                    file.getBytes());
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read the uploaded photo", e);
+        }
     }
 
     // ログは PostService が WARN で出しているので、ここでは出さない

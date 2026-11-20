@@ -26,7 +26,9 @@ import static org.mockito.Mockito.when;
 
 import com.example.tsumory.domain.Post;
 import com.example.tsumory.domain.PostCategory;
+import com.example.tsumory.domain.PostPhoto;
 import com.example.tsumory.domain.User;
+import com.example.tsumory.repository.PostPhotoRepository;
 import com.example.tsumory.repository.PostRepository;
 import com.example.tsumory.repository.UserRepository;
 import java.time.Clock;
@@ -56,8 +58,17 @@ class PostServiceTest {
     /** 今日（{@link com.example.tsumory.domain.TestFixtures#TODAY}）の 11:00 に投稿したつぶやきの時刻。 */
     private static final String THIS_MORNING = "2026-10-08T11:00:00";
 
+    /** 写真を付けない投稿。 */
+    private static final PhotoUpload NO_PHOTO = null;
+
+    private static final PhotoUpload JPEG =
+            new PhotoUpload("image/jpeg", new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x01});
+
     @Mock
     private PostRepository postRepository;
+
+    @Mock
+    private PostPhotoRepository postPhotoRepository;
 
     @Mock
     private UserRepository userRepository;
@@ -86,7 +97,12 @@ class PostServiceTest {
     // 原稿のコンストラクタ（引数 4 つ）に、保存だけをトランザクションにするための TransactionTemplate を足している
     private PostService service(Clock clock) {
         return new PostService(
-                postRepository, userRepository, categoryClassifier, new TransactionTemplate(transactionManager), clock);
+                postRepository,
+                postPhotoRepository,
+                userRepository,
+                categoryClassifier,
+                new TransactionTemplate(transactionManager),
+                clock);
     }
 
     /** 今日の午前に投稿した、カテゴリ「その他」の昼ごはんのつぶやき。編集・カテゴリ修正の出発点にする。 */
@@ -199,7 +215,7 @@ class PostServiceTest {
     void 投稿すると前後の空白を除いた本文を投稿時刻と更新時刻を同じにして保存する() {
         var service = serviceAt(NOW);
 
-        service.create(USER_ID, "  " + LUNCH + "\n");
+        service.create(USER_ID, "  " + LUNCH + "\n", NO_PHOTO);
 
         var saved = capturedSavedPost();
         assertThat(saved.getContent()).isEqualTo(LUNCH);
@@ -213,7 +229,7 @@ class PostServiceTest {
         var service = serviceAt(NOW);
         when(categoryClassifier.classify(MEETING)).thenReturn(Optional.of(PostCategory.WORK));
 
-        service.create(USER_ID, " " + MEETING + " ");
+        service.create(USER_ID, " " + MEETING + " ", NO_PHOTO);
 
         var saved = capturedSavedPost();
         assertThat(saved.getCategory()).isEqualTo(PostCategory.WORK);
@@ -227,7 +243,7 @@ class PostServiceTest {
         when(categoryClassifier.classify(MEETING)).thenReturn(Optional.of(PostCategory.WORK));
 
         // when
-        Post result = postService.create(USER_ID, MEETING);
+        Post result = postService.create(USER_ID, MEETING, NO_PHOTO);
 
         // then
         assertThat(result.getCategory()).isEqualTo(PostCategory.WORK);
@@ -241,7 +257,7 @@ class PostServiceTest {
         var service = serviceAt(NOW);
         when(categoryClassifier.classify(LUNCH)).thenReturn(Optional.empty());
 
-        service.create(USER_ID, LUNCH);
+        service.create(USER_ID, LUNCH, NO_PHOTO);
 
         assertThat(capturedSavedPost().getCategory()).isEqualTo(PostCategory.OTHER);
     }
@@ -264,7 +280,7 @@ class PostServiceTest {
         when(postRepository.countByUserIdAndDate(USER_ID, TODAY, JST))
                 .thenReturn((long) PostService.DAILY_POST_LIMIT - 1);
 
-        service.create(USER_ID, GOOD_NIGHT);
+        service.create(USER_ID, GOOD_NIGHT, NO_PHOTO);
 
         verify(postRepository).save(any());
     }
@@ -274,7 +290,7 @@ class PostServiceTest {
         var service = serviceAt(NOW);
         when(postRepository.countByUserIdAndDate(USER_ID, TODAY, JST)).thenReturn((long) PostService.DAILY_POST_LIMIT);
 
-        assertThatThrownBy(() -> service.create(USER_ID, BAKERY))
+        assertThatThrownBy(() -> service.create(USER_ID, BAKERY, NO_PHOTO))
                 .isInstanceOf(DailyPostLimitExceededException.class)
                 .hasMessage("Daily post limit exceeded: userId=1, limit=16");
 
@@ -289,7 +305,8 @@ class PostServiceTest {
         when(postRepository.countByUserIdAndDate(USER_ID, TODAY, JST))
                 .thenReturn((long) PostService.DAILY_POST_LIMIT - 1, (long) PostService.DAILY_POST_LIMIT);
 
-        assertThatThrownBy(() -> service.create(USER_ID, BAKERY)).isInstanceOf(DailyPostLimitExceededException.class);
+        assertThatThrownBy(() -> service.create(USER_ID, BAKERY, NO_PHOTO))
+                .isInstanceOf(DailyPostLimitExceededException.class);
 
         verify(postRepository, never()).save(any());
     }
@@ -300,7 +317,7 @@ class PostServiceTest {
         // メソッドが終わるまで（Claude API の応答を待つ間も）握り続けるため
         var service = serviceAt(NOW);
 
-        service.create(USER_ID, MEETING);
+        service.create(USER_ID, MEETING, NO_PHOTO);
 
         var order = inOrder(transactionManager, postRepository, categoryClassifier);
         order.verify(transactionManager).getTransaction(any());
@@ -314,7 +331,7 @@ class PostServiceTest {
         // Claude API の応答を待つ間に DB 接続を握らない：判定 → トランザクション開始 → 保存 → コミット の順
         var service = serviceAt(NOW);
 
-        service.create(USER_ID, MEETING);
+        service.create(USER_ID, MEETING, NO_PHOTO);
 
         var order = inOrder(categoryClassifier, transactionManager, postRepository);
         order.verify(categoryClassifier).classify(MEETING);
@@ -328,15 +345,82 @@ class PostServiceTest {
         // 上限の確かめ直しは、最初に求めた「今日」で行う（判定を待つ間に 0 時をまたいでも、投稿時刻の日付で数える）
         var service = serviceAt("2026-10-08T23:59:59");
 
-        service.create(USER_ID, GOOD_NIGHT);
+        service.create(USER_ID, GOOD_NIGHT, NO_PHOTO);
 
         verify(postRepository, times(2)).countByUserIdAndDate(USER_ID, TODAY, JST);
+    }
+
+    // --- 写真の添付 ---
+
+    @Test
+    void 写真を付けて投稿するとつぶやきと一緒に写真も保存する() {
+        var service = serviceAt(NOW);
+
+        var saved = service.create(USER_ID, LUNCH, JPEG);
+
+        var captor = ArgumentCaptor.forClass(PostPhoto.class);
+        verify(postPhotoRepository).save(captor.capture());
+        var photo = captor.getValue();
+        assertThat(photo.getPost()).isSameAs(saved);
+        assertThat(photo.getContentType()).isEqualTo("image/jpeg");
+        assertThat(photo.getData()).containsExactly(JPEG.data());
+        assertThat(photo.getCreatedAt()).isEqualTo(jst(NOW));
+    }
+
+    @Test
+    void 写真を付けずに投稿すると写真は保存しない() {
+        serviceAt(NOW).create(USER_ID, LUNCH, NO_PHOTO);
+
+        verify(postRepository).save(any());
+        verify(postPhotoRepository, never()).save(any());
+    }
+
+    @Test
+    void 写真はつぶやきと同じトランザクションの中で保存する() {
+        // 上限の確認（読むだけ）と保存の 2 つだけがトランザクション。写真のために別のトランザクションを張らない
+        var service = serviceAt(NOW);
+
+        service.create(USER_ID, LUNCH, JPEG);
+
+        var order = inOrder(categoryClassifier, transactionManager, postRepository, postPhotoRepository);
+        order.verify(categoryClassifier).classify(LUNCH);
+        order.verify(transactionManager).getTransaction(any());
+        order.verify(postRepository).save(any());
+        order.verify(postPhotoRepository).save(any());
+        order.verify(transactionManager).commit(any());
+        verify(transactionManager, times(2)).getTransaction(any());
+    }
+
+    @Test
+    void 写真の保存に失敗したらつぶやきの保存も取り消す() {
+        var service = serviceAt(NOW);
+        when(postPhotoRepository.save(any())).thenThrow(new IllegalStateException("photo save failed"));
+
+        assertThatThrownBy(() -> service.create(USER_ID, LUNCH, JPEG)).isInstanceOf(IllegalStateException.class);
+
+        var order = inOrder(postRepository, postPhotoRepository, transactionManager);
+        order.verify(postRepository).save(any());
+        order.verify(postPhotoRepository).save(any());
+        order.verify(transactionManager).rollback(any());
+        // コミットしたのは、判定の前に上限を確かめた読むだけのトランザクションだけ
+        verify(transactionManager, times(1)).commit(any());
+    }
+
+    @Test
+    void 上限に達していたら写真も保存しない() {
+        var service = serviceAt(NOW);
+        when(postRepository.countByUserIdAndDate(USER_ID, TODAY, JST)).thenReturn((long) PostService.DAILY_POST_LIMIT);
+
+        assertThatThrownBy(() -> service.create(USER_ID, BAKERY, JPEG))
+                .isInstanceOf(DailyPostLimitExceededException.class);
+
+        verify(postPhotoRepository, never()).save(any());
     }
 
     @Test
     void 投稿と編集はClaudeのAPIを呼ぶのでトランザクションを張らない() throws NoSuchMethodException {
         for (var method : List.of(
-                PostService.class.getMethod("create", Long.class, String.class),
+                PostService.class.getMethod("create", Long.class, String.class, PhotoUpload.class),
                 PostService.class.getMethod("edit", Long.class, Long.class, String.class, PostCategory.class))) {
             assertThat(method.getAnnotation(Transactional.class).propagation()).isEqualTo(Propagation.NOT_SUPPORTED);
         }
