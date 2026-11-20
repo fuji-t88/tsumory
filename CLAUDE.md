@@ -183,6 +183,8 @@
   - 確かめた結果、避けるべきライセンスはなかった。tomcat-embed-core（Declared は Apache-2.0）の GPL・CDDL・EPL は、同梱のサーブレット・JSP の XSD のもの。Java EE の XSD は CDDL か GPL、Jakarta EE の XSD は EPL-2.0 か GPL-2.0+Classpath Exception の選択式で、Tomcat の `META-INF/LICENSE` が CDDL-1.0・EPL-2.0 を選んでいる。jakarta.annotation・transaction・persistence・activation、logback も EPL-2.0 か BSD-3 を選べるデュアルライセンス。JUnit・AspectJ などの GPL は、EPL-2.0 の本文の中で GPL に触れているだけ
   - tsumory は改変も配布もしない Web サービスなので、改変して配布したときにだけ義務が生じるもの（EPL・CDDL・LGPL・GPL+Classpath Exception）は許容する。ネットワーク越しの提供でも義務が生じるもの（AGPL・SSPL）と、利用を制限するもの（Commons Clause・BUSL・CC-BY-NC など）は使わない。配布する（イメージを公開するなど）ことになったら見直す
   - PR で新しい issue が出たら、Declared（pom のライセンス）と Discovered（JAR の中のファイルから見つかったライセンス）を分けて見る。誤検知と決めつけず、そのファイルを開き、デュアルライセンスでどれを選べるか、同梱元の LICENSE がどれを選んでいるかを確かめる
+  - 依存を変えていない PR でも、基準のコミットのあとに見つかった脆弱性は「新しい issue」として数えられ、`fossa test` が落ちる（2026-11-20、`.gitignore` だけの PR #15 で 3 件）
+  - 2026-11-20：Jackson の脆弱性を直す PR #16 で、新しい issue が 1 件残った（#15 の 3 件から 2 件減った）。上げた Jackson の新旧の版で、pom のライセンスと JAR の中のライセンスファイルが同じことを確かめ、#16 が持ち込んだ issue ではないと判断してマージした。残りの 1 件は `main` に前からあるものと考えられるが、中身は確かめていない（push 専用のキーではログに出ない）。FOSSA の画面で確かめ、直すか、基準として扱うかを決める
 - FOSSA の GitHub 連携（Quick Import）でリポジトリを取り込まない。CI の解析とプロジェクトが 2 つでき、結果が食い違う（「CI/CD > SonarQube Cloud」の自動解析と同じ）
 - API キーは GitHub のリポジトリの Secret `FOSSA_API_KEY`（push 専用のキー）。ワークフローやコードに書かない
   - push 専用のキーでは、`fossa test` は issue の件数だけを出し、どの依存の何のライセンスかはログに出ない。詳細は FOSSA の画面で見る
