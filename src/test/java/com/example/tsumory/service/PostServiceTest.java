@@ -18,6 +18,7 @@ import static com.example.tsumory.domain.TestFixtures.pngBytes;
 import static com.example.tsumory.domain.TestFixtures.post;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
@@ -47,6 +48,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Limit;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -350,6 +352,69 @@ class PostServiceTest {
         service.create(USER_ID, GOOD_NIGHT, NO_PHOTO);
 
         verify(postRepository, times(2)).countByUserIdAndDate(USER_ID, TODAY, JST);
+    }
+
+    // --- 写真の表示と取得 ---
+
+    /** ID を入れたつぶやき（保存したつぶやきの代わり）。 */
+    private Post postWithId(Long id, String content, String postedAt) {
+        var post = post(user, content, postedAt);
+        ReflectionTestUtils.setField(post, "id", id);
+        return post;
+    }
+
+    @Test
+    void その日のつぶやきに写真の有無を入れ写真はまとめて1回だけ問い合わせる() {
+        var service = serviceAt(NOW);
+        var lunch = postWithId(10L, LUNCH, "2026-10-08T11:00:00");
+        var meeting = postWithId(11L, MEETING, "2026-10-08T11:30:00");
+        when(postRepository.findByUserIdAndDate(USER_ID, TODAY, JST)).thenReturn(List.of(lunch, meeting));
+        when(postPhotoRepository.findPostIdsWithPhoto(List.of(10L, 11L))).thenReturn(List.of(11L));
+
+        var items = service.findPosts(USER_ID, TODAY);
+
+        assertThat(items)
+                .extracting(PostItem::id, PostItem::hasPhoto)
+                .containsExactly(tuple(10L, false), tuple(11L, true));
+        verify(postPhotoRepository, times(1)).findPostIdsWithPhoto(any());
+        verify(postPhotoRepository, never()).findById(any());
+    }
+
+    @Test
+    void つぶやきがない日は写真を問い合わせない() {
+        var service = serviceAt(NOW);
+        when(postRepository.findByUserIdAndDate(USER_ID, TODAY, JST)).thenReturn(List.of());
+
+        assertThat(service.findPosts(USER_ID, TODAY)).isEmpty();
+
+        verify(postPhotoRepository, never()).findPostIdsWithPhoto(any());
+    }
+
+    @Test
+    void 編集モードで開くつぶやきに写真の有無を入れる() {
+        var service = serviceAt(NOW);
+        stubFind(postWithId(POST_ID, LUNCH, THIS_MORNING));
+        when(postPhotoRepository.existsById(POST_ID)).thenReturn(true);
+
+        assertThat(service.getEditablePost(USER_ID, POST_ID).hasPhoto()).isTrue();
+    }
+
+    @Test
+    void 自分のつぶやきの写真を保存した形式で返す() {
+        var service = serviceAt(NOW);
+        var photo = new PostPhoto(todaysLunch(), "image/jpeg", JPEG.data(), jst(NOW));
+        when(postPhotoRepository.findByPostIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.of(photo));
+
+        assertThat(service.findPhoto(USER_ID, POST_ID)).isEqualTo(new PhotoContent("image/jpeg", JPEG.data()));
+    }
+
+    @Test
+    void 他人のつぶやきや写真のないつぶやきの写真は見つからないとして扱う() {
+        // ほかのユーザーのもの・写真がない・削除したつぶやきは、リポジトリがどれも空を返し、区別しない
+        var service = serviceAt(NOW);
+        when(postPhotoRepository.findByPostIdAndUserId(POST_ID, USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.findPhoto(USER_ID, POST_ID)).isInstanceOf(ResourceNotFoundException.class);
     }
 
     // --- 写真の添付 ---

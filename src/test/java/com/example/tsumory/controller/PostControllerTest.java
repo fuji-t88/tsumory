@@ -20,6 +20,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
@@ -35,6 +36,7 @@ import com.example.tsumory.service.DailyPostLimitExceededException;
 import com.example.tsumory.service.DiaryItem;
 import com.example.tsumory.service.DiaryService;
 import com.example.tsumory.service.InvalidPhotoException;
+import com.example.tsumory.service.PhotoContent;
 import com.example.tsumory.service.PhotoUpload;
 import com.example.tsumory.service.PhotoValidator;
 import com.example.tsumory.service.PostItem;
@@ -66,9 +68,9 @@ class PostControllerTest {
     private static final CustomUserDetails PRINCIPAL = new CustomUserDetails(USER_ID, "demo", "$2a$10$hash");
 
     private static final PostItem TODAY_POST =
-            new PostItem(10L, "昼のカレーが辛すぎた", LocalTime.of(12, 40), false, PostCategory.PRIVATE);
+            new PostItem(10L, "昼のカレーが辛すぎた", LocalTime.of(12, 40), false, PostCategory.PRIVATE, false);
     private static final PostItem EDITED_POST =
-            new PostItem(11L, "寝坊した", LocalTime.of(8, 12), true, PostCategory.OTHER);
+            new PostItem(11L, "寝坊した", LocalTime.of(8, 12), true, PostCategory.OTHER, false);
 
     @Autowired
     private MockMvc mockMvc;
@@ -487,6 +489,55 @@ class PostControllerTest {
                 .getContentAsString();
 
         assertThat(photoInputs(html)).singleElement().asString().contains("disabled");
+    }
+
+    // --- 写真の取得と表示（phase3-spec.md の「6. 処理の詳細 > 写真の取得」） ---
+
+    @Test
+    void 自分の写真を保存した形式で表示用に返す() throws Exception {
+        when(postService.findPhoto(USER_ID, 10L)).thenReturn(new PhotoContent("image/jpeg", JPEG_BYTES));
+
+        mockMvc.perform(get("/posts/10/photo").with(user(PRINCIPAL)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "image/jpeg"))
+                .andExpect(header().string("Content-Disposition", "inline; filename=\"photo.jpeg\""))
+                // 形式をブラウザに推測させない（Spring Security が付ける）
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(content().bytes(JPEG_BYTES));
+    }
+
+    @Test
+    void 他人の写真や写真のないつぶやきは本文なしの404() throws Exception {
+        when(postService.findPhoto(USER_ID, 99L)).thenThrow(new ResourceNotFoundException("PostPhoto", 99L));
+
+        mockMvc.perform(get("/posts/99/photo").with(user(PRINCIPAL)))
+                .andExpect(status().isNotFound())
+                .andExpect(content().bytes(new byte[0]));
+    }
+
+    @Test
+    void 未ログインなら写真を返さずログイン画面へリダイレクト() throws Exception {
+        mockMvc.perform(get("/posts/10/photo")).andExpect(redirectedUrl("/login"));
+
+        verify(postService, never()).findPhoto(anyLong(), anyLong());
+    }
+
+    @Test
+    void 写真のあるつぶやきにだけサムネイルを出し押すと元の写真を開く() throws Exception {
+        when(postService.findPosts(USER_ID, TODAY))
+                .thenReturn(List.of(
+                        new PostItem(10L, "昼のカレーが辛すぎた", LocalTime.of(12, 40), false, PostCategory.PRIVATE, true),
+                        new PostItem(11L, "寝坊した", LocalTime.of(8, 12), false, PostCategory.OTHER, false)));
+
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html)
+                .contains("<a href=\"/posts/10/photo\" target=\"_blank\" rel=\"noopener\"")
+                .contains("<img src=\"/posts/10/photo\"")
+                .doesNotContain("/posts/11/photo");
     }
 
     /** 画面の中の、写真を選ぶ欄（{@code <input type="file" name="photo">}）のタグ。 */

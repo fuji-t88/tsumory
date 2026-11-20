@@ -8,8 +8,10 @@ import com.example.tsumory.repository.PostRepository;
 import com.example.tsumory.repository.UserRepository;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Limit;
@@ -44,10 +46,16 @@ public class PostService {
         return date.equals(today) || date.equals(today.minusDays(1));
     }
 
-    /** その日（日本時間）のつぶやきを、画面に出す形にして投稿時刻の古い順に返す。 */
+    /** その日（日本時間）のつぶやきを、画面に出す形にして投稿時刻の古い順に返す。写真の有無も入れる（写真のデータは読まない）。 */
     public List<PostItem> findPosts(Long userId, LocalDate date) {
-        return findPostsByDate(userId, date).stream()
-                .map(post -> PostItem.from(post, clock.getZone()))
+        var posts = findPostsByDate(userId, date);
+        // つぶやきごとに問い合わせず（N+1 にしない）、写真のあるつぶやきの ID をまとめて取る
+        var withPhoto = posts.isEmpty()
+                ? Set.<Long>of()
+                : new HashSet<>(postPhotoRepository.findPostIdsWithPhoto(
+                        posts.stream().map(Post::getId).toList()));
+        return posts.stream()
+                .map(post -> PostItem.from(post, clock.getZone(), withPhoto.contains(post.getId())))
                 .toList();
     }
 
@@ -88,7 +96,21 @@ public class PostService {
 
     /** 編集モードで開くつぶやきを返す。自分の今日か昨日のつぶやきでなければ {@link ResourceNotFoundException}。 */
     public PostItem getEditablePost(Long userId, Long postId) {
-        return PostItem.from(findEditablePost(userId, postId), clock.getZone());
+        var post = findEditablePost(userId, postId);
+        return PostItem.from(post, clock.getZone(), postPhotoRepository.existsById(post.getId()));
+    }
+
+    /**
+     * 自分のつぶやきに添付した写真を返す。日付は問わない（日記表示から過去の写真も開ける）。ほかのユーザーのつぶやき・写真のないつぶやき・
+     * 削除したつぶやきなら {@link ResourceNotFoundException}（どれも区別しない。CLAUDE.md の禁止事項「他人のデータ（IDOR）」）。
+     */
+    public PhotoContent findPhoto(Long userId, Long postId) {
+        var photo = postPhotoRepository.findByPostIdAndUserId(postId, userId).orElseThrow(() -> {
+            // 他人の写真へのアクセスの試行を含む（写真のないつぶやき・削除済みとは区別できない）
+            log.warn("Photo not found for user: userId={}, postId={}", userId, postId);
+            return new ResourceNotFoundException("PostPhoto", postId);
+        });
+        return new PhotoContent(photo.getContentType(), photo.getData());
     }
 
     /**

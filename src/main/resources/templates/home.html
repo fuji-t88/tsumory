@@ -82,6 +82,7 @@
                               th:text="${post.time}"></span>
                         <div class="flex-grow-1">
                             <div th:text="${post.content}">コーヒーがおいしい</div>
+                            <a th:replace="~{fragments/post-photo :: thumbnail(${post})}"></a>
                             <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
                                 <span th:replace="~{fragments/category-badge :: badge(${post.category})}"></span>
                                 <form th:action="@{/posts/{id}/category(id=${post.id})}" method="post" class="d-inline">

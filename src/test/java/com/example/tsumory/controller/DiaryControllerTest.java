@@ -200,8 +200,8 @@ class DiaryControllerTest {
     void この日のつぶやきを時刻と本文とカテゴリ付きで古い順に出す() throws Exception {
         when(postService.findPosts(USER_ID, TODAY))
                 .thenReturn(List.of(
-                        new PostItem(11L, "寝坊した", LocalTime.of(8, 12), true, PostCategory.OTHER),
-                        new PostItem(10L, "会議が長引いた", LocalTime.of(12, 40), false, PostCategory.WORK)));
+                        new PostItem(11L, "寝坊した", LocalTime.of(8, 12), true, PostCategory.OTHER, false),
+                        new PostItem(10L, "会議が長引いた", LocalTime.of(12, 40), false, PostCategory.WORK, false)));
 
         var html = mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
                 .andReturn()
@@ -219,9 +219,24 @@ class DiaryControllerTest {
     }
 
     @Test
+    void 写真のあるこの日のつぶやきにはサムネイルを出す() throws Exception {
+        when(postService.findPosts(USER_ID, TODAY))
+                .thenReturn(
+                        List.of(new PostItem(10L, "会議が長引いた", LocalTime.of(12, 40), false, PostCategory.WORK, true)));
+
+        var html = mockMvc.perform(get("/diary/2026-10-07").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(html).contains("<img src=\"/posts/10/photo\"");
+    }
+
+    @Test
     void つぶやきごとにこの日へ戻るカテゴリ変更フォームを出す() throws Exception {
         when(postService.findPosts(USER_ID, YESTERDAY))
-                .thenReturn(List.of(new PostItem(10L, "会議が長引いた", LocalTime.of(12, 40), false, PostCategory.WORK)));
+                .thenReturn(
+                        List.of(new PostItem(10L, "会議が長引いた", LocalTime.of(12, 40), false, PostCategory.WORK, false)));
 
         var html = mockMvc.perform(get("/diary/2026-10-06").with(user(PRINCIPAL)))
                 .andReturn()
@@ -282,7 +297,7 @@ class DiaryControllerTest {
 
     private void stubPosts(LocalDate date, int count) {
         var posts = java.util.stream.IntStream.range(0, count)
-                .mapToObj(i -> new PostItem((long) i, "つぶやき" + i, LocalTime.of(9, i), false, PostCategory.OTHER))
+                .mapToObj(i -> new PostItem((long) i, "つぶやき" + i, LocalTime.of(9, i), false, PostCategory.OTHER, false))
                 .toList();
         when(postService.findPosts(USER_ID, date)).thenReturn(posts);
     }

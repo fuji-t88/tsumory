@@ -18,6 +18,10 @@ import java.io.UncheckedIOException;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -112,6 +116,28 @@ public class PostController {
             return "redirect:/";
         } catch (ResourceNotFoundException e) {
             return redirectWithNotFound(flash);
+        }
+    }
+
+    /**
+     * 自分のつぶやきに添付した写真を返す（phase3-spec.md の「6. 処理の詳細 > 写真の取得」）。形式は保存したときにデータから決めたもの。ほかの
+     * ユーザーのつぶやき・写真のないつぶやき・削除したつぶやきは、どれも区別せずに 404（本文なし。画像の要求なのでエラー画面は返さない）。
+     */
+    @GetMapping("/posts/{id}/photo")
+    public ResponseEntity<byte[]> photo(@AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long id) {
+        try {
+            var photo = postService.findPhoto(principal.userId(), id);
+            var type = MediaType.parseMediaType(photo.contentType());
+            var disposition = ContentDisposition.inline()
+                    .filename("photo." + type.getSubtype())
+                    .build();
+            return ResponseEntity.ok()
+                    .contentType(type)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                    .body(photo.data());
+        } catch (ResourceNotFoundException e) {
+            // ログは PostService が WARN で出しているので、ここでは出さない
+            return ResponseEntity.notFound().build();
         }
     }
 

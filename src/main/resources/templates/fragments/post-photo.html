@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ja">
+<body>
+<!--/* つぶやきに添付した写真のサムネイル（phase3-spec.md の「5. 画面 > 写真の表示」）。写真がなければ何も出さない。
+       押すと、新しいタブで元の大きさの写真を開く。写真を取れなかったときは、ブラウザが代わりの文（alt）を出す */-->
+<a th:fragment="thumbnail(post)" th:if="${post.hasPhoto}" th:href="@{/posts/{id}/photo(id=${post.id})}" target="_blank" rel="noopener" class="d-inline-block mt-1">
+    <img th:src="@{/posts/{id}/photo(id=${post.id})}" class="photo-thumbnail img-thumbnail" loading="lazy" alt="添付した写真（新しいタブで開く）">
+</a>
+</body>
+</html>
