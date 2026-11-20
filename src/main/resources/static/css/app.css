@@ -40,3 +40,10 @@
     outline: 2px solid var(--bs-primary);
     outline-offset: -2px;
 }
+
+/* つぶやきに添付した写真。投稿前のプレビュー（photo-input.js）と、つぶやきの一覧のサムネイル */
+.photo-thumbnail {
+    max-width: 100%;
+    max-height: 160px;
+    object-fit: contain;
+}

@@ -462,6 +462,22 @@ class PostControllerTest {
     }
 
     @Test
+    void 選んだ写真のプレビューと解除のボタンを隠して置いておく() throws Exception {
+        // プレビューと解除は photo-input.js が出す。解除のボタンはフォームを送らない（type="button"）
+        var html = mockMvc.perform(get("/").with(user(PRINCIPAL)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(photoInputs(html)).singleElement().asString().contains("data-preview=\"post-photo-preview\"");
+        assertThat(html)
+                .contains("<div id=\"post-photo-preview\" class=\"mt-2\" hidden>")
+                .contains("alt=\"選んだ写真のプレビュー\"")
+                .contains(
+                        "<button type=\"button\" class=\"btn btn-outline-secondary btn-sm js-photo-clear\">写真を外す</button>");
+    }
+
+    @Test
     void 投稿の上限に達したら写真の欄も無効にする() throws Exception {
         when(postService.isPostLimitReached(USER_ID, TODAY)).thenReturn(true);
 

@@ -39,11 +39,19 @@
                            th:classappend="${#fields.hasErrors('attachedPhotos')} ? 'is-invalid'"
                            aria-describedby="post-photo-hint"
                            th:data-max-bytes="${photoMaxBytes}" th:data-type-message="${photoTypeMessage}"
-                           th:data-too-large-message="${photoTooLargeMessage}" data-error="post-photo-error">
+                           th:data-too-large-message="${photoTooLargeMessage}" data-error="post-photo-error"
+                           data-preview="post-photo-preview">
                     <p th:if="${#fields.hasErrors('attachedPhotos')}" th:errors="*{attachedPhotos}"
                        class="invalid-feedback" role="alert"></p>
                     <p id="post-photo-error" class="small text-danger mb-0" role="alert" hidden></p>
                     <p id="post-photo-hint" class="form-text mb-0" th:text="${photoHint}">JPEG か PNG・5MB まで</p>
+                    <!--/* 選んだ写真のプレビューと解除（photo-input.js）。JavaScript が無効なら出ない */-->
+                    <div id="post-photo-preview" class="mt-2" hidden>
+                        <div class="d-flex align-items-end gap-2">
+                            <img class="photo-thumbnail img-thumbnail" alt="選んだ写真のプレビュー">
+                            <button type="button" class="btn btn-outline-secondary btn-sm js-photo-clear">写真を外す</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="d-flex align-items-center justify-content-end gap-3">
                     <span th:if="${postLimitReached}" class="text-body-secondary small"
