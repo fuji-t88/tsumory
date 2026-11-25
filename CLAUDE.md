@@ -154,6 +154,8 @@
   - 2026-10-22：Spring Boot 4.1.1 に対して `tomcat`・`jackson-bom`（Jackson 3）・`jackson-2-bom`（Anthropic SDK が使う Jackson 2）・`postgresql` を上書きした
   - 2026-10-26：Snyk が Tomcat 11.0.26 に Critical（`SNYK-JAVA-ORGAPACHETOMCATEMBED-21707475`）を見つけたので、`tomcat` の上書きを 11.0.27 に上げた（Spring Boot 4.1.2 でも直るが、Spring Boot を上げるのは Dependabot に任せる）
   - 2026-11-20：Snyk が Jackson 2.21.7・3.1.7 に Critical（信頼できないデータのデシリアライズ。`SNYK-JAVA-COMFASTERXMLJACKSONCORE-21761837`・`SNYK-JAVA-TOOLSJACKSONCORE-21761838`）を見つけたので、`jackson-2-bom` の上書きを 2.21.8、`jackson-bom` の上書きを 3.1.8 に上げた（Spring Boot 4.1.3 でも直る）
+  - 2026-11-25：Snyk が Spring Security 7.1.1（なりすまし・Eval Injection）、Spring Boot 4.1.1 の `spring-boot-security`（認可の判定）、Spring Framework 7.0.9、PostgreSQL ドライバー 42.7.14 に Critical・High を見つけた。`spring-boot-security` は Spring Boot のモジュールで版の上書きでは直せないので、Dependabot を待たずに Spring Boot を 4.1.3 に上げた（Dependabot の PR #19 は 4.1.2 までで直らない）。4.1.3 は Tomcat・Jackson を上書きと同じ版にしたので、その上書きは消した。PostgreSQL ドライバーは 4.1.3 でも 42.7.14 なので、上書きを 42.7.15 にした
+    - Spring Security 7.1.3 から、ログインでセッション ID を付け替えるのは、ブラウザが送ってきたセッション ID（`isRequestedSessionIdValid()`）のときだけになった。MockMvc のテストでセッション固定の守りを確かめるときは、`setRequestedSessionId` で ID を送る（`LoginControllerTest`）。`bootRun` で、ログインの前後で `JSESSIONID` が変わり、古い ID ではログイン画面へ戻されることを確かめた
 - JAXB の実装（`org.glassfish.jaxb`。Hibernate の依存）は、`build.gradle.kts` の `configurations.all` で外している。2026-10-22 に Snyk が XXE（`SNYK-JAVA-ORGGLASSFISHJAXB-20883142`）を見つけ、直った版がなかったため
   - Hibernate がこれを使うのは XML のマッピング（`META-INF/orm.xml` など）を読むときだけ。マッピングはアノテーションで書き、XML のマッピングを置かない
   - 外したあとに `bootRun` で、Flyway の確認・Hibernate の起動・ユーザーを読むクエリ（ログイン）まで動くことを確かめた（テストは DB につながないので、テストでは確かめられない）
@@ -185,6 +187,7 @@
   - PR で新しい issue が出たら、Declared（pom のライセンス）と Discovered（JAR の中のファイルから見つかったライセンス）を分けて見る。誤検知と決めつけず、そのファイルを開き、デュアルライセンスでどれを選べるか、同梱元の LICENSE がどれを選んでいるかを確かめる
   - 依存を変えていない PR でも、基準のコミットのあとに見つかった脆弱性は「新しい issue」として数えられ、`fossa test` が落ちる（2026-11-20、`.gitignore` だけの PR #15 で 3 件）
   - 2026-11-20：Jackson の脆弱性を直す PR #16 の 1 回目の `fossa test` では、新しい issue が 1 件残った（#15 の 3 件から 2 件減った）。上げた Jackson の新旧の版で、pom のライセンスと JAR の中のライセンスファイルが同じことを確かめた。依存を変えずにコミットを足して流し直すと 0 件になり、通った。残りの 1 件が何だったか、なぜ消えたかは確かめていない（push 専用のキーではログに出ない。FOSSA 側の解析が追いついていなかったと考えられる）。同じように依存を変えていないのに件数が変わったら、まず流し直す
+  - 2026-11-25：Spring Boot を 4.1.3 に上げた PR #21 で、新しい issue が 2 件出た（流し直しても 2 件）。変わった依存（`main` と PR で解決した版の差。90 個）の pom のライセンスと、JAR の中のライセンス・NOTICE のファイルを新旧で比べた。ライセンスの種類が変わったものはなかった（変わったのは、版の番号、著作権の年、著作権者の名前（Pivotal から Broadcom）、byte-buddy に同梱の ASM の版だけ）。2 件の中身は push 専用のキーでは見られず、確かめていない。脆弱性の修正（Snyk の Critical）を先に本番へ出すため、FOSSA の失敗のままマージした。FOSSA の画面で 2 件の中身を確かめ、ライセンスの問題なら直す
 - FOSSA の GitHub 連携（Quick Import）でリポジトリを取り込まない。CI の解析とプロジェクトが 2 つでき、結果が食い違う（「CI/CD > SonarQube Cloud」の自動解析と同じ）
 - API キーは GitHub のリポジトリの Secret `FOSSA_API_KEY`（push 専用のキー）。ワークフローやコードに書かない
   - push 専用のキーでは、`fossa test` は issue の件数だけを出し、どの依存の何のライセンスかはログに出ない。詳細は FOSSA の画面で見る
