@@ -154,6 +154,8 @@
   - 2026-10-22：Spring Boot 4.1.1 に対して `tomcat`・`jackson-bom`（Jackson 3）・`jackson-2-bom`（Anthropic SDK が使う Jackson 2）・`postgresql` を上書きした
   - 2026-10-26：Snyk が Tomcat 11.0.26 に Critical（`SNYK-JAVA-ORGAPACHETOMCATEMBED-21707475`）を見つけたので、`tomcat` の上書きを 11.0.27 に上げた（Spring Boot 4.1.2 でも直るが、Spring Boot を上げるのは Dependabot に任せる）
   - 2026-11-20：Snyk が Jackson 2.21.7・3.1.7 に Critical（信頼できないデータのデシリアライズ。`SNYK-JAVA-COMFASTERXMLJACKSONCORE-21761837`・`SNYK-JAVA-TOOLSJACKSONCORE-21761838`）を見つけたので、`jackson-2-bom` の上書きを 2.21.8、`jackson-bom` の上書きを 3.1.8 に上げた（Spring Boot 4.1.3 でも直る）
+  - 2026-11-25：Snyk が Spring Security 7.1.1（なりすまし・Eval Injection）、Spring Boot 4.1.1 の `spring-boot-security`（認可の判定）、Spring Framework 7.0.9、PostgreSQL ドライバー 42.7.14 に Critical・High を見つけた。`spring-boot-security` は Spring Boot のモジュールで版の上書きでは直せないので、Dependabot を待たずに Spring Boot を 4.1.3 に上げた（Dependabot の PR #19 は 4.1.2 までで直らない）。4.1.3 は Tomcat・Jackson を上書きと同じ版にしたので、その上書きは消した。PostgreSQL ドライバーは 4.1.3 でも 42.7.14 なので、上書きを 42.7.15 にした
+    - Spring Security 7.1.3 から、ログインでセッション ID を付け替えるのは、ブラウザが送ってきたセッション ID（`isRequestedSessionIdValid()`）のときだけになった。MockMvc のテストでセッション固定の守りを確かめるときは、`setRequestedSessionId` で ID を送る（`LoginControllerTest`）。`bootRun` で、ログインの前後で `JSESSIONID` が変わり、古い ID ではログイン画面へ戻されることを確かめた
 - JAXB の実装（`org.glassfish.jaxb`。Hibernate の依存）は、`build.gradle.kts` の `configurations.all` で外している。2026-10-22 に Snyk が XXE（`SNYK-JAVA-ORGGLASSFISHJAXB-20883142`）を見つけ、直った版がなかったため
   - Hibernate がこれを使うのは XML のマッピング（`META-INF/orm.xml` など）を読むときだけ。マッピングはアノテーションで書き、XML のマッピングを置かない
   - 外したあとに `bootRun` で、Flyway の確認・Hibernate の起動・ユーザーを読むクエリ（ログイン）まで動くことを確かめた（テストは DB につながないので、テストでは確かめられない）
