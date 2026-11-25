@@ -10,11 +10,11 @@ plugins {
     jacoco
     id("org.springframework.boot") version "4.1.3"
     id("io.spring.dependency-management") version "1.1.7"
-    id("com.diffplug.spotless") version "8.10.4"
+    id("com.diffplug.spotless") version "8.11.0"
     id("org.owasp.dependencycheck") version "13.0.0"
     id("org.sonarqube") version "7.5.0.8588"
-    id("com.github.spotbugs") version "6.5.12"
-    id("com.github.jk1.dependency-license-report") version "3.1.4"
+    id("com.github.spotbugs") version "6.5.13"
+    id("com.github.jk1.dependency-license-report") version "3.1.5"
 }
 
 group = "com.example"
