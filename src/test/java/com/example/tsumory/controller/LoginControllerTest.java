@@ -126,10 +126,16 @@ class LoginControllerTest {
         var session = new MockHttpSession();
         var before = session.getId();
 
+        // ブラウザと同じく、ログインの前のセッション ID を送る（送られた ID だけを付け替える対象にする Spring Security に合わせる）
         var after = mockMvc.perform(post("/login")
                         .param("username", "demo")
                         .param("password", "password")
                         .session(session)
+                        .with(request -> {
+                            request.setRequestedSessionId(before);
+                            request.setRequestedSessionIdValid(true);
+                            return request;
+                        })
                         .with(csrf()))
                 .andExpect(authenticated())
                 .andReturn()
